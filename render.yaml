@@ -3,7 +3,7 @@ services:
     name: autoclose
     runtime: node
     rootDir: tools/activation-server
-    buildCommand: ""
+    buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
     envVars:

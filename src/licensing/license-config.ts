@@ -5,7 +5,7 @@
  * Exemplo local: "http://127.0.0.1:3921"
  * Produção: "https://seu-dominio.com/editorial-autoclose"
  */
-export const LICENSE_ACTIVATION_URL: string = "";
+export const LICENSE_ACTIVATION_URL: string = "https://autoclose.onrender.com";
 
 /**
  * Exibe botão "Resetar licença" no painel (somente para testes).
