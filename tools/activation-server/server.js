@@ -6,17 +6,35 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = Number(process.env.LICENSE_SERVER_PORT || process.env.PORT || 3921);
-const HOST = process.env.LICENSE_SERVER_HOST || "127.0.0.1";
+const PORT = Number(process.env.PORT || process.env.LICENSE_SERVER_PORT || 3921);
+const HOST = "0.0.0.0";
 const SECRET_PATH = path.join(__dirname, "..", ".license-secret");
 const USED_PATH = path.join(__dirname, "used-serials.json");
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+function getPathname(url) {
+  return String(url || "/").split("?")[0];
+}
+
 function loadSecret() {
+  const fromEnv = process.env.LICENSE_SECRET_HEX?.trim();
+  if (fromEnv) {
+    return Buffer.from(fromEnv, "hex");
+  }
+
   if (!fs.existsSync(SECRET_PATH)) {
-    throw new Error("Segredo ausente. Execute npm run license:secret");
+    throw new Error(
+      "Segredo ausente. Defina LICENSE_SECRET_HEX no Render ou execute npm run license:secret localmente."
+    );
   }
   return Buffer.from(fs.readFileSync(SECRET_PATH, "utf8").trim(), "hex");
+}
+
+function hasSecretConfigured() {
+  if (process.env.LICENSE_SECRET_HEX?.trim()) {
+    return true;
+  }
+  return fs.existsSync(SECRET_PATH);
 }
 
 function loadUsed() {
@@ -80,18 +98,25 @@ function readBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(payload));
+}
 
-  if (req.method === "GET" && req.url === "/health") {
-    res.writeHead(200);
-    res.end(JSON.stringify({ ok: true }));
+const server = http.createServer(async (req, res) => {
+  const pathname = getPathname(req.url);
+
+  if (req.method === "GET" && (pathname === "/health" || pathname === "/")) {
+    sendJson(res, 200, {
+      ok: true,
+      service: "editorial-autoclose-activation",
+      secretConfigured: hasSecretConfigured(),
+    });
     return;
   }
 
-  if (req.method !== "POST" || req.url !== "/activate") {
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: "Rota não encontrada." }));
+  if (req.method !== "POST" || pathname !== "/activate") {
+    sendJson(res, 404, { error: "Rota não encontrada." });
     return;
   }
 
@@ -104,8 +129,7 @@ const server = http.createServer(async (req, res) => {
 
     const key = body.jti || licenseId;
     if (used[key]) {
-      res.writeHead(409);
-      res.end(JSON.stringify({ error: "Serial já utilizado." }));
+      sendJson(res, 409, { error: "Serial já utilizado." });
       return;
     }
 
@@ -116,16 +140,20 @@ const server = http.createServer(async (req, res) => {
     };
     saveUsed(used);
 
-    res.writeHead(200);
-    res.end(JSON.stringify({ ok: true, licenseId }));
+    sendJson(res, 200, { ok: true, licenseId });
   } catch (error) {
-    res.writeHead(400);
-    res.end(JSON.stringify({ error: error.message || "Falha na ativação." }));
+    sendJson(res, 400, { error: error.message || "Falha na ativação." });
   }
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`Servidor de ativação em http://${HOST}:${PORT}`);
-  console.log("POST /activate  { serial, machineId }");
+  console.log(`Segredo configurado: ${hasSecretConfigured() ? "sim" : "nao"}`);
   console.log("GET  /health");
+  console.log("POST /activate  { serial, machineId }");
+});
+
+server.on("error", (error) => {
+  console.error("Falha ao iniciar servidor:", error);
+  process.exit(1);
 });
