@@ -1,0 +1,25 @@
+{
+  "name": "editorial-autoclose",
+  "version": "1.0.0",
+  "description": "Plugin UXP para fechamento editorial automático no Adobe InDesign",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "watch": "webpack --watch --mode development",
+    "dev": "webpack --mode development",
+    "license:secret": "node tools/generate-license-secret.js",
+    "license:serial": "node tools/generate-serial.js",
+    "license:server": "node tools/activation-server/server.js"
+  },
+  "devDependencies": {
+    "@adobe/cc-ext-uxp-types": "^7.3.1",
+    "clean-webpack-plugin": "^4.0.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "css-loader": "^7.1.2",
+    "mini-css-extract-plugin": "^2.9.2",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.7.2",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4"
+  }
+}

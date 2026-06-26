@@ -1,0 +1,38 @@
+================================================================================
+                    EDITORIAL AUTOCLOSE — AVISO DE COPYRIGHT
+================================================================================
+
+Produto ........... EDITORIAL AUTOCLOSE (Plugin UXP para Adobe InDesign)
+Identificador ..... com.editorial.autoclose
+Versão ............ 1.0.0
+Ano ............... 2026
+
+Titular dos direitos autorais:
+  Guilherme Henning de Paula
+
+Todos os direitos reservados.
+
+Este software, incluindo — mas não se limitando a — código-fonte, código
+objeto, interface gráfica, textos, ícones, documentação, especificação
+funcional, relatórios gerados pelo plugin e demais materiais associados, é
+protegido pela legislação brasileira de direitos autorais (Lei nº 9.610/1998)
+e por tratados internacionais aplicáveis.
+
+É proibida, sem autorização prévia e por escrito do titular:
+
+  • reprodução total ou parcial;
+  • distribuição, sublicenciamento ou comercialização;
+  • engenharia reversa, descompilação ou desmontagem;
+  • modificação, adaptação ou criação de obras derivadas;
+  • remoção ou alteração de avisos de copyright;
+
+O uso autorizado restringe-se às condições expressamente previstas em
+LICENSE.md e nos instrumentos contratuais firmados com o titular.
+
+Para licenciamento, suporte ou autorizações:
+  Entre em contato com o titular dos direitos autorais.
+
+================================================================================
+Gerado em: 2026-06-25
+Documento: COPYRIGHT.txt — EDITORIAL AUTOCLOSE v1.0.0
+================================================================================

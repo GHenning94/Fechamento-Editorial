@@ -1,0 +1,227 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2331 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(ESPECIFICACAO FUNCIONAL) Tj
+0 -14 Td
+(EDITORIAL AUTOCLOSE) Tj
+0 -14 Td
+(Versao 1.0.0 | Junho 2026) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(1. OBJETIVO) Tj
+0 -14 Td
+(Automatizar checklist editorial e fechamento de materiais InDesign,) Tj
+0 -14 Td
+(gerando package padronizado com PDFs, IDML e relatorio opcional.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(2. PLATAFORMA) Tj
+0 -14 Td
+(- Plugin UXP para Adobe InDesign 2025+ \(host minVersion 20.0\)) Tj
+0 -14 Td
+(- Linguagem: TypeScript, HTML, CSS) Tj
+0 -14 Td
+(- Painel lateral UXP: EDITORIAL AUTOCLOSE) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(3. MODULOS PRINCIPAIS) Tj
+0 -14 Td
+(3.1 VALIDAR CHECKLIST) Tj
+0 -14 Td
+(Executa validadores modulares e exibe resumo no painel.) Tj
+0 -14 Td
+(Armazena resultado em cache vinculado ao documento \(nome + caminho\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(3.2 FECHAR MATERIAL) Tj
+0 -14 Td
+(Fluxo de fechamento sem reexecutar checklist automaticamente.) Tj
+0 -14 Td
+(Gera package nativo e exporta PDFs. Relatorio HTML somente se) Tj
+0 -14 Td
+(houver checklist validado previamente para o mesmo arquivo.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(4. FLUXO DE FECHAMENTO) Tj
+0 -14 Td
+(Passo 1 - Dialogo nativo: nome do usuario) Tj
+0 -14 Td
+(Passo 2 - Selecao da pasta de destino) Tj
+0 -14 Td
+(Passo 3 - Salvamento do documento se necessario) Tj
+0 -14 Td
+(Passo 4 - Package InDesign \(packageForPrint\)) Tj
+0 -14 Td
+(Passo 5 - PDF principal: preset CTP_Arte, paginas simples, MEMORIAL oculto) Tj
+0 -14 Td
+(Passo 6 - PDF _ESTILOS: spreads espelhados, MEMORIAL visivel) Tj
+0 -14 Td
+(Passo 7 - Relatorio HTML \(condicional ao cache de checklist\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(5. ESTRUTURA DO PACKAGE) Tj
+0 -14 Td
+({nome}/) Tj
+0 -14 Td
+(  Document fonts/) Tj
+0 -14 Td
+(  Links/) Tj
+0 -14 Td
+(  {nome}.indd) Tj
+0 -14 Td
+(  {nome}.idml) Tj
+0 -14 Td
+(  {nome}.pdf) Tj
+0 -14 Td
+(  {nome}_ESTILOS.pdf) Tj
+0 -14 Td
+(  Relatorio_Fechamento.html \(opcional\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(6. VALIDADORES \(CHECKLIST\)) Tj
+0 -14 Td
+(V01 Layers obrigatorias \(MEMORIAL, GUIAS_DELETAR\)) Tj
+0 -14 Td
+(V02 Nomenclatura de layers) Tj
+0 -14 Td
+(V03 Memorial descritivo) Tj
+0 -14 Td
+(V04 Nomenclatura de cores \(COR_*\)) Tj
+0 -14 Td
+(V06 Cor CorProf) Tj
+0 -14 Td
+(V07 Cor GUIAS_DELETAR) Tj
+0 -14 Td
+(V08 Overprint) Tj
+0 -14 Td
+(V09 Idioma dos estilos \(Portugues BR\)) Tj
+0 -14 Td
+(V10 Hifenizacao) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 842] /Contents 2 0 R /Resources << /Font << /F1 1 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1892 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(V12 Fontes instaladas/disponiveis) Tj
+0 -14 Td
+(V13 Fontes duplicadas) Tj
+0 -14 Td
+(V14 Links \(status e atualizacao\)) Tj
+0 -14 Td
+(V15 Espaco de cor das imagens) Tj
+0 -14 Td
+(V16 Resolucao minima 300 DPI) Tj
+0 -14 Td
+(V17 Espessura minima de fios 0,3 pt) Tj
+0 -14 Td
+(V18 Itens na mesa de trabalho \(pasteboard\)) Tj
+0 -14 Td
+(V19 Layers bloqueadas) Tj
+0 -14 Td
+(V21 Overset de texto) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(7. REGRAS DE PDF) Tj
+0 -14 Td
+(- Preset: CTP_Arte \(fallback CTP Arte\)) Tj
+0 -14 Td
+(- PDF arte: exportReaderSpreads = false) Tj
+0 -14 Td
+(- PDF _ESTILOS: exportReaderSpreads = true \(spreads espelhados\)) Tj
+0 -14 Td
+(- Layer MEMORIAL oculta no PDF arte; visivel no PDF _ESTILOS) Tj
+0 -14 Td
+(- Preset ausente: nenhum PDF exportado; aviso no painel) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(8. REGRAS DE FECHAMENTO) Tj
+0 -14 Td
+(- Checklist nao bloqueia fechamento) Tj
+0 -14 Td
+(- Checklist nao e executado automaticamente no fechamento) Tj
+0 -14 Td
+(- Relatorio depende de VALIDAR CHECKLIST previo no mesmo documento) Tj
+0 -14 Td
+(- Cache invalido se nome ou caminho do arquivo mudar) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(9. REQUISITOS NAO FUNCIONAIS) Tj
+0 -14 Td
+(- Operacoes pesadas \(PDF, package\) fora de doScript quando possivel) Tj
+0 -14 Td
+(- Pausas entre etapas para estabilidade do InDesign) Tj
+0 -14 Td
+(- UI responsiva com barra de progresso por etapa) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(10. PERMISSOES UXP) Tj
+0 -14 Td
+(- localFileSystem: fullAccess) Tj
+0 -14 Td
+(- clipboard: readAndWrite) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(11. DOCUMENTACAO LEGAL) Tj
+0 -14 Td
+(README.md, LICENSE.md, COPYRIGHT.txt, CHANGELOG.md) Tj
+0 -14 Td
+(e este ESPECIFICACAO_FUNCIONAL.pdf compoem o pacote oficial.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Titular: Henning | \(c\) 2026 Todos os direitos reservados.) Tj
+0 -14 Td
+(Documento gerado automaticamente para registro de especificacao funcional.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 842] /Contents 4 0 R /Resources << /Font << /F1 1 0 R >> >> >>
+endobj
+6 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+7 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000002462 00000 n 
+0000002588 00000 n 
+0000004532 00000 n 
+0000004658 00000 n 
+0000004721 00000 n 
+trailer
+<< /Size 8 /Root 7 0 R >>
+startxref
+4770
+%%EOF

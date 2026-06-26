@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+report/
+tools/.license-private.pem
+tools/.license-secret
+tools/issued-serials.json
+tools/activation-server/used-serials.json
