@@ -67,7 +67,56 @@ function renderSummaryBlock(title: string, summary: ValidationSummary): string {
   `;
 }
 
+export interface ChecklistReportInput {
+  date: string;
+  user: string;
+  documentName: string;
+  documentPath: string;
+  checklist: ValidationSummary;
+}
+
 export class ReportService {
+  async generateChecklistReport(input: ChecklistReportInput, filePath: string): Promise<string> {
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relatório de Checklist — ${escapeHtml(input.documentName)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #1a1a1a; background: #f7f7f7; }
+    .container { max-width: 960px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    h1 { margin-top: 0; color: #b45309; }
+    h2 { border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 32px; }
+    h3 { margin-top: 20px; color: #444; }
+    .meta p { margin: 6px 0; }
+    .stats { display: flex; gap: 16px; margin: 12px 0 20px; flex-wrap: wrap; }
+    .stats span { padding: 8px 12px; border-radius: 6px; font-weight: 600; }
+    .approved { background: #dcfce7; color: #166534; }
+    .warning { background: #fef9c3; color: #854d0e; }
+    .error { background: #fee2e2; color: #991b1b; }
+    ul { line-height: 1.6; }
+    .empty { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>EDITORIAL AUTOCLOSE — Relatório de Checklist</h1>
+    <section class="meta">
+      <p><strong>Data:</strong> ${escapeHtml(input.date)}</p>
+      <p><strong>Usuário:</strong> ${escapeHtml(input.user)}</p>
+      <p><strong>Documento:</strong> ${escapeHtml(input.documentName)}</p>
+      <p><strong>Caminho:</strong> ${escapeHtml(input.documentPath)}</p>
+    </section>
+    ${renderSummaryBlock("Checklist Editorial", input.checklist)}
+  </div>
+</body>
+</html>`;
+
+    await writeTextFile(filePath, html);
+    return filePath;
+  }
+
   async generate(report: ClosureReport): Promise<string> {
     const user = report.user || this.getUserName();
     const html = `<!DOCTYPE html>

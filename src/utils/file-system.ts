@@ -128,6 +128,18 @@ export function sanitizeFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*]/g, "_").replace(/\s+/g, "_");
 }
 
+export async function promptChecklistReportFile(documentName: string): Promise<string | null> {
+  const baseName = sanitizeFileName(documentName.replace(/\.indd$/i, "") || "documento");
+  const suggestedName = `Relatorio_Checklist_${baseName}.html`;
+
+  const file = await fs.getFileForSaving?.(suggestedName);
+  if (!file) {
+    return null;
+  }
+
+  return entryNativePath(file);
+}
+
 export async function promptPackageFolder(): Promise<string> {
   const folder = await fs.getFolder();
   if (!folder) {

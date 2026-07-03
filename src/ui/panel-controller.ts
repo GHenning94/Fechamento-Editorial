@@ -10,6 +10,7 @@ export type ProgressHandler = (percent: number, label: string) => void;
 
 export class PanelController {
   private btnChecklist: HTMLButtonElement | null;
+  private btnDownloadReport: HTMLButtonElement | null;
   private btnClose: HTMLButtonElement | null;
   private progressBar: HTMLProgressElement | null;
   private progressLabel: HTMLElement | null;
@@ -20,9 +21,11 @@ export class PanelController {
   private listWarnings: HTMLElement | null;
   private listErrors: HTMLElement | null;
   private statusMessage: HTMLElement | null;
+  private reportDownloadAllowed = false;
 
   constructor(private root: HTMLElement) {
     this.btnChecklist = root.querySelector("#btn-checklist");
+    this.btnDownloadReport = root.querySelector("#btn-download-report");
     this.btnClose = root.querySelector("#btn-close");
     this.progressBar = root.querySelector("#progress-bar");
     this.progressLabel = root.querySelector("#progress-label");
@@ -38,6 +41,7 @@ export class PanelController {
   isReady(): boolean {
     return Boolean(
       this.btnChecklist &&
+      this.btnDownloadReport &&
       this.btnClose &&
       this.progressBar &&
       this.progressLabel &&
@@ -47,11 +51,13 @@ export class PanelController {
 
   bindHandlers(handlers: {
     onChecklist: () => Promise<void>;
+    onDownloadReport: () => Promise<void>;
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>;
   }): void {
     if (!this.isReady()) return;
 
     this.btnChecklist!.addEventListener("click", () => this.runAction(handlers.onChecklist));
+    this.btnDownloadReport!.addEventListener("click", () => this.runAction(handlers.onDownloadReport));
     this.btnClose!.addEventListener("click", () => this.runClose(handlers.onClose));
   }
 
@@ -121,6 +127,16 @@ export class PanelController {
   setBusy(busy: boolean): void {
     if (this.btnChecklist) this.btnChecklist.disabled = busy;
     if (this.btnClose) this.btnClose.disabled = busy;
+    if (this.btnDownloadReport) {
+      this.btnDownloadReport.disabled = busy || !this.reportDownloadAllowed;
+    }
+  }
+
+  setReportDownloadEnabled(enabled: boolean): void {
+    this.reportDownloadAllowed = enabled;
+    if (this.btnDownloadReport) {
+      this.btnDownloadReport.disabled = !enabled;
+    }
   }
 
   setLocked(locked: boolean): void {

@@ -14,6 +14,9 @@ const PANEL_HTML = `
 
   <section class="actions">
     <button id="btn-checklist" class="btn btn-primary" type="button">VALIDAR CHECKLIST</button>
+    <button id="btn-download-report" class="btn btn-secondary" type="button" disabled>
+      BAIXAR RELATÓRIO
+    </button>
     <button id="btn-close" class="btn btn-danger" type="button">FECHAR MATERIAL</button>
   </section>
 

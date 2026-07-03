@@ -32,6 +32,37 @@ export class ClosureOrchestrator {
     return summary;
   }
 
+  async exportChecklistReport(summary: ValidationSummary, filePath: string, userName: string): Promise<string> {
+    const docInfo = runInDesignReadOnly("EDITORIAL AUTOCLOSE — Documento (relatório)", () => {
+      const doc = getActiveDocument();
+      return {
+        name: doc.name,
+        path: this.readDocumentPath(doc),
+      };
+    });
+
+    return this.reportService.generateChecklistReport(
+      {
+        date: new Date().toLocaleString("pt-BR"),
+        user: userName,
+        documentName: docInfo.name,
+        documentPath: docInfo.path,
+        checklist: summary,
+      },
+      filePath
+    );
+  }
+
+  getCurrentDocumentInfo(): { name: string; path: string } {
+    return runInDesignReadOnly("EDITORIAL AUTOCLOSE — Documento", () => {
+      const doc = getActiveDocument();
+      return {
+        name: doc.name,
+        path: this.readDocumentPath(doc),
+      };
+    });
+  }
+
   cacheCurrentDocumentChecklist(summary: ValidationSummary): void {
     const docInfo = runInDesignReadOnly("EDITORIAL AUTOCLOSE — Cache Checklist", () => {
       const doc = getActiveDocument();

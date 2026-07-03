@@ -102,6 +102,25 @@ export function getInDesignApp(): Application {
   );
 }
 
+/** Garante ponte com o InDesign após troca de tela (ex.: ativação de licença). */
+export async function ensureInDesignReady(maxAttempts = 6, delayMs = 200): Promise<void> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      runInDesignReadOnly("EDITORIAL AUTOCLOSE — Inicializar painel", () => true);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Não foi possível conectar ao InDesign.");
+}
+
 export function getActiveDocument(): Document {
   const app = getInDesignApp();
   const doc = app.activeDocument;

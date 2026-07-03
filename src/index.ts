@@ -2,8 +2,10 @@ import "./ui/styles.css";
 import { ClosureOrchestrator } from "./core/closure-orchestrator";
 import { LICENSE_DEV_ALLOW_RESET } from "./licensing/license-config";
 import { deactivateLicense, isLicenseActive } from "./licensing/license-service";
+import { ValidationSummary } from "./models/validation-result";
 import { PanelController } from "./ui/panel-controller";
 import { promptLicenseActivation } from "./ui/license-dialog";
+import { promptUserNameDialog } from "./ui/user-name-dialog";
 import {
   clearPanelContainer,
   markPanelInitialized,
@@ -12,16 +14,21 @@ import {
   resetPanelInitialization,
   showLicenseGate,
 } from "./ui/panel-mount";
+import { PackageCancelledError, promptChecklistReportFile } from "./utils/file-system";
+import { ensureInDesignReady, getDefaultReportUserName } from "./utils/indesign-runtime";
+import { yieldToHost } from "./utils/yield-to-host";
 
 const { entrypoints } = require("uxp");
 
 const orchestrator = new ClosureOrchestrator();
 let activeController: PanelController | null = null;
+let lastChecklistSummary: ValidationSummary | null = null;
 
 async function handleLicenseReset(container: HTMLElement): Promise<void> {
   const removed = await deactivateLicense();
   resetPanelInitialization();
   activeController = null;
+  lastChecklistSummary = null;
   clearPanelContainer(container);
 
   if (!removed) {
@@ -60,6 +67,20 @@ function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
 }
 
 async function mountLicensedPanel(container: HTMLElement): Promise<void> {
+  await yieldToHost(50);
+
+  try {
+    await ensureInDesignReady();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    container.innerHTML = `
+      <div class="panel license-gate">
+        <p class="license-gate-text">${message}</p>
+      </div>
+    `;
+    return;
+  }
+
   const root = mountPanelRoot(container, true);
   if (!root) {
     return;
@@ -84,8 +105,49 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         controller.setProgress(percent, `Checklist: ${label}`);
       });
 
+      lastChecklistSummary = summary;
+      controller.setReportDownloadEnabled(true);
       controller.setProgress(100, "Checklist concluído");
       controller.renderSummary(summary, "Checklist");
+    },
+
+    onDownloadReport: async () => {
+      if (!lastChecklistSummary) {
+        controller.setStatus("Execute o checklist antes de baixar o relatório.", "warning");
+        return;
+      }
+
+      let docName = "documento";
+      try {
+        docName = orchestrator.getCurrentDocumentInfo().name;
+      } catch {
+        // usa nome genérico
+      }
+
+      const filePath = await promptChecklistReportFile(docName);
+      if (!filePath) {
+        controller.setStatus("Download cancelado.", "info");
+        return;
+      }
+
+      let userName: string;
+      try {
+        userName = await promptUserNameDialog(getDefaultReportUserName());
+      } catch (error) {
+        if (error instanceof PackageCancelledError) {
+          controller.setStatus(error.message, "info");
+          return;
+        }
+        throw error;
+      }
+
+      controller.setStatus("Gerando relatório...", "info");
+      const savedPath = await orchestrator.exportChecklistReport(
+        lastChecklistSummary,
+        filePath,
+        userName
+      );
+      controller.setStatus(`Relatório salvo: ${savedPath}`, "success");
     },
 
     onClose: async (userName: string, destinationFolder: string) => {
@@ -127,13 +189,14 @@ async function initPanel(container?: HTMLElement | null): Promise<void> {
     }
   }
 
-  if (activeController?.isReady() && target.querySelector("#root #btn-license-reset")) {
+  if (activeController?.isReady() && target.querySelector("#root #btn-checklist")) {
     bindDevLicenseReset(target, target.querySelector("#root") as HTMLElement);
     return;
   }
 
   resetPanelInitialization();
   activeController = null;
+  lastChecklistSummary = null;
   await mountLicensedPanel(target);
 }
 
@@ -148,6 +211,7 @@ async function retryActivation(container: HTMLElement): Promise<void> {
 
   resetPanelInitialization();
   activeController = null;
+  lastChecklistSummary = null;
   await mountLicensedPanel(container);
 }
 
