@@ -4,6 +4,12 @@ import { getInDesignModule } from "./indesign-runtime";
 
 export const CREDITO_STYLE_NAME = "05_Credito";
 
+const CREDITO_STYLE_PATTERN = /^05_creditos?$/i;
+
+export function isCreditoStyleName(name: string): boolean {
+  return CREDITO_STYLE_PATTERN.test((name || "").trim());
+}
+
 const MM_TO_PT = 72 / 25.4;
 
 const CREDITO_PROFILE = {

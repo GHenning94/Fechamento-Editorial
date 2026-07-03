@@ -151,11 +151,15 @@ export function isParagraphStyleNomenclatureSkipped(name: string): boolean {
 
 export function styleMatchesTrunk(styleName: string, trunk: string): boolean {
   if (containsInvalidSpaces(styleName)) return false;
-  if (styleName === trunk) return true;
-  if (styleName.startsWith(`${trunk}_`)) return true;
 
-  if (!/\d$/.test(trunk) && styleName.startsWith(trunk) && styleName.length > trunk.length) {
-    const remainder = styleName.slice(trunk.length);
+  const styleLower = styleName.toLowerCase();
+  const trunkLower = trunk.toLowerCase();
+
+  if (styleLower === trunkLower) return true;
+  if (styleLower.startsWith(`${trunkLower}_`)) return true;
+
+  if (!/\d$/.test(trunk) && styleLower.startsWith(trunkLower) && styleName.length > trunk.length) {
+    const remainder = styleLower.slice(trunkLower.length);
     if (/^\d+$/.test(remainder)) return true;
   }
 

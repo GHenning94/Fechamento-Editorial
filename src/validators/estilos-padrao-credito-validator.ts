@@ -6,6 +6,7 @@ import { forEachCollectionItem } from "../utils/collection-helpers";
 import {
   compareCreditoStyle,
   CREDITO_STYLE_NAME,
+  isCreditoStyleName,
 } from "../utils/estilos-padrao-credito";
 
 function collectParagraphStyleNames(doc: Document): Set<string> {
@@ -28,8 +29,9 @@ export class EstilosPadraoCreditoValidator extends BaseValidator {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
       const presentStyles = collectParagraphStyleNames(doc);
+      const hasCreditoStyle = [...presentStyles].some((name) => isCreditoStyleName(name));
 
-      if (!presentStyles.has(CREDITO_STYLE_NAME)) {
+      if (!hasCreditoStyle) {
         issues.push({
           message: "Estilo obrigatório ausente",
           object: CREDITO_STYLE_NAME,
@@ -39,7 +41,7 @@ export class EstilosPadraoCreditoValidator extends BaseValidator {
 
       forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
         if (!style || !style.isValid) return;
-        if (style.name !== CREDITO_STYLE_NAME) return;
+        if (!isCreditoStyleName(style.name)) return;
 
         for (const issue of compareCreditoStyle(style)) {
           issues.push({

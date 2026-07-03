@@ -39,14 +39,16 @@ export function readDocumentFileName(doc: import("indesign").Document): string {
 
 export function detectMaterialFromFileName(fileName: string): MaterialDetection {
   const normalized = (fileName || "").replace(/\.indd$/i, "");
+  const upper = normalized.toUpperCase();
 
-  if (/\bEF1\b/i.test(normalized) || /\bEFAI\b/i.test(normalized)) {
+  // EFAI/EFAF costumam vir concatenados à marca (ex.: SciEFAF, SciEFAI).
+  if (upper.includes("EFAI") || /\bEF1\b/i.test(normalized)) {
     return { segment: "EF1", label: "EF1/EFAI" };
   }
-  if (/\bEF2\b/i.test(normalized) || /\bEFAF\b/i.test(normalized)) {
+  if (upper.includes("EFAF") || /\bEF2\b/i.test(normalized)) {
     return { segment: "EF2", label: "EF2/EFAF" };
   }
-  if (/\bEM\b/i.test(normalized)) {
+  if (/(?:^|[^A-Z])EM(?:\d|[^A-Z]|$)/i.test(normalized)) {
     return { segment: "EM", label: "EM" };
   }
   if (/\bPV\b/i.test(normalized) || /\bPrevest\b/i.test(normalized)) {

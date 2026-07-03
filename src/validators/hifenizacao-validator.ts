@@ -5,6 +5,7 @@ import type { ParagraphStyle } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
+import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 
 export class HifenizacaoValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.HIFENIZACAO;
@@ -22,6 +23,7 @@ export class HifenizacaoValidator extends BaseValidator {
 
       forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
         if (!style || !style.isValid) return;
+        if (shouldSkipParagraphStyleValidation(style.name)) return;
 
         try {
           const hyphenation = style.hyphenation;

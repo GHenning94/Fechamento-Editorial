@@ -3,7 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { isDefaultParagraphStyle } from "../utils/indesign-helpers";
+import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import {
   buildParagraphStyleSuggestion,
   containsInvalidSpaces,
@@ -24,7 +24,7 @@ export class EstilosNomenclaturaValidator extends BaseValidator {
         if (!style || !style.isValid) return;
 
         const name = (style.name || "").trim();
-        if (!name || isDefaultParagraphStyle(name) || isParagraphStyleNomenclatureSkipped(name)) {
+        if (shouldSkipParagraphStyleValidation(name) || isParagraphStyleNomenclatureSkipped(name)) {
           return;
         }
 
@@ -39,7 +39,7 @@ export class EstilosNomenclaturaValidator extends BaseValidator {
         issues.push({
           message: "Nomenclatura inválida",
           object: name,
-          details: `O tronco do estilo deve ser idêntico à paleta padrão (maiúsculas e minúsculas, sem espaços). Exemplos: ${PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES}.${spaceHint}${suggestionText}`,
+          details: `O tronco do estilo deve corresponder à paleta padrão (sem espaços; sufixo numérico permitido, ex.: 05_legenda_proporcao2). Exemplos: ${PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES}.${spaceHint}${suggestionText}`,
         });
       });
 

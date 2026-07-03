@@ -544,8 +544,21 @@ export function normalizeFontFamily(name: string): string {
 }
 
 export function isDefaultParagraphStyle(name: string): boolean {
-  const lower = name.toLowerCase();
-  return lower === "[sem estilo de parágrafo]" || lower === "[no paragraph style]";
+  const normalized = name.trim().toLowerCase();
+  return (
+    normalized === "[sem estilo de parágrafo]" ||
+    normalized === "[no paragraph style]" ||
+    normalized === "[parágrafo básico]" ||
+    normalized === "[basic paragraph]"
+  );
+}
+
+/** Estilos do InDesign ou prefixo 00_ — ignorados em todas as validações de parágrafo. */
+export function shouldSkipParagraphStyleValidation(name: string): boolean {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return true;
+  if (isDefaultParagraphStyle(trimmed)) return true;
+  return trimmed.startsWith("00_");
 }
 
 export function isMixedInkColor(color: Color): boolean {

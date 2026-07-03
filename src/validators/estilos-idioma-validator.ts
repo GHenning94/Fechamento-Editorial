@@ -2,6 +2,7 @@ import type { Document } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { ACCEPTED_LANGUAGES, VALIDATOR_IDS } from "../utils/constants";
+import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import type { ParagraphStyle } from "indesign";
 
@@ -26,6 +27,7 @@ export class EstilosIdiomaValidator extends BaseValidator {
 
       forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
         if (!style || !style.isValid) return;
+        if (shouldSkipParagraphStyleValidation(style.name)) return;
 
         try {
           const language = style.appliedLanguage;

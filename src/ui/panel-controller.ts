@@ -134,8 +134,14 @@ export class PanelController {
 
   setReportDownloadEnabled(enabled: boolean): void {
     this.reportDownloadAllowed = enabled;
-    if (this.btnDownloadReport) {
-      this.btnDownloadReport.disabled = !enabled;
+    if (!this.btnDownloadReport) return;
+
+    if (enabled) {
+      this.btnDownloadReport.classList.remove("hidden");
+      this.btnDownloadReport.disabled = false;
+    } else {
+      this.btnDownloadReport.classList.add("hidden");
+      this.btnDownloadReport.disabled = true;
     }
   }
 
