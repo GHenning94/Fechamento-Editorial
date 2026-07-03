@@ -18,6 +18,13 @@ export const SPOT_COLOR_EXCEPTIONS = [COLOR_CORPROF, COLOR_GUIAS_DELETAR];
 
 export const ACCEPTED_LANGUAGES = ["Portuguese: Brazilian", "Português: Brasileiro"];
 
+export const ACCEPTED_PROFESSOR_LANGUAGES = [
+  "Portuguese: Brazilian",
+  "Português: Brasileiro",
+  "Portuguese",
+  "Português",
+] as const;
+
 export const MIN_IMAGE_DPI = 300;
 export const MIN_STROKE_WEIGHT = 0.3;
 export const BLEED_MM = 20;
@@ -30,6 +37,7 @@ export const VALIDATOR_IDS = {
   LAYERS_NOMENCLATURA: "V02_LAYERS_NOMENCLATURA",
   MEMORIAL_DESCRITIVO: "V03_MEMORIAL_DESCRITIVO",
   CORES: "V04_CORES",
+  ESTILOS_PADRAO_PROFESSOR: "V05_ESTILOS_PADRAO_PROFESSOR",
   CORPROF: "V06_CORPROF",
   GUIAS_COLOR: "V07_GUIAS_COLOR",
   OVERPRINT: "V08_OVERPRINT",

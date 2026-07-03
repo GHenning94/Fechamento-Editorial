@@ -253,6 +253,16 @@ declare module "indesign" {
     justification: number;
     appliedLanguage: Language;
     isValid: boolean;
+    pointSize: number;
+    leading: number;
+    autoLeading: number;
+    appliedFont: Font | string;
+    fillColor: Swatch | Color;
+    kerningMethod: number;
+    hyphenationZone: number;
+    spaceBefore: number;
+    spaceAfter: number;
+    overprintFill: boolean;
   }
 
   export interface Language {
@@ -294,6 +304,7 @@ declare module "indesign" {
   export interface Font {
     name: string;
     fontFamily: string;
+    fontStyleName?: string;
     fullName?: string;
     status: number;
     isValid: boolean;
