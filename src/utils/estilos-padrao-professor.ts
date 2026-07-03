@@ -12,32 +12,55 @@ export const PROFESSOR_STANDARD_STYLE_NAMES = [
   "04_proposta_citado_fonte",
 ] as const;
 
+export const PROFESSOR_REQUIRED_STYLE_NAME = "04_professor_resposta";
+
 const MM_TO_PT = 72 / 25.4;
 
-const SHARED_STYLE_SETTINGS = {
-  fontFamily: "Univers LT Std",
-  fillColor: COLOR_CORPROF,
+type LeadingMode = "fixed" | "auto";
+type JustificationExpectation = "right";
+
+const EFAI_POINT_SIZE_PT = 12;
+
+interface ProfessorStyleProfile {
+  fontFamily: string;
+  fontStyleIncludes?: string;
+  oblique?: boolean;
+  pointSizeEfAfPt: number;
+  leadingMode: LeadingMode;
+  leadingPt?: number;
+  autoLeadingPct: number;
+  leftIndentPt: number;
+  leftIndentLabel: string;
+  fillColor: string;
+  justification?: JustificationExpectation;
+  hyphenationZonePt: number;
+  spaceBeforePt: number;
+  spaceAfterPt: number;
+  overprintFill: boolean;
+  acceptedLanguages: readonly string[];
+}
+
+const SHARED_SPACING = {
   autoLeadingPct: 115,
   hyphenationZonePt: 7.408 * MM_TO_PT,
   spaceBeforePt: 2.117 * MM_TO_PT,
   spaceAfterPt: 3.528 * MM_TO_PT,
-  overprintFill: true,
 } as const;
 
-interface ProfessorStyleProfile {
-  fontStyleIncludes: string;
-  oblique?: boolean;
-  pointSizeEfAfPt: number;
-  pointSizeEfAiPt: number;
-  leadingPt?: number;
-  acceptedLanguages: readonly string[];
-}
-
 const DEFAULT_PROFESSOR_PROFILE: ProfessorStyleProfile = {
+  fontFamily: "Univers LT Std",
   fontStyleIncludes: "45 Light",
   pointSizeEfAfPt: 8,
-  pointSizeEfAiPt: 12,
+  leadingMode: "fixed",
   leadingPt: 9.2,
+  autoLeadingPct: SHARED_SPACING.autoLeadingPct,
+  leftIndentPt: 0,
+  leftIndentLabel: "0 mm",
+  fillColor: COLOR_CORPROF,
+  hyphenationZonePt: SHARED_SPACING.hyphenationZonePt,
+  spaceBeforePt: SHARED_SPACING.spaceBeforePt,
+  spaceAfterPt: SHARED_SPACING.spaceAfterPt,
+  overprintFill: true,
   acceptedLanguages: ACCEPTED_PROFESSOR_LANGUAGES,
 };
 
@@ -46,8 +69,24 @@ const PROFESSOR_STYLE_PROFILES: Record<string, Partial<ProfessorStyleProfile>> =
     fontStyleIncludes: "45 Light Oblique",
     oblique: true,
     pointSizeEfAfPt: 9,
-    pointSizeEfAiPt: 12,
+    leadingMode: "auto",
     leadingPt: undefined,
+  },
+  "04_proposta_didatica_citado": {
+    fontFamily: "ITC Garamond Std",
+    fontStyleIncludes: undefined,
+    leadingMode: "auto",
+    leadingPt: undefined,
+    leftIndentPt: 12.506 * MM_TO_PT,
+    leftIndentLabel: "12,506 mm",
+  },
+  "04_proposta_citado_fonte": {
+    fontFamily: "ITC Garamond Std",
+    fontStyleIncludes: undefined,
+    pointSizeEfAfPt: 7,
+    leadingMode: "auto",
+    leadingPt: undefined,
+    justification: "right",
   },
 };
 
@@ -70,8 +109,8 @@ export function getExpectedProfessorPointSize(
   styleName: string,
   segment: MaterialSegment
 ): number {
-  const profile = getStyleProfile(styleName);
-  return segment === "EF1" ? profile.pointSizeEfAiPt : profile.pointSizeEfAfPt;
+  if (segment === "EF1") return EFAI_POINT_SIZE_PT;
+  return getStyleProfile(styleName).pointSizeEfAfPt;
 }
 
 function approxEqual(a: number, b: number, tolerance: number): boolean {
@@ -129,6 +168,103 @@ function isOpticalKerning(value: number): boolean {
   return value === 1851876449;
 }
 
+function isAutoLeadingValue(leading: number): boolean {
+  try {
+    const { Leading } = getInDesignModule();
+    const L = Leading as { AUTO?: number };
+    if (typeof L.AUTO === "number" && leading === L.AUTO) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+
+  return leading === 1635019116;
+}
+
+function isRightAlign(justification: number): boolean {
+  try {
+    const { Justification } = getInDesignModule();
+    const J = Justification as { RIGHT_ALIGN?: number; RIGHT_JUSTIFIED?: number };
+    if (typeof J.RIGHT_ALIGN === "number" && justification === J.RIGHT_ALIGN) return true;
+    if (typeof J.RIGHT_JUSTIFIED === "number" && justification === J.RIGHT_JUSTIFIED) return true;
+  } catch {
+    // ignore
+  }
+
+  return false;
+}
+
+function readNumberProperty(
+  style: ParagraphStyle,
+  property: keyof ParagraphStyle,
+  label: string
+): { value: number | null; issue: StylePropertyIssue | null } {
+  try {
+    const raw = style[property];
+    if (typeof raw !== "number" || Number.isNaN(raw)) {
+      return {
+        value: null,
+        issue: {
+          property: label,
+          expected: "Valor numérico",
+          actual: "Não foi possível ler",
+        },
+      };
+    }
+    return { value: raw, issue: null };
+  } catch {
+    return {
+      value: null,
+      issue: {
+        property: label,
+        expected: "Valor numérico",
+        actual: "Não foi possível ler",
+      },
+    };
+  }
+}
+
+function validateFontStyle(
+  profile: ProfessorStyleProfile,
+  fontStyle: string
+): StylePropertyIssue | null {
+  if (!profile.fontStyleIncludes) return null;
+
+  if (profile.oblique) {
+    if (!fontStyle.includes(profile.fontStyleIncludes) || !isObliqueFontStyle(fontStyle)) {
+      return {
+        property: "Estilo da fonte",
+        expected: profile.fontStyleIncludes,
+        actual: fontStyle || "Não definido",
+      };
+    }
+    return null;
+  }
+
+  if (!fontStyle.includes(profile.fontStyleIncludes)) {
+    return {
+      property: "Estilo da fonte",
+      expected: profile.fontStyleIncludes,
+      actual: fontStyle || "Não definido",
+    };
+  }
+
+  if (isObliqueFontStyle(fontStyle)) {
+    return {
+      property: "Estilo da fonte",
+      expected: profile.fontStyleIncludes,
+      actual: fontStyle,
+    };
+  }
+
+  return null;
+}
+
+function pushIssue(issues: StylePropertyIssue[], issue: StylePropertyIssue | null): void {
+  if (issue) issues.push(issue);
+}
+
 export function compareProfessorStyle(
   style: ParagraphStyle,
   options: { segment: MaterialSegment | null; validateSize: boolean }
@@ -137,74 +273,81 @@ export function compareProfessorStyle(
   const profile = getStyleProfile(style.name);
   const { fontFamily, fontStyle } = readFontInfo(style);
 
-  if (!fontFamily.includes(SHARED_STYLE_SETTINGS.fontFamily)) {
+  if (!fontFamily.includes(profile.fontFamily)) {
     issues.push({
       property: "Fonte",
-      expected: SHARED_STYLE_SETTINGS.fontFamily,
+      expected: profile.fontFamily,
       actual: fontFamily || "Não definida",
     });
   }
 
-  if (profile.oblique) {
-    if (!fontStyle.includes(profile.fontStyleIncludes) || !isObliqueFontStyle(fontStyle)) {
-      issues.push({
-        property: "Estilo da fonte",
-        expected: profile.fontStyleIncludes,
-        actual: fontStyle || "Não definido",
-      });
-    }
-  } else if (!fontStyle.includes(profile.fontStyleIncludes)) {
-    issues.push({
-      property: "Estilo da fonte",
-      expected: profile.fontStyleIncludes,
-      actual: fontStyle || "Não definido",
-    });
-  } else if (isObliqueFontStyle(fontStyle)) {
-    issues.push({
-      property: "Estilo da fonte",
-      expected: profile.fontStyleIncludes,
-      actual: fontStyle,
-    });
-  }
+  pushIssue(issues, validateFontStyle(profile, fontStyle));
 
   if (options.validateSize && options.segment) {
     const expectedPointSize = getExpectedProfessorPointSize(style.name, options.segment);
-    try {
-      if (!approxEqual(style.pointSize, expectedPointSize, SIZE_TOLERANCE_PT)) {
-        issues.push({
-          property: "Tamanho",
-          expected: `${expectedPointSize} pt`,
-          actual: `${style.pointSize} pt`,
-        });
-      }
-    } catch {
+    const pointSize = readNumberProperty(style, "pointSize", "Tamanho");
+    pushIssue(issues, pointSize.issue);
+    if (pointSize.value !== null && !approxEqual(pointSize.value, expectedPointSize, SIZE_TOLERANCE_PT)) {
       issues.push({
         property: "Tamanho",
         expected: `${expectedPointSize} pt`,
-        actual: "Não foi possível ler",
+        actual: `${pointSize.value} pt`,
       });
     }
   }
 
-  if (profile.leadingPt !== undefined) {
-    try {
-      if (!approxEqual(style.leading, profile.leadingPt, SIZE_TOLERANCE_PT)) {
+  const leading = readNumberProperty(style, "leading", "Entrelinha");
+  pushIssue(issues, leading.issue);
+  if (leading.value !== null) {
+    if (profile.leadingMode === "fixed") {
+      const expectedLeading = profile.leadingPt ?? DEFAULT_PROFESSOR_PROFILE.leadingPt!;
+      if (!approxEqual(leading.value, expectedLeading, SIZE_TOLERANCE_PT)) {
         issues.push({
           property: "Entrelinha",
-          expected: `${profile.leadingPt} pt`,
-          actual: `${style.leading} pt`,
+          expected: `${expectedLeading} pt`,
+          actual: `${leading.value} pt`,
         });
       }
-    } catch {
-      // ignore unreadable leading
+    } else if (!isAutoLeadingValue(leading.value)) {
+      issues.push({
+        property: "Entrelinha",
+        expected: "Automática",
+        actual: `${leading.value} pt`,
+      });
     }
   }
 
+  const autoLeading = readNumberProperty(style, "autoLeading", "Entrelinha automática");
+  pushIssue(issues, autoLeading.issue);
+  if (
+    autoLeading.value !== null &&
+    !approxEqual(autoLeading.value, profile.autoLeadingPct, 1)
+  ) {
+    issues.push({
+      property: "Entrelinha automática",
+      expected: `${profile.autoLeadingPct}%`,
+      actual: `${autoLeading.value}%`,
+    });
+  }
+
+  const leftIndent = readNumberProperty(style, "leftIndent", "Recuo à esquerda");
+  pushIssue(issues, leftIndent.issue);
+  if (
+    leftIndent.value !== null &&
+    !approxEqual(leftIndent.value, profile.leftIndentPt, SPACING_TOLERANCE_PT)
+  ) {
+    issues.push({
+      property: "Recuo à esquerda",
+      expected: profile.leftIndentLabel,
+      actual: `${leftIndent.value}`,
+    });
+  }
+
   const fillColorName = readFillColorName(style);
-  if (fillColorName !== SHARED_STYLE_SETTINGS.fillColor) {
+  if (fillColorName !== profile.fillColor) {
     issues.push({
       property: "Cor",
-      expected: SHARED_STYLE_SETTINGS.fillColor,
+      expected: profile.fillColor,
       actual: fillColorName || "Não definida",
     });
   }
@@ -218,19 +361,29 @@ export function compareProfessorStyle(
       });
     }
   } catch {
-    // ignore
+    issues.push({
+      property: "Kerning",
+      expected: "Óptico",
+      actual: "Não foi possível ler",
+    });
   }
 
-  try {
-    if (!approxEqual(style.autoLeading, SHARED_STYLE_SETTINGS.autoLeadingPct, 1)) {
+  if (profile.justification === "right") {
+    try {
+      if (!isRightAlign(style.justification)) {
+        issues.push({
+          property: "Alinhamento",
+          expected: "À direita",
+          actual: String(style.justification),
+        });
+      }
+    } catch {
       issues.push({
-        property: "Entrelinha automática",
-        expected: `${SHARED_STYLE_SETTINGS.autoLeadingPct}%`,
-        actual: `${style.autoLeading}%`,
+        property: "Alinhamento",
+        expected: "À direita",
+        actual: "Não foi possível ler",
       });
     }
-  } catch {
-    // ignore
   }
 
   try {
@@ -243,57 +396,54 @@ export function compareProfessorStyle(
       });
     }
   } catch {
-    // ignore
+    issues.push({
+      property: "Idioma",
+      expected: profile.acceptedLanguages.join(" ou "),
+      actual: "Não foi possível ler",
+    });
+  }
+
+  const hyphenationZone = readNumberProperty(style, "hyphenationZone", "Zona de hifenização");
+  pushIssue(issues, hyphenationZone.issue);
+  if (
+    hyphenationZone.value !== null &&
+    !approxEqual(hyphenationZone.value, profile.hyphenationZonePt, SPACING_TOLERANCE_PT)
+  ) {
+    issues.push({
+      property: "Zona de hifenização",
+      expected: "7,408 mm",
+      actual: `${hyphenationZone.value}`,
+    });
+  }
+
+  const spaceBefore = readNumberProperty(style, "spaceBefore", "Espaço anterior");
+  pushIssue(issues, spaceBefore.issue);
+  if (
+    spaceBefore.value !== null &&
+    !approxEqual(spaceBefore.value, profile.spaceBeforePt, SPACING_TOLERANCE_PT)
+  ) {
+    issues.push({
+      property: "Espaço anterior",
+      expected: "2,117 mm",
+      actual: `${spaceBefore.value}`,
+    });
+  }
+
+  const spaceAfter = readNumberProperty(style, "spaceAfter", "Espaço posterior");
+  pushIssue(issues, spaceAfter.issue);
+  if (
+    spaceAfter.value !== null &&
+    !approxEqual(spaceAfter.value, profile.spaceAfterPt, SPACING_TOLERANCE_PT)
+  ) {
+    issues.push({
+      property: "Espaço posterior",
+      expected: "3,528 mm",
+      actual: `${spaceAfter.value}`,
+    });
   }
 
   try {
-    if (
-      !approxEqual(
-        style.hyphenationZone,
-        SHARED_STYLE_SETTINGS.hyphenationZonePt,
-        SPACING_TOLERANCE_PT
-      )
-    ) {
-      issues.push({
-        property: "Zona de hifenização",
-        expected: "7,408 mm",
-        actual: `${style.hyphenationZone}`,
-      });
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    if (
-      !approxEqual(style.spaceBefore, SHARED_STYLE_SETTINGS.spaceBeforePt, SPACING_TOLERANCE_PT)
-    ) {
-      issues.push({
-        property: "Espaço anterior",
-        expected: "2,117 mm",
-        actual: `${style.spaceBefore}`,
-      });
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    if (
-      !approxEqual(style.spaceAfter, SHARED_STYLE_SETTINGS.spaceAfterPt, SPACING_TOLERANCE_PT)
-    ) {
-      issues.push({
-        property: "Espaço posterior",
-        expected: "3,528 mm",
-        actual: `${style.spaceAfter}`,
-      });
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    if (style.overprintFill !== SHARED_STYLE_SETTINGS.overprintFill) {
+    if (style.overprintFill !== profile.overprintFill) {
       issues.push({
         property: "Superimposição",
         expected: "Ativada",
@@ -301,13 +451,34 @@ export function compareProfessorStyle(
       });
     }
   } catch {
-    // ignore
+    issues.push({
+      property: "Superimposição",
+      expected: "Ativada",
+      actual: "Não foi possível ler",
+    });
   }
 
   return issues;
 }
 
-export function getEfAiSizeHint(styleName: string): string {
-  const profile = getStyleProfile(styleName);
-  return ` Para EF1/EFAI, o corpo deve ser ${profile.pointSizeEfAiPt} pt.`;
+export function getEfAiSizeHint(_styleName: string): string {
+  return ` Para EF1/EFAI, o corpo deve ser ${EFAI_POINT_SIZE_PT} pt.`;
 }
+
+/** Lista das propriedades validadas em todo estilo padrão de professor. */
+export const PROFESSOR_VALIDATED_PROPERTIES = [
+  "Fonte",
+  "Estilo da fonte",
+  "Tamanho",
+  "Entrelinha",
+  "Entrelinha automática",
+  "Recuo à esquerda",
+  "Cor",
+  "Kerning",
+  "Alinhamento",
+  "Idioma",
+  "Zona de hifenização",
+  "Espaço anterior",
+  "Espaço posterior",
+  "Superimposição",
+] as const;

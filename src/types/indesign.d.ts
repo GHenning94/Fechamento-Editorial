@@ -262,6 +262,7 @@ declare module "indesign" {
     hyphenationZone: number;
     spaceBefore: number;
     spaceAfter: number;
+    leftIndent: number;
     overprintFill: boolean;
   }
 
