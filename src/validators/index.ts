@@ -8,6 +8,7 @@ import { OverprintValidator } from "./overprint-validator";
 import { EstilosIdiomaValidator } from "./estilos-idioma-validator";
 import { EstilosNomenclaturaValidator } from "./estilos-nomenclatura-validator";
 import { EstilosPadraoProfessorValidator } from "./estilos-padrao-professor-validator";
+import { EstilosPadraoCreditoValidator } from "./estilos-padrao-credito-validator";
 import { HifenizacaoValidator } from "./hifenizacao-validator";
 import { FontesValidator } from "./fontes-validator";
 import { FontesDuplicadasValidator } from "./fontes-duplicadas-validator";
@@ -31,6 +32,7 @@ export function createAllValidators(): IValidator[] {
     new EstilosIdiomaValidator(),
     new EstilosNomenclaturaValidator(),
     new EstilosPadraoProfessorValidator(),
+    new EstilosPadraoCreditoValidator(),
     new HifenizacaoValidator(),
     new FontesValidator(),
     new FontesDuplicadasValidator(),
@@ -55,6 +57,7 @@ export {
   EstilosIdiomaValidator,
   EstilosNomenclaturaValidator,
   EstilosPadraoProfessorValidator,
+  EstilosPadraoCreditoValidator,
   HifenizacaoValidator,
   FontesValidator,
   FontesDuplicadasValidator,
