@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: autoclose
+    name: fechamento-editorial
     runtime: node
     rootDir: tools/activation-server
     buildCommand: npm install

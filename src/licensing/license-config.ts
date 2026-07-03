@@ -3,9 +3,9 @@
  * Deixe vazio para modo local (sem controle de uso único entre reinstalações).
  *
  * Exemplo local: "http://127.0.0.1:3921"
- * Produção: "https://seu-dominio.com/editorial-autoclose"
+ * Produção (Render): "https://fechamento-editorial.onrender.com"
  */
-export const LICENSE_ACTIVATION_URL: string = "https://autoclose.onrender.com";
+export const LICENSE_ACTIVATION_URL: string = "https://fechamento-editorial.onrender.com";
 
 /**
  * Exibe botão "Resetar licença" no painel (somente para testes).

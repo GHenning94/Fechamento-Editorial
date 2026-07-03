@@ -130,7 +130,7 @@ LICENSE_SERVER_HOST=0.0.0.0
 Em `src/licensing/license-config.ts`:
 
 ```typescript
-export const LICENSE_ACTIVATION_URL: string = "https://seu-dominio.com/editorial-autoclose";
+export const LICENSE_ACTIVATION_URL: string = "https://fechamento-editorial.onrender.com";
 ```
 
 Rebuild e distribua o plugin (`dist/`).

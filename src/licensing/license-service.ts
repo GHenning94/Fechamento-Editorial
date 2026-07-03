@@ -50,10 +50,23 @@ async function activateOnServer(serial: string, machineId: string, licenseId: st
 
   if (!response.ok) {
     let message = "Ativação recusada pelo servidor.";
+    const contentType = response.headers.get("content-type") || "";
+
+    if (response.status === 503 || response.status === 502) {
+      message =
+        "Servidor de ativação indisponível. Para testes locais, deixe LICENSE_ACTIVATION_URL vazio em license-config.ts, rode npm run build e Unload/Load no UDT.";
+    }
+
     try {
-      const body = (await response.json()) as { error?: string };
-      if (body.error) {
-        message = body.error;
+      const raw = await response.text();
+      if (contentType.includes("application/json")) {
+        const body = JSON.parse(raw) as { error?: string };
+        if (body.error) {
+          message = body.error;
+        }
+      } else if (/suspended|indispon/i.test(raw)) {
+        message =
+          "Servidor de ativação suspenso ou offline. Para testes locais, deixe LICENSE_ACTIVATION_URL vazio em license-config.ts, rode npm run build e Unload/Load no UDT.";
       }
     } catch {
       // ignore
