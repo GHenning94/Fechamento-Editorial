@@ -6,6 +6,7 @@ import { CorProfValidator } from "./corprof-validator";
 import { GuiasColorValidator } from "./guias-color-validator";
 import { OverprintValidator } from "./overprint-validator";
 import { EstilosIdiomaValidator } from "./estilos-idioma-validator";
+import { EstilosNomenclaturaValidator } from "./estilos-nomenclatura-validator";
 import { HifenizacaoValidator } from "./hifenizacao-validator";
 import { FontesValidator } from "./fontes-validator";
 import { FontesDuplicadasValidator } from "./fontes-duplicadas-validator";
@@ -27,6 +28,7 @@ export function createAllValidators(): IValidator[] {
     new GuiasColorValidator(),
     new OverprintValidator(),
     new EstilosIdiomaValidator(),
+    new EstilosNomenclaturaValidator(),
     new HifenizacaoValidator(),
     new FontesValidator(),
     new FontesDuplicadasValidator(),
@@ -49,6 +51,7 @@ export {
   GuiasColorValidator,
   OverprintValidator,
   EstilosIdiomaValidator,
+  EstilosNomenclaturaValidator,
   HifenizacaoValidator,
   FontesValidator,
   FontesDuplicadasValidator,

@@ -11,8 +11,12 @@ function isBuiltInSwatch(name: string): boolean {
   return trimmed.startsWith("[") || trimmed === "";
 }
 
-function hasCorPrefix(name: string): boolean {
-  return (name || "").trim().toUpperCase().startsWith("COR_");
+const COR_PREFIX = "Cor";
+const COR_NOMENCLATURE_EXAMPLES = "CorAzul, Cor1, CorCMYK";
+
+function isValidCorNomenclature(name: string): boolean {
+  const trimmed = (name || "").trim();
+  return trimmed.startsWith(COR_PREFIX);
 }
 
 export class CoresValidator extends BaseValidator {
@@ -31,11 +35,11 @@ export class CoresValidator extends BaseValidator {
           return;
         }
 
-        if (!hasCorPrefix(name)) {
+        if (!isValidCorNomenclature(name)) {
           issues.push({
             message: "Nomenclatura inválida",
             object: name,
-            details: 'O nome da cor deve começar com "COR_".',
+            details: `O nome da cor deve começar com "Cor" (exatamente assim). Exemplos corretos: ${COR_NOMENCLATURE_EXAMPLES}.`,
           });
         }
       });
