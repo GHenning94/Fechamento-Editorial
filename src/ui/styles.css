@@ -1,29 +1,23 @@
 :root {
-  --bg: #141416;
-  --bg-elevated: #1a1a1e;
-  --surface: #222228;
-  --surface-hover: #2a2a32;
-  --surface-alt: #2c2c34;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #f4f2ef;
-  --text-muted: #9a9690;
-  --text-soft: #6e6a64;
+  --bg: #17171a;
+  --surface: #232329;
+  --surface-hover: #2c2c34;
+  --surface-alt: #2a2a30;
+  --border: #3a3a42;
+  --border-strong: #4a4a54;
+  --text: #f2f0ec;
+  --text-muted: #9c9891;
+  --text-soft: #6f6b65;
   --accent: #d4923a;
-  --accent-soft: rgba(212, 146, 58, 0.16);
   --accent-hover: #e4a54f;
-  --accent-pressed: #c4832e;
+  --accent-deep: #b87a2c;
   --success: #5ecf8e;
-  --success-soft: rgba(94, 207, 142, 0.12);
   --warning: #e6c35c;
-  --warning-soft: rgba(230, 195, 92, 0.12);
   --error: #e87474;
-  --error-soft: rgba(232, 116, 116, 0.12);
-  --danger: #c44a4a;
-  --danger-hover: #d45757;
+  --danger-border: #a84a4a;
+  --danger-text: #f0c8c8;
   --radius: 8px;
   --radius-sm: 6px;
-  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
 .hidden {
@@ -49,17 +43,17 @@ body {
   font-family: "Adobe Clean", "Segoe UI", system-ui, sans-serif;
   font-size: 12px;
   color: var(--text);
-  background:
-    radial-gradient(120% 80% at 50% -20%, rgba(212, 146, 58, 0.07), transparent 55%),
-    var(--bg);
-  -webkit-font-smoothing: antialiased;
+  background-color: var(--bg);
 }
 
-/* UXP desenha focus ring retangular nativo — remove e usa estados próprios */
+/* UXP: outline/box-shadow de foco viram retângulo — remover ambos */
 button,
 input,
-progress {
+progress,
+.btn,
+.license-dev-reset {
   outline: none !important;
+  box-shadow: none !important;
 }
 
 button::-moz-focus-inner {
@@ -72,10 +66,11 @@ button::-moz-focus-inner {
   flex-direction: column;
   height: 100%;
   min-height: 100%;
-  padding: 14px 14px 12px;
-  gap: 14px;
+  padding: 14px;
+  gap: 12px;
   box-sizing: border-box;
   overflow: hidden;
+  background-color: var(--bg);
 }
 
 .panel-header {
@@ -108,7 +103,6 @@ button::-moz-focus-inner {
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 11px;
-  letter-spacing: 0.01em;
 }
 
 .actions {
@@ -126,123 +120,105 @@ button::-moz-focus-inner {
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-  box-shadow: var(--shadow-soft);
-  /* Força override do Spectrum/UXP host */
   appearance: none;
   -webkit-appearance: none;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-  transform: none !important;
 }
 
 .btn:focus,
-.btn:focus-visible {
+.btn:focus-visible,
+.btn:active {
   outline: none !important;
-  box-shadow:
-    var(--shadow-soft),
-    0 0 0 2px var(--bg),
-    0 0 0 3px rgba(212, 146, 58, 0.45) !important;
-}
-
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
+  box-shadow: none !important;
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 100%) !important;
+  background-color: var(--accent) !important;
   color: #1a140c !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--accent-deep) !important;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ebae58 0%, var(--accent-hover) 100%) !important;
+  background-color: var(--accent-hover) !important;
 }
 
 .btn-primary:focus,
 .btn-primary:focus-visible {
-  box-shadow:
-    var(--shadow-soft),
-    0 0 0 2px var(--bg),
-    0 0 0 3px rgba(212, 146, 58, 0.55) !important;
+  border-color: #f0c078 !important;
 }
 
 .btn-download-report {
-  background: linear-gradient(180deg, #1f3d2a 0%, #173325 100%) !important;
+  background-color: #1a3324 !important;
   color: #d8f5e4 !important;
-  border-color: rgba(94, 207, 142, 0.45) !important;
+  border-color: #3d8f5f !important;
   font-weight: 700;
 }
 
 .btn-download-report:hover:not(:disabled) {
-  background: linear-gradient(180deg, #254a33 0%, #1a3a29 100%) !important;
-  border-color: rgba(94, 207, 142, 0.7) !important;
+  background-color: #21402d !important;
+  border-color: #5ecf8e !important;
 }
 
 .btn-download-report:focus,
 .btn-download-report:focus-visible {
-  box-shadow:
-    var(--shadow-soft),
-    0 0 0 2px var(--bg),
-    0 0 0 3px rgba(94, 207, 142, 0.45) !important;
+  border-color: #7ddda8 !important;
 }
 
 .btn-secondary {
-  background: var(--surface) !important;
+  background-color: var(--surface) !important;
   color: var(--text) !important;
   border-color: var(--border-strong) !important;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface-hover) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  background-color: var(--surface-hover) !important;
+}
+
+.btn-secondary:focus,
+.btn-secondary:focus-visible {
+  border-color: var(--accent) !important;
 }
 
 .btn-danger {
-  background: var(--surface) !important;
-  color: #f0d0d0 !important;
-  border-color: rgba(196, 74, 74, 0.55) !important;
+  background-color: var(--surface) !important;
+  color: var(--danger-text) !important;
+  border-color: var(--danger-border) !important;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: rgba(196, 74, 74, 0.16) !important;
-  border-color: rgba(232, 116, 116, 0.7) !important;
-  color: #fff !important;
+  background-color: #2e1e1e !important;
+  border-color: #c45a5a !important;
+  color: #ffffff !important;
 }
 
 .btn-danger:focus,
 .btn-danger:focus-visible {
-  box-shadow:
-    var(--shadow-soft),
-    0 0 0 2px var(--bg),
-    0 0 0 3px rgba(232, 116, 116, 0.4) !important;
+  border-color: #e87474 !important;
 }
 
 .counters {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: row;
   gap: 8px;
   flex-shrink: 0;
 }
 
 .counter {
-  background: var(--surface);
+  flex: 1;
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 8px 9px;
+  padding: 10px 6px 9px;
   text-align: center;
-  box-shadow: var(--shadow-soft);
 }
 
 .counter-label {
@@ -251,14 +227,13 @@ button::-moz-focus-inner {
   font-weight: 600;
   color: var(--text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   margin-bottom: 4px;
 }
 
 .counter-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -276,60 +251,63 @@ button::-moz-focus-inner {
 .progress-label {
   font-size: 11px;
   color: var(--text-muted);
-  letter-spacing: 0.01em;
 }
 
 progress {
   width: 100%;
-  height: 4px;
+  height: 5px;
   border: none;
-  border-radius: 999px;
+  border-radius: 3px;
   overflow: hidden;
-  background: var(--surface-alt);
+  background-color: var(--surface-alt);
   appearance: none;
   -webkit-appearance: none;
 }
 
 progress::-webkit-progress-bar {
-  background: var(--surface-alt);
-  border-radius: 999px;
+  background-color: var(--surface-alt);
+  border-radius: 3px;
 }
 
 progress::-webkit-progress-value {
-  background: linear-gradient(90deg, var(--accent-pressed), var(--accent-hover));
-  border-radius: 999px;
+  background-color: var(--accent);
+  border-radius: 3px;
 }
 
 .results {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
   min-height: 0;
+  gap: 0;
 }
 
 .result-block {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 72px;
-  background: var(--bg-elevated);
+  min-height: 64px;
+  margin-bottom: 10px;
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: var(--shadow-soft);
+}
+
+.result-block:last-child {
+  margin-bottom: 0;
 }
 
 .result-block:nth-child(1) {
-  border-left: 2px solid rgba(94, 207, 142, 0.55);
+  border-left: 3px solid var(--success);
 }
 
 .result-block:nth-child(2) {
-  border-left: 2px solid rgba(230, 195, 92, 0.55);
+  border-left: 3px solid var(--warning);
 }
 
 .result-block:nth-child(3) {
-  border-left: 2px solid rgba(232, 116, 116, 0.55);
+  border-left: 3px solid var(--error);
 }
 
 .result-header {
@@ -343,7 +321,7 @@ progress::-webkit-progress-value {
   text-transform: uppercase;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-alt);
 }
 
 .result-list {
@@ -390,26 +368,25 @@ progress::-webkit-progress-value {
   font-size: 11px;
   line-height: 1.4;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background-color: var(--surface);
   color: var(--text-muted);
-  box-shadow: var(--shadow-soft);
 }
 
 .status-success {
-  border-color: rgba(94, 207, 142, 0.35);
-  background: var(--success-soft);
+  border-color: #2f6b48;
+  background-color: #1a2e22;
   color: var(--success);
 }
 
 .status-warning {
-  border-color: rgba(230, 195, 92, 0.35);
-  background: var(--warning-soft);
+  border-color: #6b5a28;
+  background-color: #2e2a1a;
   color: var(--warning);
 }
 
 .status-error {
-  border-color: rgba(232, 116, 116, 0.35);
-  background: var(--error-soft);
+  border-color: #6b3030;
+  background-color: #2e1a1a;
   color: var(--error);
 }
 
@@ -425,14 +402,13 @@ progress::-webkit-progress-value {
   padding: 22px;
   min-width: 340px;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: 10px;
   background-color: var(--uxp-host-background-color, var(--surface));
   color: var(--uxp-host-text-color, var(--text));
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
 #editorial-user-name-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.6);
 }
 
 .user-name-dialog-content {
@@ -470,19 +446,21 @@ progress::-webkit-progress-value {
   padding: 10px 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--bg) !important;
+  background-color: var(--bg) !important;
   color: var(--text) !important;
   font-size: 12px;
   font-family: inherit;
   appearance: none;
   -webkit-appearance: none;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .user-name-dialog-native-input:focus,
 .user-name-dialog-native-input:focus-visible {
   outline: none !important;
+  box-shadow: none !important;
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px var(--accent-soft) !important;
 }
 
 .user-name-dialog-error {
@@ -573,7 +551,7 @@ progress::-webkit-progress-value {
   padding: 5px 9px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: transparent !important;
+  background-color: transparent !important;
   color: var(--text-soft) !important;
   font-family: inherit;
   font-size: 10px;
@@ -584,21 +562,22 @@ progress::-webkit-progress-value {
   white-space: nowrap;
   appearance: none;
   -webkit-appearance: none;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .license-dev-reset:hover {
   color: var(--text) !important;
-  border-color: rgba(212, 146, 58, 0.45) !important;
-  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+  background-color: #2a241c !important;
 }
 
 .license-dev-reset:focus,
-.license-dev-reset:focus-visible {
+.license-dev-reset:focus-visible,
+.license-dev-reset:active {
   outline: none !important;
-  box-shadow:
-    0 0 0 2px var(--bg),
-    0 0 0 3px rgba(212, 146, 58, 0.4) !important;
+  box-shadow: none !important;
+  border-color: var(--accent) !important;
 }
 
 .license-dev-reset.hidden {
