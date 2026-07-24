@@ -50,7 +50,7 @@ async function handleLicenseReset(container: HTMLElement): Promise<void> {
 }
 
 function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
-  const resetButton = root.querySelector("#btn-license-reset") as HTMLButtonElement | null;
+  const resetButton = root.querySelector("#btn-license-reset") as HTMLElement | null;
   if (!resetButton) {
     return;
   }
@@ -61,8 +61,15 @@ function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
   }
 
   resetButton.classList.remove("hidden");
-  resetButton.onclick = () => {
+  const onReset = (): void => {
     void handleLicenseReset(container);
+  };
+  resetButton.onclick = onReset;
+  resetButton.onkeydown = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onReset();
+    }
   };
 }
 
@@ -99,6 +106,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
     onChecklist: async () => {
       controller.resetProgress();
       controller.setStatus("Executando checklist editorial...", "info");
+      await yieldToHost(40);
 
       const summary = await orchestrator.runChecklist((current, total, label) => {
         const percent = Math.round((current / total) * 100);

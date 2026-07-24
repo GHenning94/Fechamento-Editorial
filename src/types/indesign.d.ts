@@ -82,6 +82,7 @@ declare module "indesign" {
     preflightProfiles: PreflightProfiles;
     scriptPreferences: ScriptPreferences;
     userName: string;
+    selection: unknown;
     doScript?(
       fn: () => unknown,
       language?: unknown,

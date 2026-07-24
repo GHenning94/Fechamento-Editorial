@@ -2,22 +2,22 @@ const PANEL_HTML = `
 <div id="root" class="panel">
   <header class="panel-header">
     <div class="panel-header-row">
-      <div>
+      <div class="panel-brand">
         <h1 class="panel-title">EDITORIAL AUTOCLOSE</h1>
         <p class="panel-subtitle">Fechamento editorial automatizado</p>
       </div>
-      <button id="btn-license-reset" class="license-dev-reset hidden" type="button">
+      <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">
         Resetar licença
-      </button>
+      </div>
     </div>
   </header>
 
   <section class="actions">
-    <button id="btn-checklist" class="btn btn-primary" type="button">Validar checklist</button>
-    <button id="btn-download-report" class="btn btn-download-report hidden" type="button">
+    <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
+    <div id="btn-download-report" class="btn btn-download-report hidden" role="button" tabindex="0">
       Baixar relatório
-    </button>
-    <button id="btn-close" class="btn btn-danger" type="button">Fechar material</button>
+    </div>
+    <div id="btn-close" class="btn btn-danger" role="button" tabindex="0">Fechar material</div>
   </section>
 
   <section class="counters">
@@ -105,14 +105,23 @@ export function showLicenseGate(container: HTMLElement, onEnterSerial: () => voi
         Este plugin só funciona após ativação com serial válido.
         Clique abaixo para informar o código fornecido pelo titular.
       </p>
-      <button id="btn-license-enter" class="btn btn-primary license-gate-btn" type="button">
+      <div id="btn-license-enter" class="btn btn-primary license-gate-btn" role="button" tabindex="0">
         Incluir serial
-      </button>
+      </div>
     </div>
   `;
 
-  const button = container.querySelector("#btn-license-enter");
-  button?.addEventListener("click", onEnterSerial);
+  const button = container.querySelector("#btn-license-enter") as HTMLElement | null;
+  if (!button) return;
+
+  const activate = (): void => onEnterSerial();
+  button.addEventListener("click", activate);
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activate();
+    }
+  });
 }
 
 /** Remove painel pré-renderizado fora do container UXP (legado / index.html antigo). */

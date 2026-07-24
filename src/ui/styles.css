@@ -18,6 +18,8 @@
   --danger-text: #f0c8c8;
   --radius: 8px;
   --radius-sm: 6px;
+  --space: 12px;
+  --space-sm: 8px;
 }
 
 .hidden {
@@ -46,12 +48,13 @@ body {
   background-color: var(--bg);
 }
 
-/* UXP: outline/box-shadow de foco viram retângulo — remover ambos */
+/* Sem outline/box-shadow: no UXP viram retângulo fora do border-radius */
 button,
 input,
 progress,
 .btn,
-.license-dev-reset {
+.license-dev-reset,
+[role="button"] {
   outline: none !important;
   box-shadow: none !important;
 }
@@ -67,23 +70,36 @@ button::-moz-focus-inner {
   height: 100%;
   min-height: 100%;
   padding: 14px;
-  gap: 12px;
   box-sizing: border-box;
   overflow: hidden;
   background-color: var(--bg);
 }
 
-.panel-header {
+/* UXP ignora gap em flex — usar margin nos filhos */
+.panel > * {
+  margin: 0 0 var(--space) 0;
   flex-shrink: 0;
+}
+
+.panel > *:last-child {
+  margin-bottom: 0;
+}
+
+.panel-header {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header-row {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+}
+
+.panel-brand {
+  flex: 1;
+  margin-right: 10px;
 }
 
 .panel-footer {
@@ -108,11 +124,20 @@ button::-moz-focus-inner {
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  flex-shrink: 0;
+}
+
+.actions > * {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.actions > *:last-child {
+  margin-bottom: 0;
 }
 
 .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 11px 14px;
   border: 1px solid transparent;
@@ -122,23 +147,19 @@ button::-moz-focus-inner {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  text-align: center;
   cursor: pointer;
+  user-select: none;
   appearance: none;
   -webkit-appearance: none;
-  box-shadow: none !important;
   outline: none !important;
+  box-shadow: none !important;
 }
 
-.btn:disabled {
+.btn.is-disabled,
+.btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.btn:focus,
-.btn:focus-visible,
-.btn:active {
-  outline: none !important;
-  box-shadow: none !important;
 }
 
 .btn-primary {
@@ -147,13 +168,8 @@ button::-moz-focus-inner {
   border-color: var(--accent-deep) !important;
 }
 
-.btn-primary:hover:not(:disabled) {
+.btn-primary:hover:not(.is-disabled):not([aria-disabled="true"]) {
   background-color: var(--accent-hover) !important;
-}
-
-.btn-primary:focus,
-.btn-primary:focus-visible {
-  border-color: #f0c078 !important;
 }
 
 .btn-download-report {
@@ -163,14 +179,9 @@ button::-moz-focus-inner {
   font-weight: 700;
 }
 
-.btn-download-report:hover:not(:disabled) {
+.btn-download-report:hover:not(.is-disabled):not([aria-disabled="true"]) {
   background-color: #21402d !important;
   border-color: #5ecf8e !important;
-}
-
-.btn-download-report:focus,
-.btn-download-report:focus-visible {
-  border-color: #7ddda8 !important;
 }
 
 .btn-secondary {
@@ -179,13 +190,8 @@ button::-moz-focus-inner {
   border-color: var(--border-strong) !important;
 }
 
-.btn-secondary:hover:not(:disabled) {
+.btn-secondary:hover:not(.is-disabled):not([aria-disabled="true"]) {
   background-color: var(--surface-hover) !important;
-}
-
-.btn-secondary:focus,
-.btn-secondary:focus-visible {
-  border-color: var(--accent) !important;
 }
 
 .btn-danger {
@@ -194,26 +200,27 @@ button::-moz-focus-inner {
   border-color: var(--danger-border) !important;
 }
 
-.btn-danger:hover:not(:disabled) {
+.btn-danger:hover:not(.is-disabled):not([aria-disabled="true"]) {
   background-color: #2e1e1e !important;
   border-color: #c45a5a !important;
   color: #ffffff !important;
 }
 
-.btn-danger:focus,
-.btn-danger:focus-visible {
-  border-color: #e87474 !important;
-}
-
 .counters {
   display: flex;
   flex-direction: row;
-  gap: 8px;
-  flex-shrink: 0;
+}
+
+.counters > .counter {
+  flex: 1;
+  margin: 0 0 0 var(--space-sm);
+}
+
+.counters > .counter:first-child {
+  margin-left: 0;
 }
 
 .counter {
-  flex: 1;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -244,18 +251,20 @@ button::-moz-focus-inner {
 .progress-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
 }
 
 .progress-label {
+  display: block;
   font-size: 11px;
   color: var(--text-muted);
+  margin: 0 0 6px 0;
 }
 
 progress {
+  display: block;
   width: 100%;
   height: 5px;
+  margin: 0;
   border: none;
   border-radius: 3px;
   overflow: hidden;
@@ -279,23 +288,26 @@ progress::-webkit-progress-value {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 0;
+  overflow: hidden;
+}
+
+.results > .result-block {
+  flex: 1;
+  min-height: 64px;
+  margin: 0 0 10px 0;
+}
+
+.results > .result-block:last-child {
+  margin-bottom: 0;
 }
 
 .result-block {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 64px;
-  margin-bottom: 10px;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-}
-
-.result-block:last-child {
-  margin-bottom: 0;
 }
 
 .result-block:nth-child(1) {
@@ -312,8 +324,8 @@ progress::-webkit-progress-value {
 
 .result-header {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 7px;
   padding: 7px 11px;
   font-weight: 600;
   font-size: 10px;
@@ -322,6 +334,10 @@ progress::-webkit-progress-value {
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   background-color: var(--surface-alt);
+}
+
+.result-header > span {
+  margin-right: 7px;
 }
 
 .result-list {
@@ -333,8 +349,12 @@ progress::-webkit-progress-value {
 }
 
 .result-list li {
-  margin-bottom: 7px;
+  margin: 0 0 7px 0;
   line-height: 1.45;
+}
+
+.result-list li:last-child {
+  margin-bottom: 0;
 }
 
 .item-title {
@@ -414,8 +434,15 @@ progress::-webkit-progress-value {
 .user-name-dialog-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-width: 300px;
+}
+
+.user-name-dialog-content > * {
+  margin: 0 0 12px 0;
+}
+
+.user-name-dialog-content > *:last-child {
+  margin-bottom: 0;
 }
 
 .user-name-dialog-heading {
@@ -475,15 +502,20 @@ progress::-webkit-progress-value {
 
 .user-name-dialog-actions {
   display: flex;
+  flex-direction: row;
   justify-content: flex-end;
-  gap: 8px;
   margin-top: 4px;
 }
 
-.user-name-dialog-actions .btn {
+.user-name-dialog-actions > .btn {
   width: auto;
   min-width: 96px;
   padding: 9px 14px;
+  margin: 0 0 0 8px;
+}
+
+.user-name-dialog-actions > .btn:first-child {
+  margin-left: 0;
 }
 
 .license-activation-panel {
@@ -494,8 +526,15 @@ progress::-webkit-progress-value {
 .license-activation-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   padding: 0 2px 16px;
+}
+
+.license-activation-body > * {
+  margin: 0 0 12px 0;
+}
+
+.license-activation-body > *:last-child {
+  margin-bottom: 0;
 }
 
 .license-activation-text {
@@ -507,15 +546,20 @@ progress::-webkit-progress-value {
 
 .license-activation-actions {
   display: flex;
+  flex-direction: row;
   justify-content: flex-end;
-  gap: 8px;
   margin-top: 8px;
   padding-top: 4px;
 }
 
-.license-activation-actions .btn {
+.license-activation-actions > .btn {
   width: auto;
   padding: 10px 16px;
+  margin: 0 0 0 8px;
+}
+
+.license-activation-actions > .btn:first-child {
+  margin-left: 0;
 }
 
 .license-gate {
@@ -527,6 +571,7 @@ progress::-webkit-progress-value {
   margin-top: 20px;
   align-self: center;
   min-width: 168px;
+  width: auto;
 }
 
 .license-gate-text {
@@ -560,6 +605,8 @@ progress::-webkit-progress-value {
   letter-spacing: 0.02em;
   cursor: pointer;
   white-space: nowrap;
+  text-align: center;
+  user-select: none;
   appearance: none;
   -webkit-appearance: none;
   outline: none !important;
@@ -570,14 +617,6 @@ progress::-webkit-progress-value {
   color: var(--text) !important;
   border-color: var(--accent) !important;
   background-color: #2a241c !important;
-}
-
-.license-dev-reset:focus,
-.license-dev-reset:focus-visible,
-.license-dev-reset:active {
-  outline: none !important;
-  box-shadow: none !important;
-  border-color: var(--accent) !important;
 }
 
 .license-dev-reset.hidden {

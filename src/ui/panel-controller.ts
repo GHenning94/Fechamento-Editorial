@@ -4,14 +4,15 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { PackageCancelledError, promptPackageFolder } from "../utils/file-system";
 import { yieldToHost } from "../utils/yield-to-host";
 import { getDefaultReportUserName } from "../utils/indesign-runtime";
+import { onActionActivate, setActionDisabled } from "./action-control";
 import { promptUserNameDialog } from "./user-name-dialog";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
 export class PanelController {
-  private btnChecklist: HTMLButtonElement | null;
-  private btnDownloadReport: HTMLButtonElement | null;
-  private btnClose: HTMLButtonElement | null;
+  private btnChecklist: HTMLElement | null;
+  private btnDownloadReport: HTMLElement | null;
+  private btnClose: HTMLElement | null;
   private progressBar: HTMLProgressElement | null;
   private progressLabel: HTMLElement | null;
   private countErrors: HTMLElement | null;
@@ -56,9 +57,15 @@ export class PanelController {
   }): void {
     if (!this.isReady()) return;
 
-    this.btnChecklist!.addEventListener("click", () => this.runAction(handlers.onChecklist));
-    this.btnDownloadReport!.addEventListener("click", () => this.runAction(handlers.onDownloadReport));
-    this.btnClose!.addEventListener("click", () => this.runClose(handlers.onClose));
+    onActionActivate(this.btnChecklist, () => {
+      void this.runAction(handlers.onChecklist);
+    });
+    onActionActivate(this.btnDownloadReport, () => {
+      void this.runAction(handlers.onDownloadReport);
+    });
+    onActionActivate(this.btnClose, () => {
+      void this.runClose(handlers.onClose);
+    });
   }
 
   private async runClose(
@@ -125,11 +132,9 @@ export class PanelController {
   }
 
   setBusy(busy: boolean): void {
-    if (this.btnChecklist) this.btnChecklist.disabled = busy;
-    if (this.btnClose) this.btnClose.disabled = busy;
-    if (this.btnDownloadReport) {
-      this.btnDownloadReport.disabled = busy || !this.reportDownloadAllowed;
-    }
+    setActionDisabled(this.btnChecklist, busy);
+    setActionDisabled(this.btnClose, busy);
+    setActionDisabled(this.btnDownloadReport, busy || !this.reportDownloadAllowed);
   }
 
   setReportDownloadEnabled(enabled: boolean): void {
@@ -138,10 +143,10 @@ export class PanelController {
 
     if (enabled) {
       this.btnDownloadReport.classList.remove("hidden");
-      this.btnDownloadReport.disabled = false;
+      setActionDisabled(this.btnDownloadReport, false);
     } else {
       this.btnDownloadReport.classList.add("hidden");
-      this.btnDownloadReport.disabled = true;
+      setActionDisabled(this.btnDownloadReport, true);
     }
   }
 

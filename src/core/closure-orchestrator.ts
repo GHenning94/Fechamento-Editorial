@@ -3,6 +3,7 @@ import { ReportService } from "../services/report-service";
 import { ClosureReport } from "../models/closure-report";
 import { ValidationSummary, hasBlockingErrors } from "../models/validation-result";
 import {
+  clearInDesignSelection,
   getActiveDocument,
   runInDesignHeavyMutation,
   runInDesignReadOnly,
@@ -11,14 +12,14 @@ import {
   ensureDocumentSaved,
   PackageCancelledError,
 } from "../utils/file-system";
-import { yieldToHost } from "../utils/yield-to-host";
+import { yieldForUi, yieldToHost } from "../utils/yield-to-host";
 import {
   getCachedChecklistResult,
   storeChecklistResult,
 } from "./checklist-cache";
 import { ChecklistRunner, ProgressCallback } from "./checklist-runner";
 
-const HEAVY_STEP_PAUSE_MS = 800;
+const HEAVY_STEP_PAUSE_MS = 1000;
 const FINAL_PAUSE_MS = 800;
 
 export class ClosureOrchestrator {
@@ -80,8 +81,10 @@ export class ClosureOrchestrator {
     onProgress?: ProgressCallback
   ): Promise<ClosureReport> {
     const totalSteps = 6;
+    clearInDesignSelection();
 
     onProgress?.(1, totalSteps, "Salvando documento...");
+    await yieldForUi();
     await ensureDocumentSaved();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
@@ -99,18 +102,22 @@ export class ClosureOrchestrator {
       docInfo.name,
       destinationFolder
     );
-    await yieldToHost(200);
+    await yieldToHost(300);
 
     onProgress?.(2, totalSteps, "Gerando package InDesign...");
+    await yieldForUi();
     const packageResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — Package", () =>
       this.exportService.runPackage(getActiveDocument(), paths)
     );
+    clearInDesignSelection();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
     onProgress?.(3, totalSteps, "Exportando PDF principal...");
+    await yieldForUi();
     const pdfArteResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Arte", () =>
       this.exportService.runPdfArte(getActiveDocument(), paths)
     );
+    clearInDesignSelection();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
     const skipEstilosPdf = pdfArteResult.pdfPresetMissing;
@@ -123,9 +130,11 @@ export class ClosureOrchestrator {
 
     if (!skipEstilosPdf) {
       onProgress?.(4, totalSteps, "Exportando PDF _ESTILOS (spreads)...");
+      await yieldForUi();
       pdfEstilosResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Estilos", () =>
         this.exportService.runPdfEstilos(getActiveDocument(), paths)
       );
+      clearInDesignSelection();
       await yieldToHost(HEAVY_STEP_PAUSE_MS);
     }
 
@@ -144,7 +153,7 @@ export class ClosureOrchestrator {
 
     if (cachedChecklist) {
       onProgress?.(5, totalSteps, "Gerando relatório...");
-      await yieldToHost(300);
+      await yieldToHost(400);
 
       const report: ClosureReport = {
         date: new Date().toLocaleString("pt-BR"),
@@ -168,6 +177,7 @@ export class ClosureOrchestrator {
       }
 
       onProgress?.(6, totalSteps, "Fechamento concluído");
+      clearInDesignSelection();
       await yieldToHost(FINAL_PAUSE_MS);
       return report;
     }
@@ -175,6 +185,7 @@ export class ClosureOrchestrator {
     onProgress?.(5, totalSteps, "Finalizando...");
     await yieldToHost(FINAL_PAUSE_MS);
     onProgress?.(6, totalSteps, "Fechamento concluído");
+    clearInDesignSelection();
 
     return {
       date: new Date().toLocaleString("pt-BR"),

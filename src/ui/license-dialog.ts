@@ -1,5 +1,6 @@
 import { LicenseError } from "../licensing/license-types";
 import { activateLicense, isLicenseActive } from "../licensing/license-service";
+import { onActionActivate, setActionDisabled } from "./action-control";
 
 export interface LicenseActivationCallbacks {
   onSuccess: () => void;
@@ -37,8 +38,8 @@ export function showLicenseActivationForm(
         <p id="uxp-license-error" class="user-name-dialog-error hidden"></p>
 
         <div class="license-activation-actions">
-          <button id="uxp-license-cancel" class="btn btn-secondary" type="button">Cancelar</button>
-          <button id="uxp-license-confirm" class="btn btn-primary" type="button">Ativar</button>
+          <div id="uxp-license-cancel" class="btn btn-secondary" role="button" tabindex="0">Cancelar</div>
+          <div id="uxp-license-confirm" class="btn btn-primary" role="button" tabindex="0">Ativar</div>
         </div>
       </div>
     </div>
@@ -46,8 +47,8 @@ export function showLicenseActivationForm(
 
   const input = container.querySelector("#uxp-license-input") as HTMLInputElement;
   const errorEl = container.querySelector("#uxp-license-error") as HTMLElement;
-  const btnConfirm = container.querySelector("#uxp-license-confirm") as HTMLButtonElement;
-  const btnCancel = container.querySelector("#uxp-license-cancel") as HTMLButtonElement;
+  const btnConfirm = container.querySelector("#uxp-license-confirm") as HTMLElement;
+  const btnCancel = container.querySelector("#uxp-license-cancel") as HTMLElement;
 
   const hideError = (): void => {
     errorEl.classList.add("hidden");
@@ -73,7 +74,7 @@ export function showLicenseActivationForm(
     }
 
     hideError();
-    btnConfirm.disabled = true;
+    setActionDisabled(btnConfirm, true);
     btnConfirm.textContent = "Ativando...";
 
     try {
@@ -88,15 +89,15 @@ export function showLicenseActivationForm(
       }
       showError(message);
     } finally {
-      btnConfirm.disabled = false;
+      setActionDisabled(btnConfirm, false);
       btnConfirm.textContent = "Ativar";
     }
   };
 
-  btnConfirm.addEventListener("click", () => {
+  onActionActivate(btnConfirm, () => {
     void onConfirm();
   });
-  btnCancel.addEventListener("click", onCancel);
+  onActionActivate(btnCancel, onCancel);
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -128,6 +129,5 @@ export async function promptLicenseActivation(container: HTMLElement): Promise<b
 
 /** @deprecated Use promptLicenseActivation */
 export async function ensureLicenseActivated(host?: HTMLElement): Promise<boolean> {
-  const target = host || document.body;
-  return promptLicenseActivation(target);
+  return promptLicenseActivation(host || document.body);
 }

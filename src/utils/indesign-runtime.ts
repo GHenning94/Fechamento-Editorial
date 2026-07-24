@@ -130,6 +130,16 @@ export function getActiveDocument(): Document {
   return doc;
 }
 
+/** Limpa seleção para evitar artefatos visuais / handles residuais após scripts. */
+export function clearInDesignSelection(): void {
+  try {
+    const app = getInDesignApp();
+    app.selection = [];
+  } catch {
+    // ignore — seleção pode estar indisponível em alguns estados
+  }
+}
+
 export function getInDesignUserName(): string {
   try {
     return getInDesignApp().userName || "Usuário";

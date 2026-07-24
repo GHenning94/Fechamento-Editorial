@@ -1,4 +1,5 @@
 import { PackageCancelledError } from "../utils/file-system";
+import { onActionActivate } from "./action-control";
 
 interface UxpTextField extends HTMLInputElement {}
 
@@ -28,8 +29,8 @@ function getUserNameDialog(): UxpDialog {
         Informe um nome para continuar.
       </p>
       <div class="user-name-dialog-actions">
-        <button id="uxp-user-name-cancel" class="btn btn-secondary" type="button">Cancelar</button>
-        <button id="uxp-user-name-confirm" class="btn btn-primary" type="button">Continuar</button>
+        <div id="uxp-user-name-cancel" class="btn btn-secondary" role="button" tabindex="0">Cancelar</div>
+        <div id="uxp-user-name-confirm" class="btn btn-primary" role="button" tabindex="0">Continuar</div>
       </div>
     </div>
   `;
@@ -65,8 +66,8 @@ function getUserNameDialog(): UxpDialog {
     dialog.close("");
   };
 
-  btnConfirm.addEventListener("click", confirm);
-  btnCancel.addEventListener("click", cancel);
+  onActionActivate(btnConfirm, confirm);
+  onActionActivate(btnCancel, cancel);
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
