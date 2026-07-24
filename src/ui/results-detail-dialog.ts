@@ -67,32 +67,8 @@ function bindIgnoreHandlers(
   });
 }
 
-function measureHostSize(
-  dialog: HTMLElement,
-  root: HTMLElement
-): { width: number; height: number } {
-  const widths = [
-    dialog.clientWidth,
-    root.clientWidth,
-    typeof window.innerWidth === "number" ? window.innerWidth : 0,
-    document.documentElement?.clientWidth || 0,
-    document.body?.clientWidth || 0,
-  ];
-  const heights = [
-    dialog.clientHeight,
-    root.clientHeight,
-    typeof window.innerHeight === "number" ? window.innerHeight : 0,
-    document.documentElement?.clientHeight || 0,
-    document.body?.clientHeight || 0,
-  ];
-
-  return {
-    width: Math.max(MIN_WIDTH, ...widths),
-    height: Math.max(MIN_HEIGHT, ...heights),
-  };
-}
-
-function applyFillStyles(
+/** Estilos fixos: conteúdo em 100% da janela nativa (fundo preto inteiro). */
+function applyStaticStyles(
   dialog: HTMLElement,
   root: HTMLElement,
   header: HTMLElement,
@@ -101,16 +77,12 @@ function applyFillStyles(
   listEl: HTMLElement,
   titleColor: string
 ): void {
-  const host = measureHostSize(dialog, root);
-  const listHeight = Math.max(160, host.height - HEADER_HEIGHT);
-
-  // Dimensões em px a partir da janela nativa — acompanham o resize
   dialog.style.cssText = [
     "padding:0",
     "margin:0",
     "border:none",
-    `width:${host.width}px`,
-    `height:${host.height}px`,
+    "width:100%",
+    "height:100%",
     `background-color:${BG}`,
     "color:#f2f0ec",
     "overflow:hidden",
@@ -120,8 +92,8 @@ function applyFillStyles(
   root.style.cssText = [
     "display:flex",
     "flex-direction:column",
-    `width:${host.width}px`,
-    `height:${host.height}px`,
+    "width:100%",
+    "height:100%",
     "margin:0",
     "padding:0",
     "box-sizing:border-box",
@@ -156,6 +128,7 @@ function applyFillStyles(
     "text-overflow:ellipsis",
   ].join(";");
 
+  // Sem classe .btn (width:100% quebrava o cabeçalho)
   closeBtn.style.cssText = [
     "display:flex",
     "align-items:center",
@@ -180,8 +153,6 @@ function applyFillStyles(
   listEl.style.cssText = [
     "flex:1 1 auto",
     "width:100%",
-    `height:${listHeight}px`,
-    `max-height:${listHeight}px`,
     "min-height:0",
     "margin:0",
     "padding:12px 16px",
@@ -194,9 +165,17 @@ function applyFillStyles(
 }
 
 /**
- * Layout da versão boa (Fechar visível + lista com scroll) +
- * preenchimento 100% da janela nativa (elimina a faixa cinza).
+ * Altura da lista em px: no UXP o scroll só funciona com altura explícita,
+ * então acompanhamos a janela nativa conforme o usuário redimensiona.
  */
+function syncListHeight(root: HTMLElement, listEl: HTMLElement): number {
+  const rootHeight = root.clientHeight || DIALOG_HEIGHT;
+  const listHeight = Math.max(120, rootHeight - HEADER_HEIGHT);
+  listEl.style.height = `${listHeight}px`;
+  listEl.style.maxHeight = `${listHeight}px`;
+  return listHeight;
+}
+
 export async function showResultsDetailDialog(options: ResultDetailOptions): Promise<void> {
   document.querySelectorAll("[id^='editorial-results-detail-dialog']").forEach((el) => {
     el.remove();
@@ -235,7 +214,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   dialog.appendChild(root);
   document.body.appendChild(dialog);
 
-  applyFillStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor);
+  applyStaticStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor);
+  syncListHeight(root, listEl);
 
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
@@ -245,20 +225,20 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
     dialog.close();
   });
 
+  // UXP não emite resize confiável: acompanha a janela por polling leve
   let closed = false;
-  const refit = (): void => {
-    if (closed) return;
-    applyFillStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor);
-  };
-
-  // UXP não dispara resize de forma confiável — acompanha a janela enquanto o modal estiver aberto
+  let lastListHeight = 0;
   const resizePoll = window.setInterval(() => {
     if (closed) {
       window.clearInterval(resizePoll);
       return;
     }
-    refit();
-  }, 200);
+    const rootHeight = root.clientHeight || DIALOG_HEIGHT;
+    const target = Math.max(120, rootHeight - HEADER_HEIGHT);
+    if (target !== lastListHeight) {
+      lastListHeight = syncListHeight(root, listEl);
+    }
+  }, 150);
 
   try {
     if (typeof dialog.uxpShowModal === "function") {
@@ -270,8 +250,9 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
         maxSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
       });
 
-      window.setTimeout(refit, 30);
-      window.setTimeout(refit, 120);
+      window.setTimeout(() => {
+        if (!closed) lastListHeight = syncListHeight(root, listEl);
+      }, 60);
 
       await showPromise;
       return;
@@ -280,7 +261,7 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
     dialog.style.width = `${DIALOG_WIDTH}px`;
     dialog.style.height = `${DIALOG_HEIGHT}px`;
     dialog.showModal();
-    refit();
+    lastListHeight = syncListHeight(root, listEl);
     await waitForDialogClose(dialog);
   } catch {
     // usuário fechou / host cancelou
