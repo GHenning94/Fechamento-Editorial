@@ -2,13 +2,13 @@ import type { Document, Layer } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult } from "../models/validation-result";
 import {
-  LAYER_ESTILOS_ALT,
   LAYER_GUIAS_ALT,
   LAYER_GUIAS_DELETAR,
   LAYER_MEMORIAL,
   VALIDATOR_IDS,
 } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
+import { findEditorialLayer } from "../utils/editorial-layer";
 import { layerExists } from "../utils/indesign-helpers";
 
 function findLayerCaseInsensitive(doc: Document, targetName: string): Layer | null {
@@ -40,13 +40,10 @@ export class LayersObrigatoriasValidator extends BaseValidator {
     return this.safeValidate(doc, () => {
       const issues = [];
 
-      const memorial = findLayerCaseInsensitive(doc, LAYER_MEMORIAL);
-      const estilos = findLayerCaseInsensitive(doc, LAYER_ESTILOS_ALT);
-
-      if (!memorial && !estilos) {
+      if (!findEditorialLayer(doc)) {
         issues.push({
           message: `Layer "${LAYER_MEMORIAL}" inexistente`,
-          details: "Crie a layer MEMORIAL no documento.",
+          details: "Crie uma layer ESTILOS ou MEMORIAL DESCRITIVO no documento.",
         });
       }
 
@@ -72,14 +69,6 @@ export class LayersNomenclaturaValidator extends BaseValidator {
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
       const issues = [];
-
-      if (!hasExactLayer(doc, LAYER_MEMORIAL) && hasExactLayer(doc, LAYER_ESTILOS_ALT)) {
-        issues.push({
-          message: "Nomenclatura incorreta de layer",
-          object: LAYER_ESTILOS_ALT,
-          details: `Renomeie "${LAYER_ESTILOS_ALT}" para "${LAYER_MEMORIAL}".`,
-        });
-      }
 
       if (!hasExactLayer(doc, LAYER_GUIAS_DELETAR) && hasExactLayer(doc, LAYER_GUIAS_ALT)) {
         issues.push({

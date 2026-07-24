@@ -2,9 +2,8 @@ import type { Document, Layer, PDFExportPreset } from "indesign";
 import { ExportFormat, UserInteractionLevels } from "indesign";
 import { LAYER_MEMORIAL, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
 import { joinPath } from "../utils/file-system";
-import { forEachCollectionItem } from "../utils/collection-helpers";
 import { getInDesignApp } from "../utils/indesign-runtime";
-import { layerExists } from "../utils/indesign-helpers";
+import { findEditorialLayer } from "../utils/editorial-layer";
 import { toPdfExportTarget } from "../utils/pdf-export-path";
 import { withPresetSpreadSettings, PdfSpreadSettings } from "../utils/pdf-preset-session";
 
@@ -19,22 +18,7 @@ export interface PdfExportOutcome {
 }
 
 function findMemorialLayer(doc: Document): Layer | null {
-  const exact = layerExists(doc, LAYER_MEMORIAL);
-  if (exact) {
-    return exact;
-  }
-
-  const target = LAYER_MEMORIAL.toLowerCase();
-  let found: Layer | null = null;
-
-  forEachCollectionItem<Layer>(doc.layers, (layer) => {
-    if (!layer?.isValid || found) return;
-    if ((layer.name || "").toLowerCase() === target) {
-      found = layer;
-    }
-  });
-
-  return found;
+  return findEditorialLayer(doc);
 }
 
 export function findPdfPreset(): PDFExportPreset | null {

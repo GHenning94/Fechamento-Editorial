@@ -1,21 +1,9 @@
-import type { Document, Layer, PageItem } from "indesign";
+import type { Document, PageItem } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult } from "../models/validation-result";
-import {
-  LAYER_ESTILOS_ALT,
-  LAYER_MEMORIAL,
-  VALIDATOR_IDS,
-} from "../utils/constants";
+import { LAYER_MEMORIAL, VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { layerExists } from "../utils/indesign-helpers";
-
-function resolveMemorialLayer(doc: Document): Layer | null {
-  return (
-    layerExists(doc, LAYER_MEMORIAL) ||
-    layerExists(doc, LAYER_ESTILOS_ALT) ||
-    null
-  );
-}
+import { findEditorialLayer } from "../utils/editorial-layer";
 
 export class MemorialDescritivoValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.MEMORIAL_DESCRITIVO;
@@ -23,7 +11,7 @@ export class MemorialDescritivoValidator extends BaseValidator {
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
-      const layer = resolveMemorialLayer(doc);
+      const layer = findEditorialLayer(doc);
       if (!layer) {
         return createResult(
           this.id,
@@ -33,29 +21,14 @@ export class MemorialDescritivoValidator extends BaseValidator {
         );
       }
 
-      let hasText = false;
-      let hasRectangle = false;
-      let hasGroup = false;
-      let hasImage = false;
+      let hasContent = false;
 
       const scan = (container: unknown): void => {
         forEachCollectionItem<PageItem>(container, (item) => {
-          if (!item || !item.isValid) return;
+          if (!item || !item.isValid || hasContent) return;
 
-          const typeName = item.constructor.name;
-          if (typeName === "TextFrame") hasText = true;
-          if (typeName === "Rectangle" || typeName === "Oval" || typeName === "Polygon") {
-            hasRectangle = true;
-          }
-          if (typeName === "Group") hasGroup = true;
-          if (
-            typeName === "Image" ||
-            (item.graphics && item.graphics.length > 0) ||
-            (item.images && item.images.length > 0)
-          ) {
-            hasImage = true;
-          }
-
+          // layer.pageItems reúne objetos de todas as páginas mesmo com a layer invisível.
+          hasContent = true;
           if (item.pageItems && item.pageItems.length > 0) {
             scan(item.pageItems);
           }
@@ -64,13 +37,13 @@ export class MemorialDescritivoValidator extends BaseValidator {
 
       scan(layer.pageItems);
 
-      if (!hasText && !hasRectangle && !hasGroup && !hasImage) {
+      if (!hasContent) {
         return createResult(
           this.id,
           this.name,
           [{
             message: "Layer sem conteúdo",
-            details: `${layer.name} deve conter textos, retângulos, grupos ou imagens`,
+            details: `${layer.name} deve conter ao menos um objeto em qualquer página`,
           }],
           "error"
         );
