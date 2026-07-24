@@ -492,12 +492,7 @@ progress::-webkit-progress-value {
 
 #editorial-results-detail-dialog {
   padding: 0;
-  width: 560px;
-  min-width: 560px;
-  max-width: 560px;
-  height: 620px;
-  min-height: 620px;
-  max-height: 620px;
+  margin: 0;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background-color: var(--uxp-host-background-color, var(--surface));
@@ -510,13 +505,23 @@ progress::-webkit-progress-value {
   background-color: rgba(0, 0, 0, 0.6);
 }
 
+.results-detail-dialog-form {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .results-detail-dialog-content {
   display: flex;
   flex-direction: column;
-  width: 560px;
-  min-width: 560px;
-  height: 620px;
-  min-height: 620px;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -526,6 +531,7 @@ progress::-webkit-progress-value {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   background-color: var(--surface-alt);
@@ -533,10 +539,16 @@ progress::-webkit-progress-value {
 
 .results-detail-dialog-heading {
   margin: 0;
+  margin-right: 12px;
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .results-detail-dialog-content[data-kind="approved"] .results-detail-dialog-heading {
@@ -554,16 +566,28 @@ progress::-webkit-progress-value {
 .results-detail-close {
   width: auto !important;
   min-width: 72px;
+  flex-shrink: 0;
   padding: 7px 12px !important;
 }
 
 .results-detail-list {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
   margin: 0;
   padding: 14px 16px;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
+  box-sizing: border-box;
+}
+
+.results-detail-list > li {
+  width: 100%;
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .user-name-dialog-content {
