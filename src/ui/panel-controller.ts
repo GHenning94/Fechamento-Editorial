@@ -156,7 +156,7 @@ export class PanelController {
 
   resetProgress(): void {
     if (this.progressBar) this.progressBar.value = 0;
-    if (this.progressLabel) this.progressLabel.textContent = "Aguardando...";
+    if (this.progressLabel) this.progressLabel.textContent = "Aguardando…";
   }
 
   renderSummary(summary: ValidationSummary, title: string): void {

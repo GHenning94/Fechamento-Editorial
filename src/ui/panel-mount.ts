@@ -13,44 +13,44 @@ const PANEL_HTML = `
   </header>
 
   <section class="actions">
-    <button id="btn-checklist" class="btn btn-primary" type="button">VALIDAR CHECKLIST</button>
+    <button id="btn-checklist" class="btn btn-primary" type="button">Validar checklist</button>
     <button id="btn-download-report" class="btn btn-download-report hidden" type="button">
-      BAIXAR RELATÓRIO
+      Baixar relatório
     </button>
-    <button id="btn-close" class="btn btn-danger" type="button">FECHAR MATERIAL</button>
+    <button id="btn-close" class="btn btn-danger" type="button">Fechar material</button>
   </section>
 
   <section class="counters">
-    <div class="counter counter-errors">
-      <span class="counter-label">Erros</span>
-      <span id="count-errors" class="counter-value">0</span>
+    <div class="counter counter-approved">
+      <span class="counter-label">Aprovados</span>
+      <span id="count-approved" class="counter-value">0</span>
     </div>
     <div class="counter counter-warnings">
       <span class="counter-label">Alertas</span>
       <span id="count-warnings" class="counter-value">0</span>
     </div>
-    <div class="counter counter-approved">
-      <span class="counter-label">Aprovados</span>
-      <span id="count-approved" class="counter-value">0</span>
+    <div class="counter counter-errors">
+      <span class="counter-label">Erros</span>
+      <span id="count-errors" class="counter-value">0</span>
     </div>
   </section>
 
   <section class="progress-section">
-    <span id="progress-label" class="progress-label">Aguardando...</span>
+    <span id="progress-label" class="progress-label">Aguardando…</span>
     <progress id="progress-bar" max="100" value="0"></progress>
   </section>
 
   <section class="results">
     <div class="result-block">
-      <div class="result-header"><span class="approved-icon">✔</span> Aprovados</div>
+      <div class="result-header"><span class="approved-icon">✓</span> Aprovados</div>
       <ul id="list-approved" class="result-list"></ul>
     </div>
     <div class="result-block">
-      <div class="result-header"><span class="warning-icon">⚠</span> Alertas</div>
+      <div class="result-header"><span class="warning-icon">!</span> Alertas</div>
       <ul id="list-warnings" class="result-list"></ul>
     </div>
     <div class="result-block">
-      <div class="result-header"><span class="error-icon">✖</span> Erros</div>
+      <div class="result-header"><span class="error-icon">×</span> Erros</div>
       <ul id="list-errors" class="result-list"></ul>
     </div>
   </section>
