@@ -20,32 +20,20 @@ export interface ResultDetailOptions {
   onIgnore?: (key: string) => void;
 }
 
-const MIN_WIDTH = 560;
-const MIN_HEIGHT = 400;
-const MAX_WIDTH = 900;
-const MAX_HEIGHT = 720;
-const DEFAULT_WIDTH = 640;
+/** Tamanho único para Aprovados / Alertas / Erros — a janela acompanha esta área. */
+const DIALOG_WIDTH = 720;
+const DIALOG_HEIGHT = 520;
 const HEADER_HEIGHT = 52;
+const LIST_HEIGHT = DIALOG_HEIGHT - HEADER_HEIGHT;
+const BG = "#232329";
+const BG_HEADER = "#2a2a30";
+const BORDER = "#3a3a42";
 
 const KIND_TITLE_COLOR: Record<ResultDetailKind, string> = {
   approved: "#5ecf8e",
   warning: "#e6c35c",
   error: "#e87474",
 };
-
-function countListItems(html: string): number {
-  return (html.match(/<li\b/gi) || []).length;
-}
-
-function computeDialogSize(html: string): { width: number; height: number } {
-  const items = Math.max(1, countListItems(html));
-  const idealHeight = HEADER_HEIGHT + 24 + items * 72;
-
-  return {
-    width: DEFAULT_WIDTH,
-    height: Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, idealHeight)),
-  };
-}
 
 function waitForDialogClose(dialog: UxpDialog): Promise<void> {
   return new Promise((resolve) => {
@@ -78,8 +66,9 @@ function bindIgnoreHandlers(
 }
 
 /**
- * Modal de detalhes — no UXP/InDesign o tamanho vem do filho direto em px
- * (igual à receita oficial). Evitar position:absolute / width:100% (colapsa).
+ * No InDesign, size/resize do uxpShowModal abre uma janela host maior (área cinza)
+ * com o conteúdo “preto” menor dentro. O diálogo de nome funciona passando só o title
+ * e deixando width/height em px no filho definirem o tamanho da janela.
  */
 export async function showResultsDetailDialog(options: ResultDetailOptions): Promise<void> {
   const existing = document.getElementById("editorial-results-detail-dialog");
@@ -87,34 +76,31 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
     existing.remove();
   }
 
-  const size = computeDialogSize(options.html || "");
-  const listHeight = Math.max(200, size.height - HEADER_HEIGHT);
   const titleColor = KIND_TITLE_COLOR[options.kind];
 
   const dialog = document.createElement("dialog") as UxpDialog;
   dialog.id = "editorial-results-detail-dialog";
   dialog.style.padding = "0";
   dialog.style.margin = "0";
-  dialog.style.border = "1px solid #4a4a54";
-  dialog.style.backgroundColor = "#232329";
+  dialog.style.border = "none";
+  dialog.style.backgroundColor = BG;
   dialog.style.color = "#f2f0ec";
   dialog.style.overflow = "hidden";
+  dialog.style.width = `${DIALOG_WIDTH}px`;
+  dialog.style.height = `${DIALOG_HEIGHT}px`;
 
   const root = document.createElement("div");
   root.className = "results-detail-dialog-content";
   root.setAttribute("data-kind", options.kind);
-  // Dimensões em px no filho direto — o host dimensiona a janela por isso
   root.style.display = "flex";
   root.style.flexDirection = "column";
-  root.style.width = `${size.width}px`;
-  root.style.minWidth = `${size.width}px`;
-  root.style.height = `${size.height}px`;
-  root.style.minHeight = `${size.height}px`;
+  root.style.width = `${DIALOG_WIDTH}px`;
+  root.style.height = `${DIALOG_HEIGHT}px`;
   root.style.margin = "0";
   root.style.padding = "0";
   root.style.boxSizing = "border-box";
   root.style.overflow = "hidden";
-  root.style.backgroundColor = "#232329";
+  root.style.backgroundColor = BG;
 
   const header = document.createElement("div");
   header.className = "results-detail-dialog-header";
@@ -123,22 +109,24 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   header.style.alignItems = "center";
   header.style.justifyContent = "space-between";
   header.style.flexShrink = "0";
+  header.style.width = `${DIALOG_WIDTH}px`;
   header.style.height = `${HEADER_HEIGHT}px`;
   header.style.paddingTop = "10px";
   header.style.paddingBottom = "10px";
   header.style.paddingLeft = "16px";
   header.style.paddingRight = "16px";
   header.style.boxSizing = "border-box";
-  header.style.borderBottom = "1px solid #3a3a42";
-  header.style.backgroundColor = "#2a2a30";
+  header.style.borderBottom = `1px solid ${BORDER}`;
+  header.style.backgroundColor = BG_HEADER;
 
   const titleEl = document.createElement("h2");
   titleEl.id = "results-detail-title";
   titleEl.className = "results-detail-dialog-heading";
   titleEl.textContent = options.title;
   titleEl.style.margin = "0";
-  titleEl.style.marginRight = "12px";
+  titleEl.style.marginRight = "16px";
   titleEl.style.flex = "1";
+  titleEl.style.minWidth = "0";
   titleEl.style.fontSize = "14px";
   titleEl.style.fontWeight = "700";
   titleEl.style.letterSpacing = "0.04em";
@@ -153,9 +141,23 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   closeBtn.setAttribute("role", "button");
   closeBtn.tabIndex = 0;
   closeBtn.textContent = "Fechar";
+  closeBtn.style.display = "flex";
+  closeBtn.style.alignItems = "center";
+  closeBtn.style.justifyContent = "center";
   closeBtn.style.flexShrink = "0";
-  closeBtn.style.width = "auto";
-  closeBtn.style.minWidth = "72px";
+  closeBtn.style.boxSizing = "border-box";
+  closeBtn.style.width = "88px";
+  closeBtn.style.minWidth = "88px";
+  closeBtn.style.height = "32px";
+  closeBtn.style.padding = "0";
+  closeBtn.style.margin = "0";
+  closeBtn.style.border = `1px solid ${BORDER}`;
+  closeBtn.style.borderRadius = "6px";
+  closeBtn.style.backgroundColor = "#2c2c34";
+  closeBtn.style.color = "#f2f0ec";
+  closeBtn.style.fontSize = "12px";
+  closeBtn.style.fontWeight = "600";
+  closeBtn.style.cursor = "pointer";
 
   const listEl = document.createElement("ul");
   listEl.id = "results-detail-list";
@@ -166,14 +168,14 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   listEl.style.paddingBottom = "12px";
   listEl.style.paddingLeft = "16px";
   listEl.style.paddingRight = "16px";
-  listEl.style.width = `${size.width}px`;
-  listEl.style.height = `${listHeight}px`;
-  listEl.style.maxHeight = `${listHeight}px`;
+  listEl.style.width = `${DIALOG_WIDTH}px`;
+  listEl.style.height = `${LIST_HEIGHT}px`;
+  listEl.style.maxHeight = `${LIST_HEIGHT}px`;
   listEl.style.boxSizing = "border-box";
   listEl.style.overflowX = "hidden";
   listEl.style.overflowY = "scroll";
   listEl.style.flexShrink = "0";
-  listEl.style.backgroundColor = "#232329";
+  listEl.style.backgroundColor = BG;
   listEl.innerHTML = options.html || '<li class="empty-item">Nenhum item</li>';
 
   header.appendChild(titleEl);
@@ -193,13 +195,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
 
   try {
     if (typeof dialog.uxpShowModal === "function") {
-      await dialog.uxpShowModal({
-        title: options.title,
-        resize: "both",
-        size: { width: size.width, height: size.height },
-        minSize: { width: MIN_WIDTH, height: MIN_HEIGHT },
-        maxSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
-      });
+      // Só title: igual ao diálogo de nome. size/resize geram a área cinza extra.
+      await dialog.uxpShowModal({ title: options.title });
       return;
     }
 
