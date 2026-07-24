@@ -368,26 +368,6 @@ progress::-webkit-progress-value {
   background-color: var(--surface-hover);
 }
 
-.result-block.is-expanded .result-expand {
-  color: var(--accent);
-  border-color: var(--accent-deep);
-}
-
-/* Ao expandir um box, os demais ficam apenas com o header visível. */
-.results.has-expanded > .result-block {
-  flex: 0 0 auto;
-  min-height: 0;
-}
-
-.results.has-expanded > .result-block.is-expanded {
-  flex: 1;
-  min-height: 0;
-}
-
-.results.has-expanded > .result-block:not(.is-expanded) .result-list {
-  display: none;
-}
-
 .result-list {
   list-style: none;
   margin: 0;
@@ -508,6 +488,76 @@ progress::-webkit-progress-value {
 
 #editorial-user-name-dialog::backdrop {
   background-color: rgba(0, 0, 0, 0.6);
+}
+
+#editorial-results-detail-dialog {
+  padding: 0;
+  width: 520px;
+  max-width: 92vw;
+  height: 640px;
+  max-height: 88vh;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--uxp-host-background-color, var(--surface));
+  color: var(--uxp-host-text-color, var(--text));
+  overflow: hidden;
+}
+
+#editorial-results-detail-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.results-detail-dialog-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.results-detail-dialog-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface-alt);
+}
+
+.results-detail-dialog-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.results-detail-dialog-content[data-kind="approved"] .results-detail-dialog-heading {
+  color: var(--success);
+}
+
+.results-detail-dialog-content[data-kind="warning"] .results-detail-dialog-heading {
+  color: var(--warning);
+}
+
+.results-detail-dialog-content[data-kind="error"] .results-detail-dialog-heading {
+  color: var(--error);
+}
+
+.results-detail-close {
+  width: auto !important;
+  min-width: 72px;
+  padding: 7px 12px !important;
+}
+
+.results-detail-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow-y: auto;
+  list-style: none;
 }
 
 .user-name-dialog-content {

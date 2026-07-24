@@ -44,21 +44,21 @@ const PANEL_HTML = `
     <div class="result-block">
       <div class="result-header">
         <span class="result-header-label"><span class="approved-icon">✓</span> Aprovados</span>
-        <span class="result-expand" role="button" tabindex="0" aria-expanded="false" title="Expandir Aprovados">⛶</span>
+        <span class="result-expand" role="button" tabindex="0" title="Abrir Aprovados em janela">⛶</span>
       </div>
       <ul id="list-approved" class="result-list"></ul>
     </div>
     <div class="result-block">
       <div class="result-header">
         <span class="result-header-label"><span class="warning-icon">!</span> Alertas</span>
-        <span class="result-expand" role="button" tabindex="0" aria-expanded="false" title="Expandir Alertas">⛶</span>
+        <span class="result-expand" role="button" tabindex="0" title="Abrir Alertas em janela">⛶</span>
       </div>
       <ul id="list-warnings" class="result-list"></ul>
     </div>
     <div class="result-block">
       <div class="result-header">
         <span class="result-header-label"><span class="error-icon">×</span> Erros</span>
-        <span class="result-expand" role="button" tabindex="0" aria-expanded="false" title="Expandir Erros">⛶</span>
+        <span class="result-expand" role="button" tabindex="0" title="Abrir Erros em janela">⛶</span>
       </div>
       <ul id="list-errors" class="result-list"></ul>
     </div>

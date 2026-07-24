@@ -13,6 +13,7 @@ import { yieldToHost } from "../utils/yield-to-host";
 import { getDefaultReportUserName } from "../utils/indesign-runtime";
 import { onActionActivate, setActionDisabled } from "./action-control";
 import { promptUserNameDialog } from "./user-name-dialog";
+import { showResultsDetailDialog } from "./results-detail-dialog";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -54,34 +55,47 @@ export class PanelController {
     const results = this.root.querySelector(".results") as HTMLElement | null;
     if (!results) return;
 
+    const mapping: Array<{
+      listId: string;
+      title: string;
+      kind: "approved" | "warning" | "error";
+    }> = [
+      { listId: "list-approved", title: "Aprovados", kind: "approved" },
+      { listId: "list-warnings", title: "Alertas", kind: "warning" },
+      { listId: "list-errors", title: "Erros", kind: "error" },
+    ];
+
     const expanders = results.querySelectorAll<HTMLElement>(".result-expand");
-    expanders.forEach((expander) => {
+    expanders.forEach((expander, index) => {
+      const entry = mapping[index];
+      if (!entry) return;
+
       onActionActivate(expander, () => {
-        const block = expander.parentElement?.parentElement as HTMLElement | null;
-        if (!block) return;
-
-        const willExpand = !block.classList.contains("is-expanded");
-
-        results.querySelectorAll<HTMLElement>(".result-block").forEach((item) => {
-          item.classList.remove("is-expanded");
-          const control = item.querySelector(".result-expand") as HTMLElement | null;
-          if (control) {
-            control.setAttribute("aria-expanded", "false");
-            control.textContent = "⛶";
-            control.setAttribute("title", "Expandir box");
-          }
-        });
-
-        if (willExpand) {
-          results.classList.add("has-expanded");
-          block.classList.add("is-expanded");
-          expander.setAttribute("aria-expanded", "true");
-          expander.textContent = "−";
-          expander.setAttribute("title", "Recolher box");
-        } else {
-          results.classList.remove("has-expanded");
-        }
+        void this.openResultDetailModal(entry.listId, entry.title, entry.kind);
       });
+    });
+  }
+
+  private async openResultDetailModal(
+    listId: string,
+    title: string,
+    kind: "approved" | "warning" | "error"
+  ): Promise<void> {
+    const list = this.root.querySelector(`#${listId}`) as HTMLElement | null;
+    const html = list?.innerHTML || '<li class="empty-item">Nenhum item</li>';
+
+    await showResultsDetailDialog({
+      title,
+      kind,
+      html,
+      onIgnore:
+        kind === "warning"
+          ? (key: string) => {
+              this.ignoredWarningKeys.add(key);
+              this.refreshSummaryUi();
+              this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
+            }
+          : undefined,
     });
   }
 
