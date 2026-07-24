@@ -65,11 +65,7 @@ function bindIgnoreHandlers(
   });
 }
 
-/**
- * No InDesign, size/resize do uxpShowModal abre uma janela host maior (área cinza)
- * com o conteúdo “preto” menor dentro. O diálogo de nome funciona passando só o title
- * e deixando width/height em px no filho definirem o tamanho da janela.
- */
+/** Modal fixo: a janela nativa e o conteúdo usam exatamente o mesmo tamanho. */
 export async function showResultsDetailDialog(options: ResultDetailOptions): Promise<void> {
   const existing = document.getElementById("editorial-results-detail-dialog");
   if (existing) {
@@ -86,8 +82,6 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   dialog.style.backgroundColor = BG;
   dialog.style.color = "#f2f0ec";
   dialog.style.overflow = "hidden";
-  dialog.style.width = `${DIALOG_WIDTH}px`;
-  dialog.style.height = `${DIALOG_HEIGHT}px`;
 
   const root = document.createElement("div");
   root.className = "results-detail-dialog-content";
@@ -107,8 +101,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   header.style.display = "flex";
   header.style.flexDirection = "row";
   header.style.alignItems = "center";
-  header.style.justifyContent = "space-between";
   header.style.flexShrink = "0";
+  header.style.position = "relative";
   header.style.width = `${DIALOG_WIDTH}px`;
   header.style.height = `${HEADER_HEIGHT}px`;
   header.style.paddingTop = "10px";
@@ -125,8 +119,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   titleEl.textContent = options.title;
   titleEl.style.margin = "0";
   titleEl.style.marginRight = "16px";
-  titleEl.style.flex = "1";
-  titleEl.style.minWidth = "0";
+  titleEl.style.width = "580px";
+  titleEl.style.minWidth = "580px";
   titleEl.style.fontSize = "14px";
   titleEl.style.fontWeight = "700";
   titleEl.style.letterSpacing = "0.04em";
@@ -142,6 +136,9 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   closeBtn.tabIndex = 0;
   closeBtn.textContent = "Fechar";
   closeBtn.style.display = "flex";
+  closeBtn.style.position = "absolute";
+  closeBtn.style.top = "10px";
+  closeBtn.style.right = "16px";
   closeBtn.style.alignItems = "center";
   closeBtn.style.justifyContent = "center";
   closeBtn.style.flexShrink = "0";
@@ -194,12 +191,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   });
 
   try {
-    if (typeof dialog.uxpShowModal === "function") {
-      // Só title: igual ao diálogo de nome. size/resize geram a área cinza extra.
-      await dialog.uxpShowModal({ title: options.title });
-      return;
-    }
-
+    // No InDesign 20.x, uxpShowModal pode ignorar size e reutilizar a janela
+    // anterior. showModal dimensiona pelo filho direto, como na receita oficial.
     dialog.showModal();
     await waitForDialogClose(dialog);
   } catch {
