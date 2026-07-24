@@ -1,14 +1,15 @@
 import type { Document, Layer, Page, PageItem, Color, Spread } from "indesign";
 import { BLEED_MM } from "./constants";
 import { PageItemCallback, GraphicInfo, StrokeInfo } from "../models/validator";
-import {
-  COLOR_CORPROF,
-  COLOR_GUIAS_DELETAR,
-  SPOT_COLOR_EXCEPTIONS,
-} from "./constants";
+import { SPOT_COLOR_EXCEPTIONS } from "./constants";
 import { forEachCollectionItem } from "./collection-helpers";
 import { getValidationScan } from "../core/validation-cache";
 import { getInDesignModule } from "./indesign-runtime";
+import {
+  isCorProfColorName,
+  isGuiasDeletarColorName,
+  normalizeColorName,
+} from "./editorial-color";
 
 export { getActiveDocument } from "./indesign-runtime";
 
@@ -65,16 +66,15 @@ export function getImageColorSpaceLabel(space: number): string {
 }
 
 export function isSpotExceptionColor(name: string): boolean {
-  const normalized = (name || "").trim().toLowerCase();
-  return SPOT_COLOR_EXCEPTIONS.some((exception) => exception.toLowerCase() === normalized);
+  if (isCorProfColorName(name) || isGuiasDeletarColorName(name)) {
+    return true;
+  }
+  const key = normalizeColorName(name);
+  return SPOT_COLOR_EXCEPTIONS.some((exception) => normalizeColorName(exception) === key);
 }
 
 export function isGuideColor(name: string): boolean {
-  const normalized = (name || "").trim().toLowerCase();
-  return (
-    normalized === COLOR_CORPROF.toLowerCase() ||
-    normalized === COLOR_GUIAS_DELETAR.toLowerCase()
-  );
+  return isCorProfColorName(name) || isGuiasDeletarColorName(name);
 }
 
 export function getSwatchName(item: PageItem): string {
@@ -289,12 +289,42 @@ function resolveNearestPageName(item: PageItem, pages: Page[]): string {
   }
 }
 
+function getTextFramePreview(item: PageItem): string {
+  try {
+    const raw = String(item.contents || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!raw) return "";
+    return raw.length > 40 ? `${raw.slice(0, 40)}…` : raw;
+  } catch {
+    return "";
+  }
+}
+
+/** Nome legível do objeto para reports — nunca usar índices internos (Story 98, etc.). */
 export function getPageItemDisplayName(item: PageItem): string {
   try {
-    if (item.name) {
-      return item.name;
+    const named = (item.name || "").trim();
+    if (named) {
+      return named;
     }
-    return item.constructor?.name || "Objeto";
+
+    const typeName = item.constructor?.name || "Objeto";
+    if (typeName === "TextFrame") {
+      const preview = getTextFramePreview(item);
+      return preview ? `Caixa de texto (“${preview}”)` : "Caixa de texto";
+    }
+
+    const labels: Record<string, string> = {
+      Rectangle: "Retângulo",
+      Oval: "Elipse",
+      Polygon: "Polígono",
+      Group: "Grupo",
+      GraphicLine: "Linha",
+      Image: "Imagem",
+    };
+
+    return labels[typeName] || typeName;
   } catch {
     return "Objeto";
   }
@@ -433,12 +463,12 @@ export function collectStrokedItems(doc: Document): StrokeInfo[] {
     try {
       const weight = item.strokeWeight;
       if (weight > 0) {
-        strokes.push({
-          pageName,
-          objectName: item.name || item.constructor.name || "Objeto",
-          weight,
-          pageItem: item,
-        });
+          strokes.push({
+            pageName,
+            objectName: getPageItemDisplayName(item),
+            weight,
+            pageItem: item,
+          });
       }
     } catch {
       // ignore

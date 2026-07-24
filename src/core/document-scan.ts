@@ -1,6 +1,10 @@
 import type { Document } from "indesign";
 import { GraphicInfo, StrokeInfo } from "../models/validator";
-import { getImageColorSpaceLabel, walkDirectPageItems } from "../utils/indesign-helpers";
+import {
+  getImageColorSpaceLabel,
+  getPageItemDisplayName,
+  walkDirectPageItems,
+} from "../utils/indesign-helpers";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 
 type GraphicLike = {
@@ -55,7 +59,7 @@ export class DocumentScan {
         if (weight > 0) {
           strokes.push({
             pageName,
-            objectName: item.name || item.constructor.name || "Objeto",
+            objectName: getPageItemDisplayName(item),
             weight,
             pageItem: item,
           });

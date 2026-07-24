@@ -1,6 +1,6 @@
 import type { Document, Layer } from "indesign";
 import { BaseValidator } from "./base-validator";
-import { createResult } from "../models/validation-result";
+import { createResult, ValidationIssue } from "../models/validation-result";
 import {
   LAYER_GUIAS_ALT,
   LAYER_GUIAS_DELETAR,
@@ -8,19 +8,16 @@ import {
   VALIDATOR_IDS,
 } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { findEditorialLayer } from "../utils/editorial-layer";
+import { findEditorialLayer, normalizeLayerName } from "../utils/editorial-layer";
 import { layerExists } from "../utils/indesign-helpers";
 
-function findLayerCaseInsensitive(doc: Document, targetName: string): Layer | null {
-  const exact = layerExists(doc, targetName);
-  if (exact) return exact;
-
-  const target = targetName.toLowerCase();
+function findLayerByNormalizedKeys(doc: Document, keys: string[]): Layer | null {
+  const keySet = new Set(keys.map(normalizeLayerName));
   let found: Layer | null = null;
 
   forEachCollectionItem<Layer>(doc.layers, (layer) => {
-    if (!layer || !layer.isValid || found) return;
-    if ((layer.name || "").toLowerCase() === target) {
+    if (found || !layer?.isValid) return;
+    if (keySet.has(normalizeLayerName(layer.name || ""))) {
       found = layer;
     }
   });
@@ -38,7 +35,7 @@ export class LayersObrigatoriasValidator extends BaseValidator {
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
-      const issues = [];
+      const issues: ValidationIssue[] = [];
 
       if (!findEditorialLayer(doc)) {
         issues.push({
@@ -47,13 +44,11 @@ export class LayersObrigatoriasValidator extends BaseValidator {
         });
       }
 
-      const guiasDeletar = findLayerCaseInsensitive(doc, LAYER_GUIAS_DELETAR);
-      const guias = findLayerCaseInsensitive(doc, LAYER_GUIAS_ALT);
-
-      if (!guiasDeletar && !guias) {
+      const guias = findLayerByNormalizedKeys(doc, [LAYER_GUIAS_DELETAR, LAYER_GUIAS_ALT]);
+      if (!guias) {
         issues.push({
           message: `Layer "${LAYER_GUIAS_DELETAR}" inexistente`,
-          details: "Crie a layer GUIAS_DELETAR no documento.",
+          details: `Crie a layer "${LAYER_GUIAS_DELETAR}" no documento.`,
         });
       }
 
@@ -68,13 +63,14 @@ export class LayersNomenclaturaValidator extends BaseValidator {
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
-      const issues = [];
+      const issues: ValidationIssue[] = [];
 
-      if (!hasExactLayer(doc, LAYER_GUIAS_DELETAR) && hasExactLayer(doc, LAYER_GUIAS_ALT)) {
+      const guias = findLayerByNormalizedKeys(doc, [LAYER_GUIAS_DELETAR, LAYER_GUIAS_ALT]);
+      if (guias && !hasExactLayer(doc, LAYER_GUIAS_DELETAR)) {
         issues.push({
           message: "Nomenclatura incorreta de layer",
-          object: LAYER_GUIAS_ALT,
-          details: `Renomeie "${LAYER_GUIAS_ALT}" para "${LAYER_GUIAS_DELETAR}".`,
+          object: guias.name,
+          details: `Renomeie "${guias.name}" para "${LAYER_GUIAS_DELETAR}".`,
         });
       }
 

@@ -1,6 +1,7 @@
 import type { Document, Link, Page, PageItem } from "indesign";
 import { forEachCollectionItem } from "./collection-helpers";
 import { getInDesignModule } from "./indesign-runtime";
+import { getPageItemDisplayName } from "./indesign-helpers";
 
 export const LINK_STATUS_VALUES = {
   NORMAL: 1852797549,
@@ -140,7 +141,7 @@ export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
     forEachCollectionItem<PageItem>(container, (item) => {
       if (!item || !item.isValid) return;
 
-      const objectName = item.name || parentName || item.constructor.name || "Objeto";
+      const objectName = getPageItemDisplayName(item);
 
       collectLinksFromContainer(item.graphics, pageName, objectName, seen, result);
       collectLinksFromContainer(item.images, pageName, objectName, seen, result);
