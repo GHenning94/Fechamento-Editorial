@@ -43,16 +43,17 @@ export class EstilosPadraoFonteValidator extends BaseValidator {
           object: fileName || "Documento não salvo",
           details:
             "Não foi possível identificar EF1/EFAI, EF2/EFAF, EM ou PV/Prevest pelo nome do arquivo. A validação de tamanho foi ignorada.",
+          severity: "warning",
         });
       }
 
       for (const styleName of FONTE_STANDARD_STYLE_NAMES) {
         if (presentStyles.has(styleName)) continue;
-
         issues.push({
-          message: "Estilo obrigatório ausente",
+          message: "Estilo ausente",
           object: styleName,
-          details: "Este estilo deve estar presente em todos os projetos.",
+          details: "Estilo padrão não encontrado. Quando presente, deve seguir a configuração correta.",
+          severity: "warning",
         });
       }
 
@@ -68,17 +69,18 @@ export class EstilosPadraoFonteValidator extends BaseValidator {
             message: "Configuração divergente",
             object: style.name,
             details: `${issue.property}: esperado ${issue.expected}, encontrado ${issue.actual}.`,
+            severity: "error",
           });
         }
       });
 
-      const hasError = issues.some(
-        (issue) =>
-          issue.message === "Configuração divergente" ||
-          issue.message === "Estilo obrigatório ausente"
-      );
+      const severity = issues.some((issue) => (issue.severity || "error") === "error")
+        ? "error"
+        : issues.length > 0
+          ? "warning"
+          : "success";
 
-      return createResult(this.id, this.name, issues, hasError ? "error" : "warning");
+      return createResult(this.id, this.name, issues, severity);
     });
   }
 }

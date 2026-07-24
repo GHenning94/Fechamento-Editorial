@@ -1,7 +1,11 @@
 import { getInDesignUserName } from "../utils/indesign-runtime";
 import { userInfo } from "os";
 import { ClosureReport } from "../models/closure-report";
-import { ValidationResult, ValidationSummary } from "../models/validation-result";
+import {
+  getIssueSeverity,
+  ValidationResult,
+  ValidationSummary,
+} from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { writeTextFile } from "../utils/file-system";
 
@@ -14,35 +18,52 @@ function escapeHtml(value: string): string {
 }
 
 function renderIssues(results: ValidationResult[], severity: string): string {
-  const filtered = results.filter((r) => {
-    if (severity === "success" && r.validatorId === VALIDATOR_IDS.CORES) {
-      return false;
+  if (severity === "success") {
+    const approved = results.filter(
+      (result) => result.severity === "success" && result.validatorId !== VALIDATOR_IDS.CORES
+    );
+    if (approved.length === 0) {
+      return "<p class=\"empty\">Nenhum item.</p>";
     }
-    return r.severity === severity;
-  });
-  if (filtered.length === 0) {
+    let html = "<ul>";
+    for (const result of approved) {
+      html += `<li><strong>${escapeHtml(result.validatorName)}</strong> — Aprovado</li>`;
+    }
+    html += "</ul>";
+    return html;
+  }
+
+  const grouped = new Map<string, { name: string; lines: string[] }>();
+
+  for (const result of results) {
+    const issues = Array.isArray(result.issues) ? result.issues : [];
+    for (const issue of issues) {
+      if (getIssueSeverity(result, issue) !== severity) continue;
+      const entry = grouped.get(result.validatorId) || {
+        name: result.validatorName,
+        lines: [],
+      };
+      let line = escapeHtml(issue.message);
+      if (issue.page) line += ` | Página: ${escapeHtml(issue.page)}`;
+      if (issue.object) line += ` | Objeto: ${escapeHtml(issue.object)}`;
+      if (issue.value) line += ` | Valor: ${escapeHtml(issue.value)}`;
+      if (issue.details) line += ` | ${escapeHtml(issue.details)}`;
+      entry.lines.push(line);
+      grouped.set(result.validatorId, entry);
+    }
+  }
+
+  if (grouped.size === 0) {
     return "<p class=\"empty\">Nenhum item.</p>";
   }
 
   let html = "<ul>";
-  for (const result of filtered) {
-    html += `<li><strong>${escapeHtml(result.validatorName)}</strong>`;
-    if (result.issues.length === 0) {
-      html += " — Aprovado";
-    } else {
-      html += "<ul>";
-      for (const issue of result.issues) {
-        html += "<li>";
-        html += escapeHtml(issue.message);
-        if (issue.page) html += ` | Página: ${escapeHtml(issue.page)}`;
-        if (issue.object) html += ` | Objeto: ${escapeHtml(issue.object)}`;
-        if (issue.value) html += ` | Valor: ${escapeHtml(issue.value)}`;
-        if (issue.details) html += ` | ${escapeHtml(issue.details)}`;
-        html += "</li>";
-      }
-      html += "</ul>";
+  for (const entry of grouped.values()) {
+    html += `<li><strong>${escapeHtml(entry.name)}</strong><ul>`;
+    for (const line of entry.lines) {
+      html += `<li>${line}</li>`;
     }
-    html += "</li>";
+    html += "</ul></li>";
   }
   html += "</ul>";
   return html;

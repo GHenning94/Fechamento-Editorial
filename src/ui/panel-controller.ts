@@ -1,5 +1,12 @@
 import { ClosureReport } from "../models/closure-report";
-import { ValidationResult, ValidationSummary } from "../models/validation-result";
+import {
+  filterIgnoredWarnings,
+  getIssueSeverity,
+  makeIssueKey,
+  ValidationIssue,
+  ValidationResult,
+  ValidationSummary,
+} from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { PackageCancelledError, promptPackageFolder } from "../utils/file-system";
 import { yieldToHost } from "../utils/yield-to-host";
@@ -23,6 +30,9 @@ export class PanelController {
   private listErrors: HTMLElement | null;
   private statusMessage: HTMLElement | null;
   private reportDownloadAllowed = false;
+  private rawSummary: ValidationSummary | null = null;
+  private ignoredWarningKeys = new Set<string>();
+  private onSummaryFiltered: ((summary: ValidationSummary) => void) | null = null;
 
   constructor(private root: HTMLElement) {
     this.btnChecklist = root.querySelector("#btn-checklist");
@@ -48,6 +58,16 @@ export class PanelController {
       this.progressLabel &&
       this.statusMessage
     );
+  }
+
+  setSummaryFilterListener(listener: (summary: ValidationSummary) => void): void {
+    this.onSummaryFiltered = listener;
+  }
+
+  /** Resumo com avisos ignorados já removidos (para relatório/cache). */
+  getSummaryForReport(): ValidationSummary | null {
+    if (!this.rawSummary) return null;
+    return filterIgnoredWarnings(this.rawSummary, this.ignoredWarningKeys);
   }
 
   bindHandlers(handlers: {
@@ -165,7 +185,18 @@ export class PanelController {
   }
 
   renderSummary(summary: ValidationSummary, title: string): void {
-    const safe = this.normalizeSummary(summary);
+    this.rawSummary = this.normalizeSummary(summary);
+    this.ignoredWarningKeys.clear();
+    this.refreshSummaryUi(`${title} concluído.`);
+  }
+
+  private refreshSummaryUi(statusMessage?: string): void {
+    const safe = this.getSummaryForReport() || {
+      errors: 0,
+      warnings: 0,
+      approved: 0,
+      results: [],
+    };
 
     if (this.countErrors) this.countErrors.textContent = String(safe.errors);
     if (this.countWarnings) this.countWarnings.textContent = String(safe.warnings);
@@ -175,39 +206,51 @@ export class PanelController {
       this.listApproved.innerHTML = this.renderResultList(safe.results, "success");
     }
     if (this.listWarnings) {
-      this.listWarnings.innerHTML = this.renderResultList(safe.results, "warning");
+      this.listWarnings.innerHTML = this.renderResultList(this.rawSummary?.results || [], "warning", true);
+      this.bindIgnoreButtons();
     }
     if (this.listErrors) {
       this.listErrors.innerHTML = this.renderResultList(safe.results, "error");
     }
 
-    this.setStatus(
-      `${title} concluído.`,
-      safe.errors > 0 ? "error" : safe.warnings > 0 ? "warning" : "success"
-    );
+    if (statusMessage) {
+      this.setStatus(
+        statusMessage,
+        safe.errors > 0 ? "error" : safe.warnings > 0 ? "warning" : "success"
+      );
+    }
+
+    this.onSummaryFiltered?.(safe);
+  }
+
+  private bindIgnoreButtons(): void {
+    if (!this.listWarnings) return;
+
+    const buttons = this.listWarnings.querySelectorAll<HTMLElement>("[data-ignore-key]");
+    buttons.forEach((button) => {
+      const key = button.getAttribute("data-ignore-key");
+      if (!key) return;
+
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.ignoredWarningKeys.add(key);
+        this.refreshSummaryUi();
+        this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
+      };
+    });
   }
 
   renderClosureReport(report: ClosureReport): void {
     if (report.checklist) {
-      const checklist = this.normalizeSummary(report.checklist);
-
-      if (this.countErrors) this.countErrors.textContent = String(checklist.errors);
-      if (this.countWarnings) this.countWarnings.textContent = String(checklist.warnings);
-      if (this.countApproved) this.countApproved.textContent = String(checklist.approved);
-
-      const allResults = checklist.results;
-      if (this.listApproved) {
-        this.listApproved.innerHTML = this.renderResultList(allResults, "success");
-      }
-      if (this.listWarnings) {
-        this.listWarnings.innerHTML = this.renderResultList(allResults, "warning");
-      }
-      if (this.listErrors) {
-        this.listErrors.innerHTML = this.renderResultList(allResults, "error");
-      }
+      this.rawSummary = this.normalizeSummary(report.checklist);
+      this.ignoredWarningKeys.clear();
+      this.refreshSummaryUi();
     }
 
-    const hasValidationErrors = report.checklist ? this.normalizeSummary(report.checklist).errors > 0 : false;
+    const hasValidationErrors = report.checklist
+      ? this.normalizeSummary(report.checklist).errors > 0
+      : false;
 
     if (report.blocked) {
       this.setStatus(report.blockReason || "Fechamento bloqueado devido a erros.", "error");
@@ -220,7 +263,9 @@ export class PanelController {
       report.artifacts.pdfArteGenerated ? "PDF arte gerado" : null,
       report.artifacts.pdfEstilosGenerated ? "PDF _ESTILOS gerado" : null,
       report.artifacts.pdfWarnings?.length ? report.artifacts.pdfWarnings.join(" ") : null,
-      report.reportGenerated ? `Relatório: ${report.artifacts.paths.reportPath}` : "Sem relatório (checklist não validado)",
+      report.reportGenerated
+        ? `Relatório: ${report.artifacts.paths.reportPath}`
+        : "Sem relatório (checklist não validado)",
     ]
       .filter(Boolean)
       .join(" | ");
@@ -257,32 +302,89 @@ export class PanelController {
     return result.validatorId === VALIDATOR_IDS.CORES && result.severity === "success";
   }
 
-  private renderResultList(results: ValidationResult[] | null | undefined, severity: string): string {
-    const safeResults = Array.isArray(results) ? results : [];
-    const filtered = safeResults.filter((r) => {
-      if (severity === "success" && this.shouldHideFromApproved(r)) {
-        return false;
-      }
-      return r.severity === severity;
-    });
+  private collectIssuesBySeverity(
+    results: ValidationResult[],
+    severity: "success" | "warning" | "error"
+  ): Array<{ result: ValidationResult; issue: ValidationIssue; index: number }> {
+    const items: Array<{ result: ValidationResult; issue: ValidationIssue; index: number }> = [];
 
-    if (filtered.length === 0) {
+    for (const result of results) {
+      if (severity === "success") {
+        if (this.shouldHideFromApproved(result)) continue;
+        if (result.severity === "success") {
+          items.push({
+            result,
+            issue: { message: "OK" },
+            index: -1,
+          });
+        }
+        continue;
+      }
+
+      const issues = Array.isArray(result.issues) ? result.issues : [];
+      issues.forEach((issue, index) => {
+        if (getIssueSeverity(result, issue) !== severity) return;
+        if (severity === "warning" && this.ignoredWarningKeys.has(makeIssueKey(result, issue, index))) {
+          return;
+        }
+        items.push({ result, issue, index });
+      });
+    }
+
+    return items;
+  }
+
+  private renderResultList(
+    results: ValidationResult[] | null | undefined,
+    severity: "success" | "warning" | "error",
+    withIgnore = false
+  ): string {
+    const safeResults = Array.isArray(results) ? results : [];
+
+    if (severity === "success") {
+      const approved = safeResults.filter(
+        (result) => result.severity === "success" && !this.shouldHideFromApproved(result)
+      );
+      if (approved.length === 0) {
+        return '<li class="empty-item">Nenhum item</li>';
+      }
+      return approved
+        .map(
+          (result) =>
+            `<li><span class="item-title">${this.escape(result.validatorName)}</span> — OK</li>`
+        )
+        .join("");
+    }
+
+    const grouped = new Map<string, Array<{ result: ValidationResult; issue: ValidationIssue; index: number }>>();
+    for (const item of this.collectIssuesBySeverity(safeResults, severity)) {
+      const key = item.result.validatorId;
+      const list = grouped.get(key) || [];
+      list.push(item);
+      grouped.set(key, list);
+    }
+
+    if (grouped.size === 0) {
       return '<li class="empty-item">Nenhum item</li>';
     }
 
-    return filtered
-      .map((result) => {
-        if (!result.issues || result.issues.length === 0) {
-          return `<li><span class="item-title">${this.escape(result.validatorName)}</span> — OK</li>`;
-        }
-
-        const issues = result.issues
-          .map((issue) => {
+    return Array.from(grouped.values())
+      .map((entries) => {
+        const validatorName = entries[0].result.validatorName;
+        const issuesHtml = entries
+          .map(({ result, issue, index }) => {
             const parts = [issue.message];
             if (issue.page) parts.push(`Pág: ${issue.page}`);
             if (issue.object) parts.push(`Objeto: ${issue.object}`);
             if (issue.value) parts.push(issue.value);
-            let line = `<div class="issue-line">${this.escape(parts.join(" — "))}</div>`;
+
+            const ignoreKey = makeIssueKey(result, issue, index);
+            const ignoreBtn =
+              withIgnore && severity === "warning"
+                ? `<span class="issue-ignore" data-ignore-key="${this.escape(ignoreKey)}" role="button" tabindex="0">Ignorar</span>`
+                : "";
+
+            let line = `<div class="issue-line-row"><div class="issue-line">${this.escape(parts.join(" — "))}</div>${ignoreBtn}</div>`;
             if (issue.details) {
               line += `<div class="issue-detail">${this.escape(issue.details)}</div>`;
             }
@@ -290,7 +392,7 @@ export class PanelController {
           })
           .join("");
 
-        return `<li><span class="item-title">${this.escape(result.validatorName)}</span>${issues}</li>`;
+        return `<li><span class="item-title">${this.escape(validatorName)}</span>${issuesHtml}</li>`;
       })
       .join("");
   }
@@ -305,6 +407,7 @@ export class PanelController {
     return value
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 }

@@ -116,11 +116,16 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       lastChecklistSummary = summary;
       controller.setReportDownloadEnabled(true);
       controller.setProgress(100, "Checklist concluído");
+      controller.setSummaryFilterListener((filtered) => {
+        lastChecklistSummary = filtered;
+        orchestrator.cacheCurrentDocumentChecklist(filtered);
+      });
       controller.renderSummary(summary, "Checklist");
     },
 
     onDownloadReport: async () => {
-      if (!lastChecklistSummary) {
+      const reportSummary = controller.getSummaryForReport() || lastChecklistSummary;
+      if (!reportSummary) {
         controller.setStatus("Execute o checklist antes de baixar o relatório.", "warning");
         return;
       }
@@ -151,7 +156,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
 
       controller.setStatus("Gerando relatório...", "info");
       const savedPath = await orchestrator.exportChecklistReport(
-        lastChecklistSummary,
+        reportSummary,
         filePath,
         userName
       );

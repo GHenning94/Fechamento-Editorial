@@ -1,15 +1,27 @@
 import type { ParagraphStyle } from "indesign";
 import { ACCEPTED_PROFESSOR_LANGUAGES } from "./constants";
-import { getInDesignModule } from "./indesign-runtime";
 import type { MaterialSegment } from "./material-type";
+import {
+  SIZE_TOLERANCE_PT,
+  StylePropertyIssue,
+  approxEqual,
+  compareSpacingMm,
+  formatMm,
+  isAcceptedLanguage,
+  isObliqueFontStyle,
+  isRightAlign,
+  pushIssue,
+  readFontInfo,
+  readNumberProperty,
+} from "./style-property-compare";
+
+export type { StylePropertyIssue };
 
 export const FONTE_STANDARD_STYLE_NAMES = [
   "05_grafico_fonte",
   "05_mapa_fonte",
   "08_tabela_fonte",
 ] as const;
-
-const MM_TO_PT = 72 / 25.4;
 
 type JustificationExpectation = "right";
 
@@ -18,10 +30,10 @@ interface FonteStyleProfile {
   fontStyleIncludes: string;
   leadingPt: number;
   autoLeadingPct: number;
-  hyphenationZonePt: number;
-  spaceBeforePt?: number;
-  spaceAfterPt: number;
-  leftIndentPt: number;
+  hyphenationZoneMm: number;
+  spaceBeforeMm?: number;
+  spaceAfterMm: number;
+  leftIndentMm: number;
   leftIndentLabel: string;
   justification?: JustificationExpectation;
   acceptedLanguages: readonly string[];
@@ -32,31 +44,31 @@ const SHARED_FONTE_BASE = {
   fontStyleIncludes: "45 Light",
   leadingPt: 7,
   autoLeadingPct: 115,
-  hyphenationZonePt: 7.408 * MM_TO_PT,
+  hyphenationZoneMm: 7.408,
   acceptedLanguages: ACCEPTED_PROFESSOR_LANGUAGES,
 } as const;
 
 const FONTE_STYLE_PROFILES: Record<(typeof FONTE_STANDARD_STYLE_NAMES)[number], FonteStyleProfile> = {
   "05_grafico_fonte": {
     ...SHARED_FONTE_BASE,
-    spaceBeforePt: 2.117 * MM_TO_PT,
-    spaceAfterPt: 4.233 * MM_TO_PT,
-    leftIndentPt: 0,
+    spaceBeforeMm: 2.117,
+    spaceAfterMm: 4.233,
+    leftIndentMm: 0,
     leftIndentLabel: "0 mm",
     justification: "right",
   },
   "05_mapa_fonte": {
     ...SHARED_FONTE_BASE,
-    spaceBeforePt: 2.117 * MM_TO_PT,
-    spaceAfterPt: 3.528 * MM_TO_PT,
-    leftIndentPt: 0,
+    spaceBeforeMm: 2.117,
+    spaceAfterMm: 3.528,
+    leftIndentMm: 0,
     leftIndentLabel: "0 mm",
     justification: "right",
   },
   "08_tabela_fonte": {
     ...SHARED_FONTE_BASE,
-    spaceAfterPt: 4.233 * MM_TO_PT,
-    leftIndentPt: 99.907 * MM_TO_PT,
+    spaceAfterMm: 4.233,
+    leftIndentMm: 99.907,
     leftIndentLabel: "99,907 mm",
   },
 };
@@ -75,19 +87,6 @@ const SEGMENT_SIZE_LABEL: Record<MaterialSegment, string> = {
   PV: "6 pt ou 7 pt",
 };
 
-const SIZE_TOLERANCE_PT = 0.25;
-const SPACING_TOLERANCE_PT = 0.35;
-
-export interface StylePropertyIssue {
-  property: string;
-  expected: string;
-  actual: string;
-}
-
-function approxEqual(a: number, b: number, tolerance: number): boolean {
-  return Math.abs(a - b) <= tolerance;
-}
-
 function isAcceptedPointSize(segment: MaterialSegment, pointSize: number): boolean {
   return SEGMENT_POINT_SIZE_PT[segment].some((size) =>
     approxEqual(pointSize, size, SIZE_TOLERANCE_PT)
@@ -96,72 +95,6 @@ function isAcceptedPointSize(segment: MaterialSegment, pointSize: number): boole
 
 export function getExpectedFontePointSizeLabel(segment: MaterialSegment): string {
   return SEGMENT_SIZE_LABEL[segment];
-}
-
-function normalizeLanguageName(name: string): string {
-  return name.trim().replace(/\s*:\s*/g, ": ");
-}
-
-function isAcceptedLanguage(languageName: string, accepted: readonly string[]): boolean {
-  const normalized = normalizeLanguageName(languageName).toLowerCase();
-  return accepted.some((entry) => normalizeLanguageName(entry).toLowerCase() === normalized);
-}
-
-function isObliqueFontStyle(fontStyle: string): boolean {
-  return /oblique|itálico|italico|italic/i.test(fontStyle);
-}
-
-function readFontInfo(style: ParagraphStyle): { fontFamily: string; fontStyle: string } {
-  try {
-    const font = style.appliedFont;
-    if (!font || typeof font !== "object") {
-      return { fontFamily: String(font || ""), fontStyle: "" };
-    }
-    return {
-      fontFamily: font.fontFamily || font.name || "",
-      fontStyle: font.fontStyleName || font.name || "",
-    };
-  } catch {
-    return { fontFamily: "", fontStyle: "" };
-  }
-}
-
-function isRightAlign(justification: number): boolean {
-  try {
-    const { Justification } = getInDesignModule();
-    const J = Justification as { RIGHT_ALIGN?: number; RIGHT_JUSTIFIED?: number };
-    if (typeof J.RIGHT_ALIGN === "number" && justification === J.RIGHT_ALIGN) return true;
-    if (typeof J.RIGHT_JUSTIFIED === "number" && justification === J.RIGHT_JUSTIFIED) return true;
-  } catch {
-    // ignore
-  }
-  return false;
-}
-
-function readNumberProperty(
-  style: ParagraphStyle,
-  property: keyof ParagraphStyle,
-  label: string
-): { value: number | null; issue: StylePropertyIssue | null } {
-  try {
-    const raw = style[property];
-    if (typeof raw !== "number" || Number.isNaN(raw)) {
-      return {
-        value: null,
-        issue: { property: label, expected: "Valor numérico", actual: "Não foi possível ler" },
-      };
-    }
-    return { value: raw, issue: null };
-  } catch {
-    return {
-      value: null,
-      issue: { property: label, expected: "Valor numérico", actual: "Não foi possível ler" },
-    };
-  }
-}
-
-function pushIssue(issues: StylePropertyIssue[], issue: StylePropertyIssue | null): void {
-  if (issue) issues.push(issue);
 }
 
 export function compareFonteStyle(
@@ -175,7 +108,7 @@ export function compareFonteStyle(
   const issues: StylePropertyIssue[] = [];
   const { fontFamily, fontStyle } = readFontInfo(style);
 
-  if (!fontFamily.includes(profile.fontFamily)) {
+  if (!fontFamily.toLowerCase().includes(profile.fontFamily.toLowerCase())) {
     issues.push({
       property: "Fonte",
       expected: profile.fontFamily,
@@ -200,10 +133,7 @@ export function compareFonteStyle(
   if (options.validateSize && options.segment) {
     const pointSize = readNumberProperty(style, "pointSize", "Tamanho");
     pushIssue(issues, pointSize.issue);
-    if (
-      pointSize.value !== null &&
-      !isAcceptedPointSize(options.segment, pointSize.value)
-    ) {
+    if (pointSize.value !== null && !isAcceptedPointSize(options.segment, pointSize.value)) {
       issues.push({
         property: "Tamanho",
         expected: getExpectedFontePointSizeLabel(options.segment),
@@ -255,16 +185,13 @@ export function compareFonteStyle(
 
   const leftIndent = readNumberProperty(style, "leftIndent", "Recuo à esquerda");
   pushIssue(issues, leftIndent.issue);
-  if (
-    leftIndent.value !== null &&
-    !approxEqual(leftIndent.value, profile.leftIndentPt, SPACING_TOLERANCE_PT)
-  ) {
-    issues.push({
-      property: "Recuo à esquerda",
-      expected: profile.leftIndentLabel,
-      actual: `${leftIndent.value}`,
-    });
-  }
+  compareSpacingMm(
+    issues,
+    "Recuo à esquerda",
+    leftIndent.value,
+    profile.leftIndentMm,
+    profile.leftIndentLabel
+  );
 
   try {
     const languageName = style.appliedLanguage?.name || "";
@@ -285,46 +212,35 @@ export function compareFonteStyle(
 
   const hyphenationZone = readNumberProperty(style, "hyphenationZone", "Zona de hifenização");
   pushIssue(issues, hyphenationZone.issue);
-  if (
-    hyphenationZone.value !== null &&
-    !approxEqual(hyphenationZone.value, profile.hyphenationZonePt, SPACING_TOLERANCE_PT)
-  ) {
-    issues.push({
-      property: "Zona de hifenização",
-      expected: "7,408 mm",
-      actual: `${hyphenationZone.value}`,
-    });
-  }
+  compareSpacingMm(
+    issues,
+    "Zona de hifenização",
+    hyphenationZone.value,
+    profile.hyphenationZoneMm,
+    formatMm(profile.hyphenationZoneMm)
+  );
 
-  if (profile.spaceBeforePt !== undefined) {
+  if (profile.spaceBeforeMm !== undefined) {
     const spaceBefore = readNumberProperty(style, "spaceBefore", "Espaço anterior");
     pushIssue(issues, spaceBefore.issue);
-    if (
-      spaceBefore.value !== null &&
-      !approxEqual(spaceBefore.value, profile.spaceBeforePt, SPACING_TOLERANCE_PT)
-    ) {
-      issues.push({
-        property: "Espaço anterior",
-        expected: "2,117 mm",
-        actual: `${spaceBefore.value}`,
-      });
-    }
+    compareSpacingMm(
+      issues,
+      "Espaço anterior",
+      spaceBefore.value,
+      profile.spaceBeforeMm,
+      formatMm(profile.spaceBeforeMm)
+    );
   }
 
   const spaceAfter = readNumberProperty(style, "spaceAfter", "Espaço posterior");
   pushIssue(issues, spaceAfter.issue);
-  if (
-    spaceAfter.value !== null &&
-    !approxEqual(spaceAfter.value, profile.spaceAfterPt, SPACING_TOLERANCE_PT)
-  ) {
-    const expectedAfter =
-      styleName === "05_mapa_fonte" ? "3,528 mm" : "4,233 mm";
-    issues.push({
-      property: "Espaço posterior",
-      expected: expectedAfter,
-      actual: `${spaceAfter.value}`,
-    });
-  }
+  compareSpacingMm(
+    issues,
+    "Espaço posterior",
+    spaceAfter.value,
+    profile.spaceAfterMm,
+    formatMm(profile.spaceAfterMm)
+  );
 
   return issues;
 }

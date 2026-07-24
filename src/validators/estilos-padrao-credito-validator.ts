@@ -33,9 +33,10 @@ export class EstilosPadraoCreditoValidator extends BaseValidator {
 
       if (!hasCreditoStyle) {
         issues.push({
-          message: "Estilo obrigatório ausente",
+          message: "Estilo ausente",
           object: CREDITO_STYLE_NAME,
-          details: "Este estilo deve estar presente em todos os projetos.",
+          details: "Estilo padrão não encontrado. Quando presente, deve seguir a configuração correta.",
+          severity: "warning",
         });
       }
 
@@ -46,13 +47,18 @@ export class EstilosPadraoCreditoValidator extends BaseValidator {
         for (const issue of compareCreditoStyle(style)) {
           issues.push({
             message: "Configuração divergente",
-            object: CREDITO_STYLE_NAME,
+            object: style.name || CREDITO_STYLE_NAME,
             details: `${issue.property}: esperado ${issue.expected}, encontrado ${issue.actual}.`,
+            severity: "error",
           });
         }
       });
 
-      const severity = issues.length > 0 ? "error" : "success";
+      const severity = issues.some((issue) => (issue.severity || "error") === "error")
+        ? "error"
+        : issues.length > 0
+          ? "warning"
+          : "success";
 
       return createResult(this.id, this.name, issues, severity);
     });
