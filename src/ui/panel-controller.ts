@@ -47,6 +47,42 @@ export class PanelController {
     this.listWarnings = root.querySelector("#list-warnings");
     this.listErrors = root.querySelector("#list-errors");
     this.statusMessage = root.querySelector("#status-message");
+    this.bindResultExpanders();
+  }
+
+  private bindResultExpanders(): void {
+    const results = this.root.querySelector(".results") as HTMLElement | null;
+    if (!results) return;
+
+    const expanders = results.querySelectorAll<HTMLElement>(".result-expand");
+    expanders.forEach((expander) => {
+      onActionActivate(expander, () => {
+        const block = expander.parentElement?.parentElement as HTMLElement | null;
+        if (!block) return;
+
+        const willExpand = !block.classList.contains("is-expanded");
+
+        results.querySelectorAll<HTMLElement>(".result-block").forEach((item) => {
+          item.classList.remove("is-expanded");
+          const control = item.querySelector(".result-expand") as HTMLElement | null;
+          if (control) {
+            control.setAttribute("aria-expanded", "false");
+            control.textContent = "⛶";
+            control.setAttribute("title", "Expandir box");
+          }
+        });
+
+        if (willExpand) {
+          results.classList.add("has-expanded");
+          block.classList.add("is-expanded");
+          expander.setAttribute("aria-expanded", "true");
+          expander.textContent = "−";
+          expander.setAttribute("title", "Recolher box");
+        } else {
+          results.classList.remove("has-expanded");
+        }
+      });
+    });
   }
 
   isReady(): boolean {

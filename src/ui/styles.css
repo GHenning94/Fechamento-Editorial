@@ -326,6 +326,7 @@ progress::-webkit-progress-value {
   display: flex;
   flex-direction: row;
   align-items: center;
+  justify-content: space-between;
   padding: 7px 11px;
   font-weight: 600;
   font-size: 10px;
@@ -336,8 +337,55 @@ progress::-webkit-progress-value {
   background-color: var(--surface-alt);
 }
 
-.result-header > span {
+.result-header-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.result-header-label > span {
   margin-right: 7px;
+}
+
+.result-expand {
+  flex-shrink: 0;
+  margin-left: 10px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.result-expand:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background-color: var(--surface-hover);
+}
+
+.result-block.is-expanded .result-expand {
+  color: var(--accent);
+  border-color: var(--accent-deep);
+}
+
+/* Ao expandir um box, os demais ficam apenas com o header visível. */
+.results.has-expanded > .result-block {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.results.has-expanded > .result-block.is-expanded {
+  flex: 1;
+  min-height: 0;
+}
+
+.results.has-expanded > .result-block:not(.is-expanded) .result-list {
+  display: none;
 }
 
 .result-list {
