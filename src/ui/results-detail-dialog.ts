@@ -20,29 +20,30 @@ export interface ResultDetailOptions {
   onIgnore?: (key: string) => void;
 }
 
-const MIN_WIDTH = 520;
-const MIN_HEIGHT = 380;
-const MAX_WIDTH = 920;
-const MAX_HEIGHT = 880;
-const DEFAULT_WIDTH = 720;
+const MIN_WIDTH = 560;
+const MIN_HEIGHT = 400;
+const MAX_WIDTH = 900;
+const MAX_HEIGHT = 720;
+const DEFAULT_WIDTH = 640;
+const HEADER_HEIGHT = 52;
+
+const KIND_TITLE_COLOR: Record<ResultDetailKind, string> = {
+  approved: "#5ecf8e",
+  warning: "#e6c35c",
+  error: "#e87474",
+};
 
 function countListItems(html: string): number {
   return (html.match(/<li\b/gi) || []).length;
 }
 
-/** Estima um tamanho inicial onde a lista caiba sem precisar redimensionar. */
 function computeDialogSize(html: string): { width: number; height: number } {
   const items = Math.max(1, countListItems(html));
-  const headerAndPadding = 88;
-  const estimatedItemHeight = 96;
-  const height = Math.min(
-    MAX_HEIGHT,
-    Math.max(MIN_HEIGHT, headerAndPadding + items * estimatedItemHeight)
-  );
+  const idealHeight = HEADER_HEIGHT + 24 + items * 72;
 
   return {
     width: DEFAULT_WIDTH,
-    height,
+    height: Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, idealHeight)),
   };
 }
 
@@ -76,6 +77,10 @@ function bindIgnoreHandlers(
   });
 }
 
+/**
+ * Modal de detalhes — no UXP/InDesign o tamanho vem do filho direto em px
+ * (igual à receita oficial). Evitar position:absolute / width:100% (colapsa).
+ */
 export async function showResultsDetailDialog(options: ResultDetailOptions): Promise<void> {
   const existing = document.getElementById("editorial-results-detail-dialog");
   if (existing) {
@@ -83,32 +88,100 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   }
 
   const size = computeDialogSize(options.html || "");
+  const listHeight = Math.max(200, size.height - HEADER_HEIGHT);
+  const titleColor = KIND_TITLE_COLOR[options.kind];
+
   const dialog = document.createElement("dialog") as UxpDialog;
   dialog.id = "editorial-results-detail-dialog";
+  dialog.style.padding = "0";
+  dialog.style.margin = "0";
+  dialog.style.border = "1px solid #4a4a54";
+  dialog.style.backgroundColor = "#232329";
+  dialog.style.color = "#f2f0ec";
+  dialog.style.overflow = "hidden";
 
-  // form com width explícito: no UXP, sem isso o diálogo colapsa (largura ~0).
-  dialog.innerHTML = `
-    <form method="dialog" class="results-detail-dialog-form">
-      <div class="results-detail-dialog-content" data-kind="${options.kind}">
-        <div class="results-detail-dialog-header">
-          <h2 id="results-detail-title" class="results-detail-dialog-heading"></h2>
-          <div id="results-detail-close" class="btn btn-secondary results-detail-close" role="button" tabindex="0">
-            Fechar
-          </div>
-        </div>
-        <ul id="results-detail-list" class="results-detail-list result-list"></ul>
-      </div>
-    </form>
-  `;
+  const root = document.createElement("div");
+  root.className = "results-detail-dialog-content";
+  root.setAttribute("data-kind", options.kind);
+  // Dimensões em px no filho direto — o host dimensiona a janela por isso
+  root.style.display = "flex";
+  root.style.flexDirection = "column";
+  root.style.width = `${size.width}px`;
+  root.style.minWidth = `${size.width}px`;
+  root.style.height = `${size.height}px`;
+  root.style.minHeight = `${size.height}px`;
+  root.style.margin = "0";
+  root.style.padding = "0";
+  root.style.boxSizing = "border-box";
+  root.style.overflow = "hidden";
+  root.style.backgroundColor = "#232329";
 
-  const form = dialog.querySelector(".results-detail-dialog-form") as HTMLFormElement;
-  const content = dialog.querySelector(".results-detail-dialog-content") as HTMLElement;
-  const titleEl = dialog.querySelector("#results-detail-title") as HTMLElement;
-  const listEl = dialog.querySelector("#results-detail-list") as HTMLElement;
-  const closeBtn = dialog.querySelector("#results-detail-close") as HTMLElement;
+  const header = document.createElement("div");
+  header.className = "results-detail-dialog-header";
+  header.style.display = "flex";
+  header.style.flexDirection = "row";
+  header.style.alignItems = "center";
+  header.style.justifyContent = "space-between";
+  header.style.flexShrink = "0";
+  header.style.height = `${HEADER_HEIGHT}px`;
+  header.style.paddingTop = "10px";
+  header.style.paddingBottom = "10px";
+  header.style.paddingLeft = "16px";
+  header.style.paddingRight = "16px";
+  header.style.boxSizing = "border-box";
+  header.style.borderBottom = "1px solid #3a3a42";
+  header.style.backgroundColor = "#2a2a30";
 
+  const titleEl = document.createElement("h2");
+  titleEl.id = "results-detail-title";
+  titleEl.className = "results-detail-dialog-heading";
   titleEl.textContent = options.title;
+  titleEl.style.margin = "0";
+  titleEl.style.marginRight = "12px";
+  titleEl.style.flex = "1";
+  titleEl.style.fontSize = "14px";
+  titleEl.style.fontWeight = "700";
+  titleEl.style.letterSpacing = "0.04em";
+  titleEl.style.color = titleColor;
+  titleEl.style.overflow = "hidden";
+  titleEl.style.whiteSpace = "nowrap";
+  titleEl.style.textOverflow = "ellipsis";
+
+  const closeBtn = document.createElement("div");
+  closeBtn.id = "results-detail-close";
+  closeBtn.className = "btn btn-secondary results-detail-close";
+  closeBtn.setAttribute("role", "button");
+  closeBtn.tabIndex = 0;
+  closeBtn.textContent = "Fechar";
+  closeBtn.style.flexShrink = "0";
+  closeBtn.style.width = "auto";
+  closeBtn.style.minWidth = "72px";
+
+  const listEl = document.createElement("ul");
+  listEl.id = "results-detail-list";
+  listEl.className = "results-detail-list result-list";
+  listEl.style.listStyle = "none";
+  listEl.style.margin = "0";
+  listEl.style.paddingTop = "12px";
+  listEl.style.paddingBottom = "12px";
+  listEl.style.paddingLeft = "16px";
+  listEl.style.paddingRight = "16px";
+  listEl.style.width = `${size.width}px`;
+  listEl.style.height = `${listHeight}px`;
+  listEl.style.maxHeight = `${listHeight}px`;
+  listEl.style.boxSizing = "border-box";
+  listEl.style.overflowX = "hidden";
+  listEl.style.overflowY = "scroll";
+  listEl.style.flexShrink = "0";
+  listEl.style.backgroundColor = "#232329";
   listEl.innerHTML = options.html || '<li class="empty-item">Nenhum item</li>';
+
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+  root.appendChild(header);
+  root.appendChild(listEl);
+  dialog.appendChild(root);
+  document.body.appendChild(dialog);
 
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
@@ -118,18 +191,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
     dialog.close();
   });
 
-  document.body.appendChild(dialog);
-
   try {
     if (typeof dialog.uxpShowModal === "function") {
-      // Janela nativa: tamanho via API. Conteúdo em 100% para acompanhar resize.
-      form.style.width = "100%";
-      form.style.height = "100%";
-      form.style.minWidth = `${MIN_WIDTH}px`;
-      form.style.minHeight = `${MIN_HEIGHT}px`;
-      content.style.width = "100%";
-      content.style.height = "100%";
-
       await dialog.uxpShowModal({
         title: options.title,
         resize: "both",
@@ -139,14 +202,6 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
       });
       return;
     }
-
-    // Fallback InDesign (showModal): o tamanho vem do form em px.
-    form.style.width = `${size.width}px`;
-    form.style.height = `${size.height}px`;
-    form.style.minWidth = `${MIN_WIDTH}px`;
-    form.style.minHeight = `${MIN_HEIGHT}px`;
-    content.style.width = "100%";
-    content.style.height = "100%";
 
     dialog.showModal();
     await waitForDialogClose(dialog);
