@@ -1,7 +1,11 @@
 import { onActionActivate } from "./action-control";
 
 type UxpDialog = HTMLDialogElement & {
-  uxpShowModal?(options: { title: string }): Promise<unknown>;
+  uxpShowModal?(options: {
+    title: string;
+    resize?: "none" | "both" | "horizontal" | "vertical";
+    size?: { width: number; height: number };
+  }): Promise<unknown>;
   close(returnValue?: string): void;
 };
 
@@ -14,7 +18,32 @@ export interface ResultDetailOptions {
   onIgnore?: (key: string) => void;
 }
 
+const DIALOG_WIDTH = 560;
+const DIALOG_HEIGHT = 620;
+
 let dialogInstance: UxpDialog | null = null;
+
+function applyDialogMetrics(dialog: UxpDialog, content: HTMLElement): void {
+  dialog.style.width = `${DIALOG_WIDTH}px`;
+  dialog.style.minWidth = `${DIALOG_WIDTH}px`;
+  dialog.style.maxWidth = `${DIALOG_WIDTH}px`;
+  dialog.style.height = `${DIALOG_HEIGHT}px`;
+  dialog.style.minHeight = `${DIALOG_HEIGHT}px`;
+  dialog.style.maxHeight = `${DIALOG_HEIGHT}px`;
+  dialog.style.padding = "0";
+  dialog.style.margin = "0";
+  dialog.style.boxSizing = "border-box";
+  dialog.style.overflow = "hidden";
+
+  content.style.width = `${DIALOG_WIDTH}px`;
+  content.style.minWidth = `${DIALOG_WIDTH}px`;
+  content.style.height = `${DIALOG_HEIGHT}px`;
+  content.style.minHeight = `${DIALOG_HEIGHT}px`;
+  content.style.boxSizing = "border-box";
+  content.style.display = "flex";
+  content.style.flexDirection = "column";
+  content.style.overflow = "hidden";
+}
 
 function getResultsDetailDialog(): UxpDialog {
   if (dialogInstance) {
@@ -37,6 +66,9 @@ function getResultsDetailDialog(): UxpDialog {
 
   document.body.appendChild(dialog);
 
+  const content = dialog.querySelector(".results-detail-dialog-content") as HTMLElement;
+  applyDialogMetrics(dialog, content);
+
   const closeBtn = dialog.querySelector("#results-detail-close") as HTMLElement;
   onActionActivate(closeBtn, () => {
     dialog.close();
@@ -51,6 +83,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   const titleEl = dialog.querySelector("#results-detail-title") as HTMLElement;
   const listEl = dialog.querySelector("#results-detail-list") as HTMLElement;
   const content = dialog.querySelector(".results-detail-dialog-content") as HTMLElement;
+
+  applyDialogMetrics(dialog, content);
 
   titleEl.textContent = options.title;
   listEl.innerHTML = options.html || '<li class="empty-item">Nenhum item</li>';
@@ -75,17 +109,22 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
 
   try {
     if (typeof dialog.uxpShowModal === "function") {
-      await dialog.uxpShowModal({ title: options.title });
-    } else {
-      dialog.showModal();
-      await new Promise<void>((resolve) => {
-        const onClose = (): void => {
-          dialog.removeEventListener("close", onClose);
-          resolve();
-        };
-        dialog.addEventListener("close", onClose);
+      await dialog.uxpShowModal({
+        title: options.title,
+        resize: "both",
+        size: { width: DIALOG_WIDTH, height: DIALOG_HEIGHT },
       });
+      return;
     }
+
+    dialog.showModal();
+    await new Promise<void>((resolve) => {
+      const onClose = (): void => {
+        dialog.removeEventListener("close", onClose);
+        resolve();
+      };
+      dialog.addEventListener("close", onClose);
+    });
   } catch {
     // usuário fechou / host cancelou
   }
