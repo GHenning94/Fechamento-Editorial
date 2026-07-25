@@ -1,4 +1,5 @@
 import { onActionActivate } from "./action-control";
+import { bindResultGroupToggles } from "./result-group-toggle";
 
 type UxpDialog = HTMLDialogElement & {
   uxpShowModal?(options: {
@@ -220,6 +221,8 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
   }
+
+  bindResultGroupToggles(listEl);
 
   onActionActivate(closeBtn, () => {
     dialog.close();

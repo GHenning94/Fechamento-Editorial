@@ -69,10 +69,17 @@ button::-moz-focus-inner {
   flex-direction: column;
   height: 100%;
   min-height: 100%;
+  width: 100%;
+  min-width: 0;
   padding: 14px;
   box-sizing: border-box;
   overflow: hidden;
   background-color: var(--bg);
+}
+
+.panel.has-results {
+  min-height: 100%;
+  height: 100%;
 }
 
 /* UXP ignora gap em flex — usar margin nos filhos */
@@ -104,6 +111,9 @@ button::-moz-focus-inner {
 
 .panel-footer {
   flex-shrink: 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .panel-title {
@@ -292,9 +302,16 @@ progress::-webkit-progress-value {
 }
 
 .results > .result-block {
-  flex: 1;
-  min-height: 64px;
+  flex: 1 1 72px;
+  min-height: 48px;
+  max-height: 140px;
   margin: 0 0 10px 0;
+}
+
+.panel.has-results .results > .result-block {
+  max-height: none;
+  flex: 1 1 0;
+  min-height: 80px;
 }
 
 .results > .result-block:last-child {
@@ -371,14 +388,43 @@ progress::-webkit-progress-value {
 .result-list {
   list-style: none;
   margin: 0;
-  padding: 8px 11px;
+  padding: 8px 14px 8px 11px;
+  overflow-x: hidden;
   overflow-y: auto;
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Alertas: botões Ignorar no DOM oculto não podem alargar a lista */
+#list-warnings {
+  padding-right: 16px;
+}
+
+#list-warnings .result-group:not(.is-open) > .result-group-body {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  visibility: hidden !important;
+}
+
+#list-errors {
+  padding-right: 16px;
 }
 
 .result-list li {
   margin: 0 0 7px 0;
   line-height: 1.45;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .result-list li:last-child {
@@ -390,11 +436,104 @@ progress::-webkit-progress-value {
   color: var(--text);
 }
 
+.result-group {
+  margin: 0 0 6px 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.result-group:last-child {
+  margin-bottom: 0;
+}
+
+.result-group-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  outline: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.result-group-toggle:hover {
+  background-color: var(--surface-hover);
+}
+
+.result-group-chevron {
+  flex-shrink: 0;
+  width: 12px;
+  margin-right: 4px;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.result-group.is-open > .result-group-toggle > .result-group-chevron {
+  transform: rotate(90deg);
+}
+
+.result-group-toggle > .item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.result-group-count {
+  flex: 0 0 auto;
+  margin-left: 0;
+  margin-right: 2px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background-color: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.result-group-body {
+  display: none;
+  padding: 4px 0 2px 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.result-group.is-open > .result-group-body {
+  display: block;
+}
+
+.result-group-issue {
+  margin: 0 0 6px 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.result-group-issue:last-child {
+  margin-bottom: 0;
+}
+
 .issue-line {
   color: var(--text-muted);
   font-size: 11px;
   padding-left: 8px;
   flex: 1;
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .issue-line-row {
@@ -403,6 +542,9 @@ progress::-webkit-progress-value {
   align-items: flex-start;
   padding-left: 0;
   margin-bottom: 2px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .issue-ignore {
@@ -442,6 +584,10 @@ progress::-webkit-progress-value {
 }
 
 .status-message {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 9px 12px;
   border-radius: var(--radius);
   font-size: 11px;
@@ -449,6 +595,11 @@ progress::-webkit-progress-value {
   border: 1px solid var(--border);
   background-color: var(--surface);
   color: var(--text-muted);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .status-success {

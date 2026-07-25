@@ -114,6 +114,7 @@ declare module "indesign" {
     saved: boolean;
     layers: Layers;
     colors: Colors;
+    colorGroups: ColorGroups;
     paragraphStyles: ParagraphStyles;
     characterStyles: CharacterStyles;
     links: Links;
@@ -234,6 +235,29 @@ declare module "indesign" {
     space: number;
     overprintFill: boolean;
     overprintStroke: boolean;
+    parentColorGroup?: ColorGroup | null;
+    isValid: boolean;
+  }
+
+  export interface ColorGroups {
+    length: number;
+    item(index: number): ColorGroup;
+    itemByName(name: string): ColorGroup;
+  }
+
+  export interface ColorGroup {
+    name: string;
+    isValid: boolean;
+    colorGroupSwatches: ColorGroupSwatches;
+  }
+
+  export interface ColorGroupSwatches {
+    length: number;
+    item(index: number): ColorGroupSwatch;
+  }
+
+  export interface ColorGroupSwatch {
+    swatchItemRef: Swatch | Color;
     isValid: boolean;
   }
 

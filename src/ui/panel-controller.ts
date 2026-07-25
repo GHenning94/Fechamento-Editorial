@@ -14,6 +14,8 @@ import { getDefaultReportUserName } from "../utils/indesign-runtime";
 import { onActionActivate, setActionDisabled } from "./action-control";
 import { promptUserNameDialog } from "./user-name-dialog";
 import { showResultsDetailDialog } from "./results-detail-dialog";
+import { bindResultGroupToggles } from "./result-group-toggle";
+import { tryExpandPanelToHostHeight } from "./panel-expand";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -237,7 +239,10 @@ export class PanelController {
   renderSummary(summary: ValidationSummary, title: string): void {
     this.rawSummary = this.normalizeSummary(summary);
     this.ignoredWarningKeys.clear();
+    this.root.classList.add("has-results");
     this.refreshSummaryUi(`${title} concluído.`);
+    tryExpandPanelToHostHeight();
+    window.setTimeout(() => tryExpandPanelToHostHeight(), 120);
   }
 
   private refreshSummaryUi(statusMessage?: string): void {
@@ -258,9 +263,11 @@ export class PanelController {
     if (this.listWarnings) {
       this.listWarnings.innerHTML = this.renderResultList(this.rawSummary?.results || [], "warning", true);
       this.bindIgnoreButtons();
+      bindResultGroupToggles(this.listWarnings);
     }
     if (this.listErrors) {
       this.listErrors.innerHTML = this.renderResultList(safe.results, "error");
+      bindResultGroupToggles(this.listErrors);
     }
 
     if (statusMessage) {
@@ -421,6 +428,7 @@ export class PanelController {
     return Array.from(grouped.values())
       .map((entries) => {
         const validatorName = entries[0].result.validatorName;
+        const count = entries.length;
         const issuesHtml = entries
           .map(({ result, issue, index }) => {
             const parts = [issue.message];
@@ -438,11 +446,26 @@ export class PanelController {
             if (issue.details) {
               line += `<div class="issue-detail">${this.escape(issue.details)}</div>`;
             }
-            return line;
+            return `<div class="result-group-issue">${line}</div>`;
           })
           .join("");
 
-        return `<li><span class="item-title">${this.escape(validatorName)}</span>${issuesHtml}</li>`;
+        return `
+          <li class="result-group">
+            <div
+              class="result-group-toggle"
+              data-result-group-toggle
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+            >
+              <span class="result-group-chevron">▸</span>
+              <span class="item-title">${this.escape(validatorName)}</span>
+              <span class="result-group-count">${count}</span>
+            </div>
+            <div class="result-group-body">${issuesHtml}</div>
+          </li>
+        `;
       })
       .join("");
   }
