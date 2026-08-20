@@ -118,6 +118,7 @@ button::-moz-focus-inner {
 }
 
 .panel-title {
+  display: block;
   margin: 0;
   font-size: 13px;
   font-weight: 700;
@@ -186,6 +187,7 @@ button::-moz-focus-inner {
 }
 
 .panel-subtitle {
+  display: block;
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 11px;
@@ -876,6 +878,12 @@ progress::-webkit-progress-value {
 .license-gate {
   justify-content: center;
   text-align: center;
+}
+
+.license-gate .panel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .license-gate-btn {

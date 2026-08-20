@@ -56,7 +56,7 @@ function getLicenseDialog(): UxpDialog {
       <h2 class="user-name-dialog-heading">Ativação do plugin</h2>
       <p class="user-name-dialog-body">
         Informe o serial (EAC1-XXXX-XXXX-XXXX-XXXX). Depois de ativar, este computador
-        não pede o código de novo — só em caso de reinstalação.
+        não pede o código de novo, só em caso de reinstalação.
       </p>
       <label class="user-name-dialog-label" for="uxp-license-input">Serial</label>
       <input
