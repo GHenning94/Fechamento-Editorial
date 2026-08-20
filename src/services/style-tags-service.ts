@@ -7,7 +7,6 @@ import type {
   PageItem,
   ParagraphStyle,
   Story,
-  Swatch,
   Text,
 } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
@@ -302,22 +301,6 @@ function ensureProcessColor(doc: Document, name: string, cmyk: number[]): Color 
   return doc.colors.itemByName(name);
 }
 
-function swatchByName(doc: Document, name: string): Swatch | Color | null {
-  try {
-    const item = doc.swatches?.itemByName(name);
-    if (item?.isValid) return item;
-  } catch {
-    // ignore
-  }
-  try {
-    const item = doc.colors.itemByName(name);
-    if (item?.isValid) return item;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
 function quoteExtendScript(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
@@ -445,12 +428,106 @@ function shiftIfCollision(hit: StyleHit, placed: Array<{ pageIndex: number; boun
   return y;
 }
 
-function buildTagScript(
-  hit: StyleHit,
-  fillName: string,
-  inkName: string,
-  noneName: string | null
-): { script: string; bounds: number[] } {
+const TAG_SCRIPT_HELPERS = [
+  "function eacFindNamed(collection, names) {",
+  "  for (var i = 0; i < names.length; i++) {",
+  "    try {",
+  "      var item = collection.itemByName(names[i]);",
+  "      if (item.isValid) return item;",
+  "    } catch (e) {}",
+  "  }",
+  "  return null;",
+  "}",
+  "function eacNoneSwatch(doc) {",
+  "  return eacFindNamed(doc.swatches, ['None', 'Nenhum', 'Nenhuma']) || doc.swatches.item(0);",
+  "}",
+  "function eacNoneChar(doc) {",
+  "  return eacFindNamed(doc.characterStyles, ['[None]', '[Nenhum]', '[Nenhuma]']);",
+  "}",
+  "function eacStripStroke(item, noneSwatch) {",
+  "  try { item.strokeWeight = 0; } catch (e) {}",
+  "  if (noneSwatch && noneSwatch.isValid) {",
+  "    try { item.strokeColor = noneSwatch; } catch (e) {}",
+  "    try { item.gapColor = noneSwatch; } catch (e) {}",
+  "  }",
+  "  try { item.overprintStroke = false; } catch (e) {}",
+  "}",
+  "function eacResetObjectStyle(item, noneSwatch) {",
+  "  try {",
+  "    var os = eacFindNamed(app.activeDocument.objectStyles, ['[None]', '[Nenhum]']);",
+  "    if (os) item.appliedObjectStyle = os;",
+  "  } catch (e) {}",
+  "  eacStripStroke(item, noneSwatch);",
+  "}",
+  "function eacEnsureInk(doc) {",
+  "  var ink = doc.colors.itemByName('EAC_TAG_INK');",
+  "  if (!ink.isValid) {",
+  "    ink = doc.colors.add({",
+  "      name: 'EAC_TAG_INK',",
+  "      model: ColorModel.PROCESS,",
+  "      space: ColorSpace.CMYK,",
+  "      colorValue: [0, 0, 0, 100]",
+  "    });",
+  "  } else {",
+  "    try {",
+  "      ink.model = ColorModel.PROCESS;",
+  "      ink.space = ColorSpace.CMYK;",
+  "      ink.colorValue = [0, 0, 0, 100];",
+  "    } catch (e) {}",
+  "  }",
+  "  return ink;",
+  "}",
+  "function eacEnsureTagPara(doc, ink) {",
+  "  var style = doc.paragraphStyles.itemByName('EAC_TagLabel');",
+  "  if (!style.isValid) style = doc.paragraphStyles.add({ name: 'EAC_TagLabel' });",
+  "  var base = eacFindNamed(doc.paragraphStyles, ['[No Paragraph Style]', '[Sem estilo de parágrafo]']);",
+  "  if (!base) { try { base = doc.paragraphStyles.item(0); } catch (e) {} }",
+  "  if (base) { try { style.basedOn = base; } catch (e) {} }",
+  "  try { style.appliedFont = app.fonts.item('Minion Pro\\tRegular'); } catch (e) {",
+  "    try { style.appliedFont = 'Minion Pro'; } catch (e2) {}",
+  "  }",
+  "  try { style.fontStyle = 'Regular'; } catch (e) {}",
+  "  style.pointSize = 12;",
+  "  try { style.leading = 14; } catch (e) {}",
+  "  if (ink && ink.isValid) { try { style.fillColor = ink; } catch (e) {} }",
+  "  try { style.strokeWeight = 0; } catch (e) {}",
+  "  try { style.justification = Justification.CENTER_ALIGN; } catch (e) {}",
+  "  try { style.capitalization = Capitalization.NORMAL; } catch (e) {}",
+  "  try { style.underline = false; style.strikeThru = false; } catch (e) {}",
+  "  try { style.hyphenation = false; } catch (e) {}",
+  "  try { style.nestedGrepStyles.everyItem().remove(); } catch (e) {}",
+  "  try { style.nestedStyles.everyItem().remove(); } catch (e) {}",
+  "  try { style.nestedLineStyles.everyItem().remove(); } catch (e) {}",
+  "  return style;",
+  "}",
+  "function eacLockTagText(t, para, noneChar, ink, noneSwatch) {",
+  "  try { t.appliedParagraphStyle = para; } catch (e) {}",
+  "  try { t.applyParagraphStyle(para, true); } catch (e) {}",
+  "  if (noneChar) {",
+  "    try { t.appliedCharacterStyle = noneChar; } catch (e) {}",
+  "    try { t.applyCharacterStyle(noneChar, true); } catch (e) {}",
+  "  }",
+  "  try { t.clearOverrides(); } catch (e) {}",
+  "  try { t.appliedFont = app.fonts.item('Minion Pro\\tRegular'); } catch (e) {",
+  "    try { t.appliedFont = 'Minion Pro'; } catch (e2) {}",
+  "  }",
+  "  try { t.fontStyle = 'Regular'; } catch (e) {}",
+  "  t.pointSize = 12;",
+  "  if (ink && ink.isValid) { try { t.fillColor = ink; } catch (e) {} }",
+  "  try { t.strokeWeight = 0; } catch (e) {}",
+  "  if (noneSwatch && noneSwatch.isValid) { try { t.strokeColor = noneSwatch; } catch (e) {} }",
+  "  try { t.justification = Justification.CENTER_ALIGN; } catch (e) {}",
+  "  try { t.underline = false; t.strikeThru = false; } catch (e) {}",
+  "  try { t.capitalization = Capitalization.NORMAL; } catch (e) {}",
+  "  try { t.horizontalScale = 100; t.verticalScale = 100; t.baselineShift = 0; t.skew = 0; t.tracking = 0; } catch (e) {}",
+  "}",
+  "var eacNone = eacNoneSwatch(doc);",
+  "var eacInk = eacEnsureInk(doc);",
+  "var eacPara = eacEnsureTagPara(doc, eacInk);",
+  "var eacCharNone = eacNoneChar(doc);",
+].join("\n");
+
+function buildTagScript(hit: StyleHit, fillName: string): { script: string; bounds: number[] } {
   const width = estimateTagWidth(hit.name);
   const y = hit.y;
   const top = y - TAG_HEIGHT + 3;
@@ -460,9 +537,6 @@ function buildTagScript(
   const right = frameLeft + width;
   const midY = (top + bottom) / 2;
   const frameName = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
-  const noneLine = noneName
-    ? `var noneSwatch = doc.swatches.itemByName(${quoteExtendScript(noneName)});`
-    : "var noneSwatch = null;";
   const pageName = hit.page.name || "";
 
   const script = [
@@ -474,16 +548,13 @@ function buildTagScript(
     "  if (namedPage.isValid) { page = namedPage; }",
     "} catch (e) {}",
     `var fill = doc.colors.itemByName(${quoteExtendScript(fillName)});`,
-    `var ink = doc.swatches.itemByName(${quoteExtendScript(inkName)});`,
-    noneLine,
     "var tf = page.textFrames.add();",
     `tf.geometricBounds = [${top}, ${frameLeft}, ${bottom}, ${right}];`,
-    `tf.contents = ${quoteExtendScript(hit.name)};`,
     `tf.name = ${quoteExtendScript(frameName)};`,
     `tf.label = ${quoteExtendScript(TAG_LABEL)};`,
+    "eacResetObjectStyle(tf, eacNone);",
     "if (fill.isValid) { tf.fillColor = fill; }",
-    "if (noneSwatch && noneSwatch.isValid) { tf.strokeColor = noneSwatch; }",
-    "tf.strokeWeight = 0;",
+    "eacStripStroke(tf, eacNone);",
     "try {",
     "  tf.topLeftCornerOption = CornerOptions.ROUNDED_CORNER;",
     "  tf.topRightCornerOption = CornerOptions.ROUNDED_CORNER;",
@@ -495,21 +566,28 @@ function buildTagScript(
     "  tf.bottomRightCornerRadius = 3;",
     "} catch (e) {}",
     "try { tf.textFramePreferences.insetSpacing = [1, 3, 1, 3]; } catch (e) {}",
-    "var t = tf.texts[0];",
-    'try { t.appliedFont = "Minion Pro"; t.fontStyle = "Regular"; } catch (e) {}',
-    "t.pointSize = 12;",
-    "if (ink.isValid) { t.fillColor = ink; }",
-    "try { t.justification = Justification.CENTER_ALIGN; } catch (e) {}",
+    `tf.contents = ${quoteExtendScript(hit.name)};`,
+    "eacStripStroke(tf, eacNone);",
+    "if (fill.isValid) { tf.fillColor = fill; }",
+    "var t = tf.parentStory.texts[0];",
+    "eacLockTagText(t, eacPara, eacCharNone, eacInk, eacNone);",
     "try {",
     "  var pointer = page.polygons.add();",
     `  pointer.name = ${quoteExtendScript(`${frameName}_p`)};`,
     `  pointer.label = ${quoteExtendScript(TAG_LABEL)};`,
+    "  eacResetObjectStyle(pointer, eacNone);",
     "  if (fill.isValid) { pointer.fillColor = fill; }",
-    "  if (noneSwatch && noneSwatch.isValid) { pointer.strokeColor = noneSwatch; }",
-    "  pointer.strokeWeight = 0;",
+    "  eacStripStroke(pointer, eacNone);",
     `  pointer.paths[0].entirePath = [[${left}, ${midY}], [${frameLeft + 0.4}, ${top + 3}], [${frameLeft + 0.4}, ${bottom - 3}]];`,
-    "  try { page.groups.add([pointer, tf]); } catch (e2) {}",
+    "  try {",
+    "    var grp = page.groups.add([pointer, tf]);",
+    "    eacStripStroke(grp, eacNone);",
+    "    eacStripStroke(tf, eacNone);",
+    "    eacStripStroke(pointer, eacNone);",
+    "    if (fill.isValid) { tf.fillColor = fill; pointer.fillColor = fill; }",
+    "  } catch (e2) {}",
     "} catch (e) {}",
+    "eacLockTagText(tf.parentStory.texts[0], eacPara, eacCharNone, eacInk, eacNone);",
     "})();",
   ].join("\n");
 
@@ -561,11 +639,6 @@ export function createMemorialStyleTags(): StyleTagsResult {
         const palette = pickContrastingColors(collectUsedCmyk(doc));
         ensureProcessColor(doc, COLOR_PARA, palette.paragraph);
         ensureProcessColor(doc, COLOR_CHAR, palette.character);
-        const inkName = swatchByName(doc, "Black") ? "Black" : swatchByName(doc, "Preto") ? "Preto" : null;
-        const noneName = swatchByName(doc, "None") ? "None" : swatchByName(doc, "Nenhum") ? "Nenhum" : null;
-        if (!inkName) {
-          throw new Error("Swatch Black não encontrado no documento.");
-        }
 
         const placed: Array<{ pageIndex: number; bounds: number[] }> = [];
         const scripts: string[] = [];
@@ -575,7 +648,7 @@ export function createMemorialStyleTags(): StyleTagsResult {
         for (const hit of hits) {
           const adjusted: StyleHit = { ...hit, y: shiftIfCollision(hit, placed) };
           const fillName = hit.kind === "character" ? COLOR_CHAR : COLOR_PARA;
-          const built = buildTagScript(adjusted, fillName, inkName, noneName);
+          const built = buildTagScript(adjusted, fillName);
           scripts.push(built.script);
           placed.push({ pageIndex: hit.pageIndex, bounds: built.bounds });
           if (hit.kind === "character") character += 1;
@@ -592,6 +665,7 @@ export function createMemorialStyleTags(): StyleTagsResult {
             "vp.verticalMeasurementUnits = MeasurementUnits.POINTS;",
             `var memorialLayer = doc.layers.itemByName(${quoteExtendScript(layerName)});`,
             "if (memorialLayer.isValid) { memorialLayer.visible = true; memorialLayer.locked = false; doc.activeLayer = memorialLayer; }",
+            TAG_SCRIPT_HELPERS,
             "try {",
             scripts.join("\n"),
             "} finally {",
