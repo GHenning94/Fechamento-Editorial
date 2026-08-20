@@ -349,6 +349,7 @@ declare module "indesign" {
     length: number;
     item(index: number): ParagraphStyle;
     itemByName(name: string): ParagraphStyle;
+    add(properties?: object): ParagraphStyle;
   }
 
   export interface ParagraphStyle {
@@ -498,6 +499,7 @@ declare module "indesign" {
   export interface Pages {
     length: number;
     item(index: number): Page;
+    itemByName?(name: string): Page;
   }
 
   export const PageSideOptions: {

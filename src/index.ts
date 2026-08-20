@@ -131,7 +131,9 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       controller.resetProgress();
       controller.setStatus("Criando tags de estilos…", "info");
       await yieldToHost(40);
-      const result = createMemorialStyleTags();
+      const result = await createMemorialStyleTags((percent, label) => {
+        controller.setProgress(percent, label);
+      });
       controller.setProgress(100, "Estilos criados");
       controller.setStatus(
         `Layer "${result.layerName}": ${result.total} tags (${result.paragraph} parágrafo, ${result.character} caractere).`,
