@@ -38,6 +38,7 @@ module.exports = (env, argv) => {
         patterns: [
           { from: "src/index.html", to: "index.html" },
           { from: "manifest.json", to: "manifest.json" },
+          { from: "VERSION", to: "VERSION", toType: "file", noErrorOnMissing: true },
           { from: "icons", to: "icons", noErrorOnMissing: true },
         ],
       }),

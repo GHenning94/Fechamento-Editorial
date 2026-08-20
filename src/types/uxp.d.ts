@@ -13,14 +13,20 @@ declare module "uxp" {
     }): void;
   };
 
+  export const shell: {
+    openExternal(target: string | { url: string }): Promise<void> | void;
+  };
+
   export const storage: {
     localFileSystem: {
       getEntryWithUrl(url: string): Promise<FileSystemEntry>;
       getFolder(): Promise<FileSystemFolder | null>;
       getDataFolder(): Promise<FileSystemFolder>;
+      getPluginFolder?(): Promise<FileSystemFolder>;
     };
     formats: {
       utf8: string;
+      binary?: string;
     };
     secureStorage?: {
       getItem(key: string): Promise<string | ArrayBuffer | Uint8Array | null | undefined>;
@@ -37,7 +43,7 @@ declare module "uxp" {
     createFolder(name: string): Promise<FileSystemFolder>;
     createFile?(name: string, options?: { overwrite?: boolean }): Promise<FileSystemEntry>;
     read?(options?: { format?: string }): Promise<string>;
-    write(content: string, options?: { format?: string }): Promise<void>;
+    write(content: string | ArrayBuffer, options?: { format?: string }): Promise<void>;
     copyTo(
       destFolder: FileSystemFolder,
       options?: { overwrite?: boolean }

@@ -12,6 +12,16 @@ const PANEL_HTML = `
     </div>
   </header>
 
+  <section id="update-banner" class="update-banner hidden">
+    <div class="update-banner-row">
+      <p class="update-banner-text">
+        Atualização <span id="update-banner-version"></span> disponível
+      </p>
+      <div id="btn-update-open" class="update-banner-btn" role="button" tabindex="0">Atualizar</div>
+    </div>
+    <p id="update-banner-status" class="update-banner-status hidden"></p>
+  </section>
+
   <section class="actions">
     <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
     <div id="btn-download-report" class="btn btn-download-report hidden" role="button" tabindex="0">

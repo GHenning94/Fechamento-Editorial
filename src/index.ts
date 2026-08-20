@@ -17,6 +17,7 @@ import {
 import { PackageCancelledError, promptChecklistReportFile } from "./utils/file-system";
 import { ensureInDesignReady, getDefaultReportUserName } from "./utils/indesign-runtime";
 import { yieldToHost } from "./utils/yield-to-host";
+import { bindUpdateBanner } from "./update/update-banner";
 
 const { entrypoints } = require("uxp");
 
@@ -102,6 +103,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
   activeController = controller;
   markPanelInitialized();
   bindDevLicenseReset(container, root);
+  bindUpdateBanner(root);
 
   controller.bindHandlers({
     onChecklist: async () => {

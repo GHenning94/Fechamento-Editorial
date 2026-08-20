@@ -57,6 +57,21 @@ npm run license:server   # servidor opcional
 npm run build            # compila o plugin
 ```
 
+## Atualizações
+
+Altere só o arquivo `VERSION` (ex.: `1.0.1`) e faça commit/push pela app do
+GitHub. O GitHub Actions gera a build e publica na branch `plugin-dist`.
+
+Quem já tem o plugin vê um aviso verde e clica em **Atualizar**. Os arquivos
+são trocados na pasta do plugin e a **licença permanece**.
+
+O repositório precisa estar **público** (ou a branch `plugin-dist` acessível)
+para o aviso e o download funcionarem. Ative Actions no GitHub.
+
+Não rode `license:secret` de novo.
+
+---
+
 ## Problemas
 
 | Problema | O que fazer |

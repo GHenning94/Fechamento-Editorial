@@ -4,9 +4,9 @@
   "description": "Plugin UXP para fechamento editorial automático no Adobe InDesign",
   "private": true,
   "scripts": {
-    "build": "webpack --mode production",
-    "watch": "webpack --watch --mode development",
-    "dev": "webpack --mode development",
+    "build": "node tools/sync-version.js && webpack --mode production",
+    "watch": "node tools/sync-version.js && webpack --watch --mode development",
+    "dev": "node tools/sync-version.js && webpack --mode development",
     "license:secret": "node tools/generate-license-secret.js",
     "license:serial": "node tools/generate-serial.js",
     "license:server": "node tools/activation-server/server.js"

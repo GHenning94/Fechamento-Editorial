@@ -34,7 +34,10 @@
       "width": 23,
       "height": 23,
       "path": "icons/icon.png",
-      "scale": [1, 2]
+      "scale": [
+        1,
+        2
+      ]
     }
   ],
   "requiredPermissions": {
@@ -42,6 +45,12 @@
     "clipboard": "readAndWrite",
     "network": {
       "domains": "all"
+    },
+    "launchProcess": {
+      "schemes": [
+        "https",
+        "http"
+      ]
     }
   }
 }
