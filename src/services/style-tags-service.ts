@@ -44,8 +44,8 @@ function parseResult(raw: unknown): StyleTagsResult {
 }
 
 /**
- * Varredura + criação num único script nativo (sem ponte UXP por parágrafo).
- * Sem polígonos/grupos: só um text frame por estilo, primeira ocorrência.
+ * Um único script nativo: varre 1ª ocorrência, depois cria tags leves
+ * (quadro arredondado + ponteiro), sem varrer o DOM pelo UXP.
  */
 function buildCreateTagsScript(): string {
   return `
@@ -58,6 +58,7 @@ function buildCreateTagsScript(): string {
   var CHAR_CMYK = [${CHAR_CMYK.join(", ")}];
   var TAG_H = 16;
   var PAD_X = 5;
+  var POINTER_W = 5;
 
   var doc = app.activeDocument;
   var prefs = app.scriptPreferences;
@@ -71,8 +72,10 @@ function buildCreateTagsScript(): string {
   try { oldRedraw = prefs.enableRedraw; } catch (e) {}
   try { prefs.enableRedraw = false; } catch (e) {}
   try { prefs.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT; } catch (e) {}
-  vp.horizontalMeasurementUnits = MeasurementUnits.POINTS;
-  vp.verticalMeasurementUnits = MeasurementUnits.POINTS;
+  try {
+    vp.horizontalMeasurementUnits = MeasurementUnits.POINTS;
+    vp.verticalMeasurementUnits = MeasurementUnits.POINTS;
+  } catch (e) {}
 
   function trimName(name) {
     return String(name || "").replace(/^\\s+|\\s+$/g, "");
@@ -97,30 +100,31 @@ function buildCreateTagsScript(): string {
     }
     return false;
   }
+  function isAlive(obj) {
+    try { return !!(obj && obj.isValid); } catch (e) { return false; }
+  }
   function findNamed(collection, names) {
     for (var i = 0; i < names.length; i++) {
       try {
         var item = collection.itemByName(names[i]);
-        if (item.isValid) return item;
+        if (isAlive(item)) return item;
       } catch (e) {}
     }
     return null;
   }
   function ensureColor(name, cmyk) {
-    var color = doc.colors.itemByName(name);
-    if (!color.isValid) {
+    var color = null;
+    try {
+      color = doc.colors.itemByName(name);
+      if (!isAlive(color)) color = null;
+    } catch (e) { color = null; }
+    if (!color) {
       color = doc.colors.add({
         name: name,
         model: ColorModel.PROCESS,
         space: ColorSpace.CMYK,
         colorValue: cmyk
       });
-    } else {
-      try {
-        color.model = ColorModel.PROCESS;
-        color.space = ColorSpace.CMYK;
-        color.colorValue = cmyk;
-      } catch (e) {}
     }
     return color;
   }
@@ -128,32 +132,25 @@ function buildCreateTagsScript(): string {
     var layers = doc.layers;
     for (var i = 0; i < layers.length; i++) {
       var layer = layers.item(i);
-      if (layer.isValid && isEditorial(layer.name)) return layer;
+      if (isAlive(layer) && isEditorial(layer.name)) return layer;
     }
     return doc.layers.add({ name: LAYER_NAME });
   }
   function ensureInk() {
-    var ink = doc.colors.itemByName("EAC_TAG_INK");
-    if (!ink.isValid) {
-      ink = doc.colors.add({
-        name: "EAC_TAG_INK",
-        model: ColorModel.PROCESS,
-        space: ColorSpace.CMYK,
-        colorValue: [0, 0, 0, 100]
-      });
-    }
-    return ink;
+    return ensureColor("EAC_TAG_INK", [0, 0, 0, 100]);
   }
   function ensurePara(ink, noneSwatch) {
-    var style = doc.paragraphStyles.itemByName("EAC_TagLabel");
-    if (!style.isValid) style = doc.paragraphStyles.add({ name: "EAC_TagLabel" });
+    var style = null;
+    try {
+      style = doc.paragraphStyles.itemByName("EAC_TagLabel");
+      if (!isAlive(style)) style = null;
+    } catch (e) { style = null; }
+    if (!style) style = doc.paragraphStyles.add({ name: "EAC_TagLabel" });
     var base = findNamed(doc.paragraphStyles, ["[No Paragraph Style]", "[Sem estilo de parágrafo]"]);
     if (base) { try { style.basedOn = base; } catch (e) {} }
-    try { style.appliedFont = app.fonts.item("Minion Pro\\tRegular"); } catch (e) {
-      try { style.appliedFont = "Minion Pro"; } catch (e2) {}
-    }
+    try { style.appliedFont = "Minion Pro"; } catch (e) {}
     try { style.fontStyle = "Regular"; } catch (e) {}
-    style.pointSize = 12;
+    try { style.pointSize = 12; } catch (e) {}
     try { style.leading = 14; } catch (e) {}
     try { style.fillColor = ink; } catch (e) {}
     try { style.strokeWeight = 0; } catch (e) {}
@@ -162,30 +159,65 @@ function buildCreateTagsScript(): string {
     try { style.hyphenation = false; } catch (e) {}
     return style;
   }
-  function isMaster(page) {
+  function firstFrame(ch) {
+    var frames, frame;
+    try { frames = ch.parentTextFrames; } catch (e) { return null; }
+    if (!frames) return null;
     try {
-      return String(page.parent.constructor.name).toLowerCase().indexOf("master") >= 0;
-    } catch (e) {
-      return true;
+      if (typeof frames.item === "function") frame = frames.item(0);
+    } catch (e) {}
+    if (!isAlive(frame)) {
+      try { frame = frames[0]; } catch (e2) { frame = null; }
     }
+    return isAlive(frame) ? frame : null;
+  }
+  function pageOfFrame(frame) {
+    var page;
+    try { page = frame.parentPage; } catch (e) { return null; }
+    if (page == null || typeof page === "number") return null;
+    if (!isAlive(page)) return null;
+    try {
+      if (String(page.parent.constructor.name).toLowerCase().indexOf("master") >= 0) return null;
+    } catch (e2) { return null; }
+    return page;
   }
   function anchorOf(text) {
     try {
+      if (!isAlive(text) || text.characters.length < 1) return null;
       var ch = text.characters.item(0);
-      var frames = ch.parentTextFrames;
-      var frame = frames && frames.length ? frames[0] : null;
+      if (!isAlive(ch)) return null;
+      var frame = firstFrame(ch);
       if (!frame) return null;
-      if (isEditorial(frame.itemLayer.name)) return null;
-      var page = frame.parentPage;
-      if (!page || page === NothingEnum.NOTHING) return null;
-      if (isMaster(page)) return null;
+      try {
+        if (isEditorial(frame.itemLayer.name)) return null;
+      } catch (e) {}
+      var page = pageOfFrame(frame);
+      if (!page) return null;
       var x = Number(ch.horizontalOffset);
       var y = Number(ch.baseline);
       if (isNaN(x) || isNaN(y)) return null;
-      return { page: page, pageIndex: page.documentOffset, x: x, y: y };
+      var pageIndex = 0;
+      var pageName = "";
+      try { pageIndex = page.documentOffset; } catch (e2) {}
+      try { pageName = page.name; } catch (e3) {}
+      return { pageIndex: pageIndex, pageName: pageName, x: x, y: y };
     } catch (e) {
       return null;
     }
+  }
+  function resolvePage(pageIndex, pageName) {
+    var page;
+    try {
+      page = doc.pages.item(pageIndex);
+      if (isAlive(page)) return page;
+    } catch (e) {}
+    try {
+      if (pageName) {
+        page = doc.pages.itemByName(String(pageName));
+        if (isAlive(page)) return page;
+      }
+    } catch (e2) {}
+    return null;
   }
   function widthOf(name) {
     var w = name.length * 6.2 + PAD_X * 2;
@@ -200,7 +232,7 @@ function buildCreateTagsScript(): string {
       top = y - TAG_H + 3;
       bottom = y + 4;
       left = x + 2;
-      right = left + width;
+      right = left + POINTER_W + width;
       collides = false;
       for (i = 0; i < placed.length; i++) {
         item = placed[i];
@@ -216,18 +248,22 @@ function buildCreateTagsScript(): string {
     return y;
   }
   function placeTag(info, name, fill, noneSwatch, paraStyle, noneChar) {
+    var page = resolvePage(info.pageIndex, info.pageName);
+    if (!page) return;
     var width = widthOf(name);
     var y = shiftY(info.pageIndex, info.x, info.y, width);
     var top = y - TAG_H + 3;
     var bottom = y + 4;
     var left = info.x + 2;
-    var right = left + width;
-    var page = doc.pages.item(info.pageIndex);
+    var frameLeft = left + POINTER_W;
+    var right = frameLeft + width;
+    var midY = (top + bottom) / 2;
     var tf = page.textFrames.add();
-    tf.geometricBounds = [top, left, bottom, right];
-    tf.fillColor = fill;
-    tf.strokeWeight = 0;
-    if (noneSwatch) tf.strokeColor = noneSwatch;
+    if (!isAlive(tf)) return;
+    tf.geometricBounds = [top, frameLeft, bottom, right];
+    try { tf.fillColor = fill; } catch (e) {}
+    try { tf.strokeWeight = 0; } catch (e) {}
+    if (noneSwatch) { try { tf.strokeColor = noneSwatch; } catch (e) {} }
     tf.label = TAG_LABEL;
     try {
       tf.topLeftCornerOption = CornerOptions.ROUNDED_CORNER;
@@ -241,28 +277,48 @@ function buildCreateTagsScript(): string {
     } catch (e) {}
     try { tf.textFramePreferences.insetSpacing = [1, 3, 1, 3]; } catch (e) {}
     tf.contents = name;
-    try { tf.parentStory.appliedParagraphStyle = paraStyle; } catch (e) {}
-    if (noneChar) { try { tf.parentStory.appliedCharacterStyle = noneChar; } catch (e) {} }
+    try { tf.texts.item(0).appliedParagraphStyle = paraStyle; } catch (e) {}
+    if (noneChar) { try { tf.texts.item(0).appliedCharacterStyle = noneChar; } catch (e) {} }
+    try {
+      var pointer = page.polygons.add();
+      if (isAlive(pointer)) {
+        try { pointer.fillColor = fill; } catch (e2) {}
+        try { pointer.strokeWeight = 0; } catch (e3) {}
+        if (noneSwatch) { try { pointer.strokeColor = noneSwatch; } catch (e4) {} }
+        pointer.label = TAG_LABEL;
+        pointer.paths.item(0).entirePath = [
+          [left, midY],
+          [frameLeft + 0.4, top + 3],
+          [frameLeft + 0.4, bottom - 3]
+        ];
+        try { page.groups.add([pointer, tf]); } catch (e5) {}
+      }
+    } catch (e) {}
     placed.push({ p: info.pageIndex, t: top, l: left, b: bottom, r: right });
   }
   function deleteOld(layer) {
     var items = layer.pageItems;
-    for (var i = items.length - 1; i >= 0; i--) {
+    var i, it;
+    for (i = items.length - 1; i >= 0; i--) {
       try {
-        var item = items.item(i);
-        if (item.label === TAG_LABEL) item.remove();
+        it = items.item(i);
+        if (isAlive(it) && it.label === TAG_LABEL) it.remove();
       } catch (e) {}
     }
+  }
+  function jsonError(err) {
+    var msg = err && err.message ? err.message : String(err);
+    return '{"error":"' + String(msg).replace(/\\\\/g, "\\\\\\\\").replace(/"/g, '\\\\"') + '"}';
   }
 
   try {
     var layer = ensureLayer();
     layer.visible = true;
     layer.locked = false;
-    doc.activeLayer = layer;
+    try { doc.activeLayer = layer; } catch (e) {}
     deleteOld(layer);
 
-    var noneSwatch = findNamed(doc.swatches, ["None", "Nenhum", "Nenhuma"]) || doc.swatches.item(0);
+    var noneSwatch = findNamed(doc.swatches, ["None", "Nenhum", "Nenhuma"]);
     var noneChar = findNamed(doc.characterStyles, ["[None]", "[Nenhum]", "[Nenhuma]"]);
     var ink = ensureInk();
     var paraStyle = ensurePara(ink, noneSwatch);
@@ -275,22 +331,21 @@ function buildCreateTagsScript(): string {
     var stories = doc.stories;
     for (var s = 0; s < stories.length; s++) {
       var story = stories.item(s);
-      if (!story.isValid) continue;
+      if (!isAlive(story)) continue;
       try { if (story.length < 1) continue; } catch (e0) {}
-      try { if (isEditorial(story.itemLayer.name)) continue; } catch (e) {}
       var paras = story.paragraphs;
       var pLen = paras.length;
       for (var p = 0; p < pLen; p++) {
         var para = paras.item(p);
         var st;
         try { st = para.appliedParagraphStyle; } catch (e2) { continue; }
-        if (!st || !st.isValid) continue;
+        if (!isAlive(st)) continue;
         var pname = st.name;
         if (ignored(pname, "paragraph") || seen["p:" + pname]) continue;
         var info = anchorOf(para);
         if (!info) continue;
         seen["p:" + pname] = true;
-        hits.push({ kind: "paragraph", name: pname, pageIndex: info.pageIndex, x: info.x, y: info.y });
+        hits.push({ kind: "paragraph", name: pname, pageIndex: info.pageIndex, pageName: info.pageName, x: info.x, y: info.y });
         paragraph++;
       }
 
@@ -301,33 +356,40 @@ function buildCreateTagsScript(): string {
         var range = ranges.item(r);
         var cs;
         try { cs = range.appliedCharacterStyle; } catch (e3) { continue; }
-        if (!cs || !cs.isValid) continue;
+        if (!isAlive(cs)) continue;
         var cname = cs.name;
         if (ignored(cname, "character") || seen["c:" + cname]) continue;
         var cinfo = anchorOf(range);
         if (!cinfo) continue;
         seen["c:" + cname] = true;
-        hits.push({ kind: "character", name: cname, pageIndex: cinfo.pageIndex, x: cinfo.x, y: cinfo.y });
+        hits.push({ kind: "character", name: cname, pageIndex: cinfo.pageIndex, pageName: cinfo.pageName, x: cinfo.x, y: cinfo.y });
         character++;
       }
     }
 
     if (paragraph + character === 0) {
-      throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
+      return '{"error":"Nenhum estilo de parágrafo ou caractere em uso neste documento."}';
     }
 
     for (var h = 0; h < hits.length; h++) {
-      var hit = hits[h];
-      placeTag(hit, hit.name, hit.kind === "character" ? charFill : paraFill, noneSwatch, paraStyle, noneChar);
+      try {
+        var hit = hits[h];
+        placeTag(hit, hit.name, hit.kind === "character" ? charFill : paraFill, noneSwatch, paraStyle, noneChar);
+      } catch (e4) {}
     }
 
     return '{"layerName":"' + String(layer.name).replace(/"/g, '\\\\"') + '","paragraph":' + paragraph + ',"character":' + character + ',"total":' + (paragraph + character) + '}';
+  } catch (err) {
+    return jsonError(err);
   } finally {
     try { vp.horizontalMeasurementUnits = oldH; vp.verticalMeasurementUnits = oldV; } catch (e) {}
     try { prefs.enableRedraw = oldRedraw; } catch (e) {}
     try { prefs.userInteractionLevel = oldInteract; } catch (e) {}
     if (oldLayer) {
-      try { doc.activeLayer = doc.layers.itemByName(oldLayer); } catch (e) {}
+      try {
+        var prev = doc.layers.itemByName(oldLayer);
+        if (isAlive(prev)) doc.activeLayer = prev;
+      } catch (e) {}
     }
   }
 })();
@@ -336,5 +398,13 @@ function buildCreateTagsScript(): string {
 
 export function createMemorialStyleTags(): StyleTagsResult {
   getActiveDocument();
-  return parseResult(runExtendScript(buildCreateTagsScript()));
+  try {
+    return parseResult(runExtendScript(buildCreateTagsScript()));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/não existe mais|no longer exists/i.test(message)) {
+      throw new Error("Não foi possível criar as tags neste documento. Recarregue o plugin (Unload → Load) e tente de novo.");
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
 }
