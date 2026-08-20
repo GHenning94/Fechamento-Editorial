@@ -1,42 +1,11 @@
-import type {
-  CharacterStyle,
-  Color,
-  Document,
-  Layer,
-  Page,
-  PageItem,
-  ParagraphStyle,
-  Story,
-  Text,
-} from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
-import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
-import { findEditorialLayer, isEditorialLayerName } from "../utils/editorial-layer";
-import {
-  getActiveDocument,
-  getInDesignApp,
-  getInDesignModule,
-  runInDesignHeavyMutation,
-} from "../utils/indesign-runtime";
+import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 
 const TAG_LABEL = "eac-style-tag";
 const COLOR_PARA = "EAC_TAG_PARAGRAFO";
 const COLOR_CHAR = "EAC_TAG_CARACTERE";
-const TAG_HEIGHT = 16;
-const TAG_PADDING_X = 5;
-const POINTER_W = 5;
-
-const PARA_CANDIDATES: number[][] = [
-  [0, 28, 52, 0],
-  [0, 45, 70, 0],
-  [8, 0, 72, 0],
-];
-
-const CHAR_CANDIDATES: number[][] = [
-  [52, 18, 0, 0],
-  [35, 55, 0, 0],
-  [60, 0, 35, 0],
-];
+const PARA_CMYK = [0, 28, 52, 0];
+const CHAR_CMYK = [52, 18, 0, 0];
 
 export interface StyleTagsResult {
   layerName: string;
@@ -45,648 +14,327 @@ export interface StyleTagsResult {
   total: number;
 }
 
-type StyleKind = "paragraph" | "character";
-
-interface StyleHit {
-  name: string;
-  kind: StyleKind;
-  page: Page;
-  pageIndex: number;
-  x: number;
-  y: number;
-}
-
-function isIgnoredStyleName(name: string, kind: StyleKind): boolean {
-  const value = (name || "").trim();
-  if (!value) return true;
-  if (value.startsWith("[")) return true;
-  if (kind === "character") {
-    const key = value.toLocaleLowerCase();
-    if (key === "none" || key === "nenhum" || key === "normal") return true;
-  }
-  return false;
-}
-
-function isOnEditorialLayer(item: { itemLayer?: Layer } | null): boolean {
-  try {
-    const layer = item?.itemLayer;
-    return Boolean(layer?.isValid && isEditorialLayerName(layer.name));
-  } catch {
-    return false;
-  }
-}
-
-function isMasterPage(page: Page | null): boolean {
-  if (!page?.isValid) return true;
-  try {
-    const parent = page.parent as { constructor?: { name?: string } } | undefined;
-    const name = parent?.constructor?.name || "";
-    return /master/i.test(name);
-  } catch {
-    return false;
-  }
-}
-
-function getPageIndex(page: Page): number {
-  try {
-    if (typeof page.documentOffset === "number") {
-      return page.documentOffset;
-    }
-  } catch {
-    // ignore
-  }
-  return 0;
-}
-
-function getAnchorFromText(text: Text | null): Omit<StyleHit, "name" | "kind"> | null {
-  if (!text) return null;
-
-  try {
-    const chars = text.characters;
-    if (!chars || getCollectionLength(chars) < 1) return null;
-    const character = getCollectionItem<Text>(chars, 0);
-    if (!character) return null;
-
-    const frames = character.parentTextFrames as { item?: (i: number) => PageItem; length?: number } | PageItem[] | undefined;
-    let frame: PageItem | null = null;
-    if (Array.isArray(frames) && frames[0]) {
-      frame = frames[0];
-    } else if (frames) {
-      frame = getCollectionItem<PageItem>(frames, 0);
-    }
-    if (!frame?.isValid || isOnEditorialLayer(frame)) return null;
-
-    const page = frame.parentPage;
-    if (!page || typeof page === "number" || !page.isValid || isMasterPage(page)) {
-      return null;
-    }
-
-    const x = Number(character.horizontalOffset);
-    const y = Number(character.baseline);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-
-    return { page, pageIndex: getPageIndex(page), x, y };
-  } catch {
-    return null;
-  }
-}
-
-function considerHit(
-  hits: Map<string, StyleHit>,
-  name: string,
-  kind: StyleKind,
-  source: Text | null
-): void {
-  if (isIgnoredStyleName(name, kind)) return;
-  const key = `${kind}:${name}`;
-  const anchor = getAnchorFromText(source);
-  if (!anchor) return;
-
-  const existing = hits.get(key);
-  if (!existing) {
-    hits.set(key, { name, kind, ...anchor });
-    return;
-  }
-
-  if (
-    anchor.pageIndex < existing.pageIndex ||
-    (anchor.pageIndex === existing.pageIndex &&
-      (anchor.y < existing.y - 0.5 || (Math.abs(anchor.y - existing.y) <= 0.5 && anchor.x < existing.x)))
-  ) {
-    hits.set(key, { name, kind, ...anchor });
-  }
-}
-
-function scanParagraphs(collection: unknown, hits: Map<string, StyleHit>): void {
-  forEachCollectionItem<Text>(collection, (paragraph) => {
-    if (!paragraph?.isValid) return;
-    try {
-      const style = paragraph.appliedParagraphStyle;
-      if (!style?.isValid) return;
-      considerHit(hits, style.name, "paragraph", paragraph);
-    } catch {
-      // ignore
-    }
-  });
-}
-
-function scanCharacterRanges(collection: unknown, hits: Map<string, StyleHit>): void {
-  forEachCollectionItem<Text>(collection, (range) => {
-    if (!range?.isValid) return;
-    try {
-      const style = range.appliedCharacterStyle as CharacterStyle | undefined;
-      if (!style?.isValid) return;
-      considerHit(hits, style.name, "character", range);
-    } catch {
-      // ignore
-    }
-  });
-}
-
-function scanStories(doc: Document): StyleHit[] {
-  const hits = new Map<string, StyleHit>();
-
-  forEachCollectionItem<Story>(doc.stories, (story) => {
-    if (!story?.isValid || isOnEditorialLayer(story)) return;
-    scanParagraphs(story.paragraphs, hits);
-    scanCharacterRanges(story.textStyleRanges, hits);
-
-    forEachCollectionItem<{ cells?: unknown; isValid?: boolean }>(story.tables, (table) => {
-      if (!table?.isValid) return;
-      forEachCollectionItem<{ paragraphs?: unknown; textStyleRanges?: unknown; isValid?: boolean }>(
-        table.cells,
-        (cell) => {
-          if (!cell?.isValid) return;
-          scanParagraphs(cell.paragraphs, hits);
-          scanCharacterRanges(cell.textStyleRanges, hits);
-        }
-      );
-    });
-  });
-
-  return Array.from(hits.values()).sort((a, b) => {
-    if (a.pageIndex !== b.pageIndex) return a.pageIndex - b.pageIndex;
-    if (a.y !== b.y) return a.y - b.y;
-    return a.x - b.x;
-  });
-}
-
-function collectUsedCmyk(doc: Document): number[][] {
-  const used: number[][] = [];
-  const { ColorSpace } = getInDesignModule() as { ColorSpace?: { CMYK?: number } };
-  const cmyk = ColorSpace?.CMYK;
-
-  forEachCollectionItem<Color>(doc.colors, (color) => {
-    if (!color?.isValid) return;
-    try {
-      const name = color.name || "";
-      if (/^(none|paper|black|registration|eac_tag_)/i.test(name) || name.startsWith("[")) {
-        return;
-      }
-      if (cmyk != null && color.space !== cmyk) return;
-      const value = color.colorValue;
-      if (value && value.length >= 4) {
-        used.push([value[0], value[1], value[2], value[3]]);
-      }
-    } catch {
-      // ignore
-    }
-  });
-
-  return used;
-}
-
-function cmykDistance(a: number[], b: number[]): number {
-  let sum = 0;
-  for (let i = 0; i < 4; i++) {
-    const delta = (a[i] || 0) - (b[i] || 0);
-    sum += delta * delta;
-  }
-  return Math.sqrt(sum);
-}
-
-function minDistanceToUsed(candidate: number[], used: number[][]): number {
-  if (!used.length) return 999;
-  let min = Infinity;
-  for (const color of used) {
-    min = Math.min(min, cmykDistance(candidate, color));
-  }
-  return min;
-}
-
-function pickContrastingColors(used: number[][]): { paragraph: number[]; character: number[] } {
-  const para = [...PARA_CANDIDATES].sort(
-    (a, b) => minDistanceToUsed(b, used) - minDistanceToUsed(a, used)
-  )[0];
-  const char = [...CHAR_CANDIDATES]
-    .filter((candidate) => cmykDistance(candidate, para) > 20)
-    .sort((a, b) => minDistanceToUsed(b, used) - minDistanceToUsed(a, used))[0] || CHAR_CANDIDATES[0];
-
-  return { paragraph: para, character: char };
-}
-
-function ensureProcessColor(doc: Document, name: string, cmyk: number[]): Color {
-  const { ColorModel, ColorSpace } = getInDesignModule() as {
-    ColorModel: { PROCESS: number };
-    ColorSpace: { CMYK: number };
-  };
-
-  let color: Color | null = null;
-  try {
-    const existing = doc.colors.itemByName(name);
-    if (existing?.isValid) {
-      color = existing;
-    }
-  } catch {
-    color = null;
-  }
-
-  if (!color) {
-    doc.colors.add({
-      name,
-      model: ColorModel.PROCESS,
-      space: ColorSpace.CMYK,
-      colorValue: cmyk,
-    });
-  } else {
-    try {
-      color.model = ColorModel.PROCESS;
-      color.space = ColorSpace.CMYK;
-      color.colorValue = cmyk;
-    } catch {
-      // mantém a cor existente
-    }
-  }
-
-  return doc.colors.itemByName(name);
-}
-
-function quoteExtendScript(value: string): string {
+function quote(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-function runExtendScript(source: string, commandName = "EDITORIAL AUTOCLOSE — Estilos"): void {
+function runExtendScript(source: string): unknown {
   const app = getInDesignApp();
   const mod = getInDesignModule();
   if (typeof app.doScript !== "function") {
-    throw new Error("doScript indisponível para operar layers no InDesign.");
+    throw new Error("doScript indisponível para criar estilos no InDesign.");
   }
   const undoMode = mod.UndoModes?.FAST_ENTIRE_SCRIPT ?? mod.UndoModes?.ENTIRE_SCRIPT;
-  app.doScript(source, mod.ScriptLanguage?.JAVASCRIPT, [], undoMode, commandName);
+  return app.doScript(source, mod.ScriptLanguage?.JAVASCRIPT, [], undoMode, "EDITORIAL AUTOCLOSE — Criar estilos");
+}
+
+function parseResult(raw: unknown): StyleTagsResult {
+  const text = typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : "";
+  if (!text) {
+    throw new Error("O InDesign não retornou o resultado da criação de estilos.");
+  }
+  const parsed = JSON.parse(text) as StyleTagsResult & { error?: string };
+  if (parsed.error) {
+    throw new Error(parsed.error);
+  }
+  if (typeof parsed.total !== "number") {
+    throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
+  }
+  return parsed;
 }
 
 /**
- * Ativa/destrava a layer no motor nativo do InDesign.
- * No UXP, atribuir um proxy Layer a activeLayer/itemLayer gera
- * "Esperado Layer, mas recebido Layer".
+ * Varredura + criação num único script nativo (sem ponte UXP por parágrafo).
+ * Sem polígonos/grupos: só um text frame por estilo, primeira ocorrência.
  */
-function prepareLayerNative(name: string): void {
-  const quoted = quoteExtendScript(name);
-  runExtendScript(
-    [
-      "var doc = app.activeDocument;",
-      `var layer = doc.layers.itemByName(${quoted});`,
-      "if (!layer.isValid) { throw new Error('Layer não encontrada.'); }",
-      "layer.visible = true;",
-      "layer.locked = false;",
-      "doc.activeLayer = layer;",
-    ].join("\n")
-  );
-}
+function buildCreateTagsScript(): string {
+  return `
+(function () {
+  var TAG_LABEL = ${quote(TAG_LABEL)};
+  var LAYER_NAME = ${quote(LAYER_MEMORIAL_DESCRITIVO)};
+  var COLOR_PARA = ${quote(COLOR_PARA)};
+  var COLOR_CHAR = ${quote(COLOR_CHAR)};
+  var PARA_CMYK = [${PARA_CMYK.join(", ")}];
+  var CHAR_CMYK = [${CHAR_CMYK.join(", ")}];
+  var TAG_H = 16;
+  var PAD_X = 5;
 
-function restoreLayerNative(name: string): void {
-  const quoted = quoteExtendScript(name);
-  try {
-    runExtendScript(
-      [
-        "var doc = app.activeDocument;",
-        `var layer = doc.layers.itemByName(${quoted});`,
-        "if (layer.isValid) { doc.activeLayer = layer; }",
-      ].join("\n")
-    );
-  } catch {
-    // ignora
+  var doc = app.activeDocument;
+  var prefs = app.scriptPreferences;
+  var oldRedraw = true;
+  var oldInteract = prefs.userInteractionLevel;
+  var vp = doc.viewPreferences;
+  var oldH = vp.horizontalMeasurementUnits;
+  var oldV = vp.verticalMeasurementUnits;
+  var oldLayer = "";
+  try { oldLayer = doc.activeLayer.name; } catch (e) {}
+  try { oldRedraw = prefs.enableRedraw; } catch (e) {}
+  try { prefs.enableRedraw = false; } catch (e) {}
+  try { prefs.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT; } catch (e) {}
+  vp.horizontalMeasurementUnits = MeasurementUnits.POINTS;
+  vp.verticalMeasurementUnits = MeasurementUnits.POINTS;
+
+  function trimName(name) {
+    return String(name || "").replace(/^\\s+|\\s+$/g, "");
   }
-}
-
-function isStyleTagItem(item: PageItem): boolean {
-  try {
-    return item.label === TAG_LABEL || (item.name || "").startsWith("EAC_TAG_");
-  } catch {
+  function normLayer(name) {
+    var n = trimName(name).toLowerCase().replace(/_/g, " ");
+    while (n.indexOf("  ") >= 0) n = n.replace("  ", " ");
+    return n;
+  }
+  function isEditorial(name) {
+    var n = normLayer(name);
+    return n === "estilos" || n === "memorial" || n === "memorial descritivo" || n === "memoral descritivo";
+  }
+  function ignored(name, kind) {
+    var value = trimName(name);
+    if (!value) return true;
+    if (value.charAt(0) === "[") return true;
+    if (value.indexOf("EAC_") === 0) return true;
+    if (kind === "character") {
+      var key = value.toLowerCase();
+      if (key === "none" || key === "nenhum" || key === "normal") return true;
+    }
     return false;
   }
-}
-
-function deletePreviousTags(doc: Document, layerName: string): void {
-  const items: PageItem[] = [];
-
-  forEachCollectionItem<Layer>(doc.layers, (layer) => {
-    if (!layer?.isValid || layer.name !== layerName) return;
-    forEachCollectionItem<PageItem>(layer.pageItems, (item) => {
-      if (item?.isValid && isStyleTagItem(item)) {
-        items.push(item);
-      }
-    });
-  });
-
-  if (!items.length) {
-    forEachCollectionItem<Page>(doc.pages, (page) => {
-      if (!page?.isValid) return;
-      forEachCollectionItem<PageItem>(page.pageItems, (item) => {
-        if (item?.isValid && isStyleTagItem(item)) {
-          items.push(item);
-        }
+  function findNamed(collection, names) {
+    for (var i = 0; i < names.length; i++) {
+      try {
+        var item = collection.itemByName(names[i]);
+        if (item.isValid) return item;
+      } catch (e) {}
+    }
+    return null;
+  }
+  function ensureColor(name, cmyk) {
+    var color = doc.colors.itemByName(name);
+    if (!color.isValid) {
+      color = doc.colors.add({
+        name: name,
+        model: ColorModel.PROCESS,
+        space: ColorSpace.CMYK,
+        colorValue: cmyk
       });
-    });
+    } else {
+      try {
+        color.model = ColorModel.PROCESS;
+        color.space = ColorSpace.CMYK;
+        color.colorValue = cmyk;
+      } catch (e) {}
+    }
+    return color;
   }
-
-  for (let i = items.length - 1; i >= 0; i--) {
+  function ensureLayer() {
+    var layers = doc.layers;
+    for (var i = 0; i < layers.length; i++) {
+      var layer = layers.item(i);
+      if (layer.isValid && isEditorial(layer.name)) return layer;
+    }
+    return doc.layers.add({ name: LAYER_NAME });
+  }
+  function ensureInk() {
+    var ink = doc.colors.itemByName("EAC_TAG_INK");
+    if (!ink.isValid) {
+      ink = doc.colors.add({
+        name: "EAC_TAG_INK",
+        model: ColorModel.PROCESS,
+        space: ColorSpace.CMYK,
+        colorValue: [0, 0, 0, 100]
+      });
+    }
+    return ink;
+  }
+  function ensurePara(ink, noneSwatch) {
+    var style = doc.paragraphStyles.itemByName("EAC_TagLabel");
+    if (!style.isValid) style = doc.paragraphStyles.add({ name: "EAC_TagLabel" });
+    var base = findNamed(doc.paragraphStyles, ["[No Paragraph Style]", "[Sem estilo de parágrafo]"]);
+    if (base) { try { style.basedOn = base; } catch (e) {} }
+    try { style.appliedFont = app.fonts.item("Minion Pro\\tRegular"); } catch (e) {
+      try { style.appliedFont = "Minion Pro"; } catch (e2) {}
+    }
+    try { style.fontStyle = "Regular"; } catch (e) {}
+    style.pointSize = 12;
+    try { style.leading = 14; } catch (e) {}
+    try { style.fillColor = ink; } catch (e) {}
+    try { style.strokeWeight = 0; } catch (e) {}
+    if (noneSwatch) { try { style.strokeColor = noneSwatch; } catch (e) {} }
+    try { style.justification = Justification.CENTER_ALIGN; } catch (e) {}
+    try { style.hyphenation = false; } catch (e) {}
+    return style;
+  }
+  function isMaster(page) {
     try {
-      items[i].remove?.();
-    } catch {
-      // ignore
+      return String(page.parent.constructor.name).toLowerCase().indexOf("master") >= 0;
+    } catch (e) {
+      return true;
     }
   }
-}
-
-function ensureMemorialLayerName(doc: Document): string {
-  const existing = findEditorialLayer(doc);
-  if (existing?.isValid) {
-    return existing.name;
+  function anchorOf(text) {
+    try {
+      var ch = text.characters.item(0);
+      var frames = ch.parentTextFrames;
+      var frame = frames && frames.length ? frames[0] : null;
+      if (!frame) return null;
+      if (isEditorial(frame.itemLayer.name)) return null;
+      var page = frame.parentPage;
+      if (!page || page === NothingEnum.NOTHING) return null;
+      if (isMaster(page)) return null;
+      var x = Number(ch.horizontalOffset);
+      var y = Number(ch.baseline);
+      if (isNaN(x) || isNaN(y)) return null;
+      return { page: page, pageIndex: page.documentOffset, x: x, y: y };
+    } catch (e) {
+      return null;
+    }
+  }
+  function widthOf(name) {
+    var w = name.length * 6.2 + PAD_X * 2;
+    return w < 36 ? 36 : w;
   }
 
-  const quoted = quoteExtendScript(LAYER_MEMORIAL_DESCRITIVO);
-  runExtendScript(
-    [
-      "var doc = app.activeDocument;",
-      `var layer = doc.layers.itemByName(${quoted});`,
-      "if (!layer.isValid) { doc.layers.add({ name: " + quoted + " }); }",
-    ].join("\n")
-  );
-  return LAYER_MEMORIAL_DESCRITIVO;
-}
-
-function estimateTagWidth(name: string): number {
-  return Math.max(36, name.length * 6.2 + TAG_PADDING_X * 2);
-}
-
-function shiftIfCollision(hit: StyleHit, placed: Array<{ pageIndex: number; bounds: number[] }>): number {
-  let y = hit.y;
-  for (let guard = 0; guard < 12; guard++) {
-    const top = y - TAG_HEIGHT + 3;
-    const bottom = y + 4;
-    const left = hit.x + 2;
-    const right = left + POINTER_W + estimateTagWidth(hit.name);
-    const collides = placed.some((item) => {
-      if (item.pageIndex !== hit.pageIndex) return false;
-      const [t, l, b, r] = item.bounds;
-      return !(right < l || left > r || bottom < t || top > b);
-    });
-    if (!collides) return y;
-    y += TAG_HEIGHT + 2;
+  var placed = [];
+  var hits = [];
+  function shiftY(pageIndex, x, y, width) {
+    var guard, i, item, top, bottom, left, right, collides;
+    for (guard = 0; guard < 10; guard++) {
+      top = y - TAG_H + 3;
+      bottom = y + 4;
+      left = x + 2;
+      right = left + width;
+      collides = false;
+      for (i = 0; i < placed.length; i++) {
+        item = placed[i];
+        if (item.p !== pageIndex) continue;
+        if (!(right < item.l || left > item.r || bottom < item.t || top > item.b)) {
+          collides = true;
+          break;
+        }
+      }
+      if (!collides) return y;
+      y += TAG_H + 2;
+    }
+    return y;
   }
-  return y;
-}
-
-const TAG_SCRIPT_HELPERS = [
-  "function eacFindNamed(collection, names) {",
-  "  for (var i = 0; i < names.length; i++) {",
-  "    try {",
-  "      var item = collection.itemByName(names[i]);",
-  "      if (item.isValid) return item;",
-  "    } catch (e) {}",
-  "  }",
-  "  return null;",
-  "}",
-  "function eacNoneSwatch(doc) {",
-  "  return eacFindNamed(doc.swatches, ['None', 'Nenhum', 'Nenhuma']) || doc.swatches.item(0);",
-  "}",
-  "function eacNoneChar(doc) {",
-  "  return eacFindNamed(doc.characterStyles, ['[None]', '[Nenhum]', '[Nenhuma]']);",
-  "}",
-  "function eacStripStroke(item, noneSwatch) {",
-  "  try { item.strokeWeight = 0; } catch (e) {}",
-  "  if (noneSwatch && noneSwatch.isValid) {",
-  "    try { item.strokeColor = noneSwatch; } catch (e) {}",
-  "    try { item.gapColor = noneSwatch; } catch (e) {}",
-  "  }",
-  "  try { item.overprintStroke = false; } catch (e) {}",
-  "}",
-  "function eacResetObjectStyle(item, noneSwatch) {",
-  "  try {",
-  "    var os = eacFindNamed(app.activeDocument.objectStyles, ['[None]', '[Nenhum]']);",
-  "    if (os) item.appliedObjectStyle = os;",
-  "  } catch (e) {}",
-  "  eacStripStroke(item, noneSwatch);",
-  "}",
-  "function eacEnsureInk(doc) {",
-  "  var ink = doc.colors.itemByName('EAC_TAG_INK');",
-  "  if (!ink.isValid) {",
-  "    ink = doc.colors.add({",
-  "      name: 'EAC_TAG_INK',",
-  "      model: ColorModel.PROCESS,",
-  "      space: ColorSpace.CMYK,",
-  "      colorValue: [0, 0, 0, 100]",
-  "    });",
-  "  } else {",
-  "    try {",
-  "      ink.model = ColorModel.PROCESS;",
-  "      ink.space = ColorSpace.CMYK;",
-  "      ink.colorValue = [0, 0, 0, 100];",
-  "    } catch (e) {}",
-  "  }",
-  "  return ink;",
-  "}",
-  "function eacEnsureTagPara(doc, ink) {",
-  "  var style = doc.paragraphStyles.itemByName('EAC_TagLabel');",
-  "  if (!style.isValid) style = doc.paragraphStyles.add({ name: 'EAC_TagLabel' });",
-  "  var base = eacFindNamed(doc.paragraphStyles, ['[No Paragraph Style]', '[Sem estilo de parágrafo]']);",
-  "  if (!base) { try { base = doc.paragraphStyles.item(0); } catch (e) {} }",
-  "  if (base) { try { style.basedOn = base; } catch (e) {} }",
-  "  try { style.appliedFont = app.fonts.item('Minion Pro\\tRegular'); } catch (e) {",
-  "    try { style.appliedFont = 'Minion Pro'; } catch (e2) {}",
-  "  }",
-  "  try { style.fontStyle = 'Regular'; } catch (e) {}",
-  "  style.pointSize = 12;",
-  "  try { style.leading = 14; } catch (e) {}",
-  "  if (ink && ink.isValid) { try { style.fillColor = ink; } catch (e) {} }",
-  "  try { style.strokeWeight = 0; } catch (e) {}",
-  "  try { style.justification = Justification.CENTER_ALIGN; } catch (e) {}",
-  "  try { style.capitalization = Capitalization.NORMAL; } catch (e) {}",
-  "  try { style.underline = false; style.strikeThru = false; } catch (e) {}",
-  "  try { style.hyphenation = false; } catch (e) {}",
-  "  try { style.nestedGrepStyles.everyItem().remove(); } catch (e) {}",
-  "  try { style.nestedStyles.everyItem().remove(); } catch (e) {}",
-  "  try { style.nestedLineStyles.everyItem().remove(); } catch (e) {}",
-  "  return style;",
-  "}",
-  "function eacLockTagText(t, para, noneChar, ink, noneSwatch) {",
-  "  try { t.appliedParagraphStyle = para; } catch (e) {}",
-  "  try { t.applyParagraphStyle(para, true); } catch (e) {}",
-  "  if (noneChar) {",
-  "    try { t.appliedCharacterStyle = noneChar; } catch (e) {}",
-  "    try { t.applyCharacterStyle(noneChar, true); } catch (e) {}",
-  "  }",
-  "  try { t.clearOverrides(); } catch (e) {}",
-  "  try { t.appliedFont = app.fonts.item('Minion Pro\\tRegular'); } catch (e) {",
-  "    try { t.appliedFont = 'Minion Pro'; } catch (e2) {}",
-  "  }",
-  "  try { t.fontStyle = 'Regular'; } catch (e) {}",
-  "  t.pointSize = 12;",
-  "  if (ink && ink.isValid) { try { t.fillColor = ink; } catch (e) {} }",
-  "  try { t.strokeWeight = 0; } catch (e) {}",
-  "  if (noneSwatch && noneSwatch.isValid) { try { t.strokeColor = noneSwatch; } catch (e) {} }",
-  "  try { t.justification = Justification.CENTER_ALIGN; } catch (e) {}",
-  "  try { t.underline = false; t.strikeThru = false; } catch (e) {}",
-  "  try { t.capitalization = Capitalization.NORMAL; } catch (e) {}",
-  "  try { t.horizontalScale = 100; t.verticalScale = 100; t.baselineShift = 0; t.skew = 0; t.tracking = 0; } catch (e) {}",
-  "}",
-  "var eacNone = eacNoneSwatch(doc);",
-  "var eacInk = eacEnsureInk(doc);",
-  "var eacPara = eacEnsureTagPara(doc, eacInk);",
-  "var eacCharNone = eacNoneChar(doc);",
-].join("\n");
-
-function buildTagScript(hit: StyleHit, fillName: string): { script: string; bounds: number[] } {
-  const width = estimateTagWidth(hit.name);
-  const y = hit.y;
-  const top = y - TAG_HEIGHT + 3;
-  const bottom = y + 4;
-  const left = hit.x + 2;
-  const frameLeft = left + POINTER_W;
-  const right = frameLeft + width;
-  const midY = (top + bottom) / 2;
-  const frameName = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
-  const pageName = hit.page.name || "";
-
-  const script = [
-    "(function () {",
-    "var doc = app.activeDocument;",
-    `var page = doc.pages.item(${hit.pageIndex});`,
-    "try {",
-    `  var namedPage = doc.pages.itemByName(${quoteExtendScript(pageName)});`,
-    "  if (namedPage.isValid) { page = namedPage; }",
-    "} catch (e) {}",
-    `var fill = doc.colors.itemByName(${quoteExtendScript(fillName)});`,
-    "var tf = page.textFrames.add();",
-    `tf.geometricBounds = [${top}, ${frameLeft}, ${bottom}, ${right}];`,
-    `tf.name = ${quoteExtendScript(frameName)};`,
-    `tf.label = ${quoteExtendScript(TAG_LABEL)};`,
-    "eacResetObjectStyle(tf, eacNone);",
-    "if (fill.isValid) { tf.fillColor = fill; }",
-    "eacStripStroke(tf, eacNone);",
-    "try {",
-    "  tf.topLeftCornerOption = CornerOptions.ROUNDED_CORNER;",
-    "  tf.topRightCornerOption = CornerOptions.ROUNDED_CORNER;",
-    "  tf.bottomLeftCornerOption = CornerOptions.ROUNDED_CORNER;",
-    "  tf.bottomRightCornerOption = CornerOptions.ROUNDED_CORNER;",
-    "  tf.topLeftCornerRadius = 3;",
-    "  tf.topRightCornerRadius = 3;",
-    "  tf.bottomLeftCornerRadius = 3;",
-    "  tf.bottomRightCornerRadius = 3;",
-    "} catch (e) {}",
-    "try { tf.textFramePreferences.insetSpacing = [1, 3, 1, 3]; } catch (e) {}",
-    `tf.contents = ${quoteExtendScript(hit.name)};`,
-    "eacStripStroke(tf, eacNone);",
-    "if (fill.isValid) { tf.fillColor = fill; }",
-    "var t = tf.parentStory.texts[0];",
-    "eacLockTagText(t, eacPara, eacCharNone, eacInk, eacNone);",
-    "try {",
-    "  var pointer = page.polygons.add();",
-    `  pointer.name = ${quoteExtendScript(`${frameName}_p`)};`,
-    `  pointer.label = ${quoteExtendScript(TAG_LABEL)};`,
-    "  eacResetObjectStyle(pointer, eacNone);",
-    "  if (fill.isValid) { pointer.fillColor = fill; }",
-    "  eacStripStroke(pointer, eacNone);",
-    `  pointer.paths[0].entirePath = [[${left}, ${midY}], [${frameLeft + 0.4}, ${top + 3}], [${frameLeft + 0.4}, ${bottom - 3}]];`,
-    "  try {",
-    "    var grp = page.groups.add([pointer, tf]);",
-    "    eacStripStroke(grp, eacNone);",
-    "    eacStripStroke(tf, eacNone);",
-    "    eacStripStroke(pointer, eacNone);",
-    "    if (fill.isValid) { tf.fillColor = fill; pointer.fillColor = fill; }",
-    "  } catch (e2) {}",
-    "} catch (e) {}",
-    "eacLockTagText(tf.parentStory.texts[0], eacPara, eacCharNone, eacInk, eacNone);",
-    "})();",
-  ].join("\n");
-
-  return { script, bounds: [top, left, bottom, right] };
-}
-
-function withPointUnits<T>(doc: Document, fn: () => T): T {
-  const { MeasurementUnits } = getInDesignModule() as {
-    MeasurementUnits?: { POINTS?: number };
-  };
-  const points = MeasurementUnits?.POINTS;
-  const prefs = doc.viewPreferences;
-  if (!prefs || points == null) {
-    return fn();
+  function placeTag(info, name, fill, noneSwatch, paraStyle, noneChar) {
+    var width = widthOf(name);
+    var y = shiftY(info.pageIndex, info.x, info.y, width);
+    var top = y - TAG_H + 3;
+    var bottom = y + 4;
+    var left = info.x + 2;
+    var right = left + width;
+    var page = doc.pages.item(info.pageIndex);
+    var tf = page.textFrames.add();
+    tf.geometricBounds = [top, left, bottom, right];
+    tf.fillColor = fill;
+    tf.strokeWeight = 0;
+    if (noneSwatch) tf.strokeColor = noneSwatch;
+    tf.label = TAG_LABEL;
+    try {
+      tf.topLeftCornerOption = CornerOptions.ROUNDED_CORNER;
+      tf.topRightCornerOption = CornerOptions.ROUNDED_CORNER;
+      tf.bottomLeftCornerOption = CornerOptions.ROUNDED_CORNER;
+      tf.bottomRightCornerOption = CornerOptions.ROUNDED_CORNER;
+      tf.topLeftCornerRadius = 3;
+      tf.topRightCornerRadius = 3;
+      tf.bottomLeftCornerRadius = 3;
+      tf.bottomRightCornerRadius = 3;
+    } catch (e) {}
+    try { tf.textFramePreferences.insetSpacing = [1, 3, 1, 3]; } catch (e) {}
+    tf.contents = name;
+    try { tf.parentStory.appliedParagraphStyle = paraStyle; } catch (e) {}
+    if (noneChar) { try { tf.parentStory.appliedCharacterStyle = noneChar; } catch (e) {} }
+    placed.push({ p: info.pageIndex, t: top, l: left, b: bottom, r: right });
+  }
+  function deleteOld(layer) {
+    var items = layer.pageItems;
+    for (var i = items.length - 1; i >= 0; i--) {
+      try {
+        var item = items.item(i);
+        if (item.label === TAG_LABEL) item.remove();
+      } catch (e) {}
+    }
   }
 
-  const previousH = prefs.horizontalMeasurementUnits;
-  const previousV = prefs.verticalMeasurementUnits;
   try {
-    prefs.horizontalMeasurementUnits = points;
-    prefs.verticalMeasurementUnits = points;
-    return fn();
+    var layer = ensureLayer();
+    layer.visible = true;
+    layer.locked = false;
+    doc.activeLayer = layer;
+    deleteOld(layer);
+
+    var noneSwatch = findNamed(doc.swatches, ["None", "Nenhum", "Nenhuma"]) || doc.swatches.item(0);
+    var noneChar = findNamed(doc.characterStyles, ["[None]", "[Nenhum]", "[Nenhuma]"]);
+    var ink = ensureInk();
+    var paraStyle = ensurePara(ink, noneSwatch);
+    var paraFill = ensureColor(COLOR_PARA, PARA_CMYK);
+    var charFill = ensureColor(COLOR_CHAR, CHAR_CMYK);
+
+    var seen = {};
+    var paragraph = 0;
+    var character = 0;
+    var stories = doc.stories;
+    for (var s = 0; s < stories.length; s++) {
+      var story = stories.item(s);
+      if (!story.isValid) continue;
+      try { if (story.length < 1) continue; } catch (e0) {}
+      try { if (isEditorial(story.itemLayer.name)) continue; } catch (e) {}
+      var paras = story.paragraphs;
+      var pLen = paras.length;
+      for (var p = 0; p < pLen; p++) {
+        var para = paras.item(p);
+        var st;
+        try { st = para.appliedParagraphStyle; } catch (e2) { continue; }
+        if (!st || !st.isValid) continue;
+        var pname = st.name;
+        if (ignored(pname, "paragraph") || seen["p:" + pname]) continue;
+        var info = anchorOf(para);
+        if (!info) continue;
+        seen["p:" + pname] = true;
+        hits.push({ kind: "paragraph", name: pname, pageIndex: info.pageIndex, x: info.x, y: info.y });
+        paragraph++;
+      }
+
+      var ranges = story.textStyleRanges;
+      var rLen = ranges.length;
+      if (rLen > 8000) rLen = 8000;
+      for (var r = 0; r < rLen; r++) {
+        var range = ranges.item(r);
+        var cs;
+        try { cs = range.appliedCharacterStyle; } catch (e3) { continue; }
+        if (!cs || !cs.isValid) continue;
+        var cname = cs.name;
+        if (ignored(cname, "character") || seen["c:" + cname]) continue;
+        var cinfo = anchorOf(range);
+        if (!cinfo) continue;
+        seen["c:" + cname] = true;
+        hits.push({ kind: "character", name: cname, pageIndex: cinfo.pageIndex, x: cinfo.x, y: cinfo.y });
+        character++;
+      }
+    }
+
+    if (paragraph + character === 0) {
+      throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
+    }
+
+    for (var h = 0; h < hits.length; h++) {
+      var hit = hits[h];
+      placeTag(hit, hit.name, hit.kind === "character" ? charFill : paraFill, noneSwatch, paraStyle, noneChar);
+    }
+
+    return '{"layerName":"' + String(layer.name).replace(/"/g, '\\\\"') + '","paragraph":' + paragraph + ',"character":' + character + ',"total":' + (paragraph + character) + '}';
   } finally {
-    try {
-      prefs.horizontalMeasurementUnits = previousH;
-      prefs.verticalMeasurementUnits = previousV;
-    } catch {
-      // ignore
+    try { vp.horizontalMeasurementUnits = oldH; vp.verticalMeasurementUnits = oldV; } catch (e) {}
+    try { prefs.enableRedraw = oldRedraw; } catch (e) {}
+    try { prefs.userInteractionLevel = oldInteract; } catch (e) {}
+    if (oldLayer) {
+      try { doc.activeLayer = doc.layers.itemByName(oldLayer); } catch (e) {}
     }
   }
+})();
+`;
 }
 
 export function createMemorialStyleTags(): StyleTagsResult {
-  return runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — Criar estilos", () => {
-    const doc = getActiveDocument();
-
-    return withPointUnits(doc, () => {
-      const previousLayerName = doc.activeLayer?.name || "";
-      const layerName = ensureMemorialLayerName(doc);
-      prepareLayerNative(layerName);
-      deletePreviousTags(doc, layerName);
-
-      try {
-        const hits = scanStories(doc);
-        if (!hits.length) {
-          throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
-        }
-
-        const palette = pickContrastingColors(collectUsedCmyk(doc));
-        ensureProcessColor(doc, COLOR_PARA, palette.paragraph);
-        ensureProcessColor(doc, COLOR_CHAR, palette.character);
-
-        const placed: Array<{ pageIndex: number; bounds: number[] }> = [];
-        const scripts: string[] = [];
-        let paragraph = 0;
-        let character = 0;
-
-        for (const hit of hits) {
-          const adjusted: StyleHit = { ...hit, y: shiftIfCollision(hit, placed) };
-          const fillName = hit.kind === "character" ? COLOR_CHAR : COLOR_PARA;
-          const built = buildTagScript(adjusted, fillName);
-          scripts.push(built.script);
-          placed.push({ pageIndex: hit.pageIndex, bounds: built.bounds });
-          if (hit.kind === "character") character += 1;
-          else paragraph += 1;
-        }
-
-        runExtendScript(
-          [
-            "var doc = app.activeDocument;",
-            "var vp = doc.viewPreferences;",
-            "var oldH = vp.horizontalMeasurementUnits;",
-            "var oldV = vp.verticalMeasurementUnits;",
-            "vp.horizontalMeasurementUnits = MeasurementUnits.POINTS;",
-            "vp.verticalMeasurementUnits = MeasurementUnits.POINTS;",
-            `var memorialLayer = doc.layers.itemByName(${quoteExtendScript(layerName)});`,
-            "if (memorialLayer.isValid) { memorialLayer.visible = true; memorialLayer.locked = false; doc.activeLayer = memorialLayer; }",
-            TAG_SCRIPT_HELPERS,
-            "try {",
-            scripts.join("\n"),
-            "} finally {",
-            "vp.horizontalMeasurementUnits = oldH;",
-            "vp.verticalMeasurementUnits = oldV;",
-            "}",
-          ].join("\n"),
-          "EDITORIAL AUTOCLOSE — Criar tags de estilo"
-        );
-
-        return {
-          layerName,
-          paragraph,
-          character,
-          total: paragraph + character,
-        };
-      } finally {
-        if (previousLayerName) {
-          restoreLayerNative(previousLayerName);
-        }
-      }
-    });
-  });
+  getActiveDocument();
+  return parseResult(runExtendScript(buildCreateTagsScript()));
 }
