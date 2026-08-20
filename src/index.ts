@@ -4,7 +4,7 @@ import { LICENSE_DEV_ALLOW_RESET } from "./licensing/license-config";
 import { deactivateLicense, isLicenseActive } from "./licensing/license-service";
 import { ValidationSummary } from "./models/validation-result";
 import { PanelController } from "./ui/panel-controller";
-import { promptLicenseActivation } from "./ui/license-dialog";
+import { isLicensePromptOpen, promptLicenseActivation } from "./ui/license-dialog";
 import { promptUserNameDialog } from "./ui/user-name-dialog";
 import {
   clearPanelContainer,
@@ -23,6 +23,7 @@ const { entrypoints } = require("uxp");
 const orchestrator = new ClosureOrchestrator();
 let activeController: PanelController | null = null;
 let lastChecklistSummary: ValidationSummary | null = null;
+let panelInitInFlight = false;
 
 async function handleLicenseReset(container: HTMLElement): Promise<void> {
   const removed = await deactivateLicense();
@@ -186,34 +187,47 @@ async function initPanel(container?: HTMLElement | null): Promise<void> {
     return;
   }
 
-  removeStrayPanelRoots(target);
+  if (panelInitInFlight || isLicensePromptOpen()) {
+    return;
+  }
+  panelInitInFlight = true;
 
-  const licensed = await isLicenseActive();
-  if (!licensed) {
-    resetPanelInitialization();
-    activeController = null;
+  try {
+    removeStrayPanelRoots(target);
 
-    const activated = await requestActivation(target);
-    if (!activated) {
+    const licensed = await isLicenseActive();
+    if (!licensed) {
+      resetPanelInitialization();
+      activeController = null;
       showLicenseGate(target, () => {
         void retryActivation(target);
       });
+
+      const activated = await requestActivation(target);
+      if (!activated) {
+        return;
+      }
+    }
+
+    if (activeController?.isReady() && target.querySelector("#root #btn-checklist")) {
+      bindDevLicenseReset(target, target.querySelector("#root") as HTMLElement);
       return;
     }
-  }
 
-  if (activeController?.isReady() && target.querySelector("#root #btn-checklist")) {
-    bindDevLicenseReset(target, target.querySelector("#root") as HTMLElement);
-    return;
+    resetPanelInitialization();
+    activeController = null;
+    lastChecklistSummary = null;
+    await mountLicensedPanel(target);
+  } finally {
+    panelInitInFlight = false;
   }
-
-  resetPanelInitialization();
-  activeController = null;
-  lastChecklistSummary = null;
-  await mountLicensedPanel(target);
 }
 
 async function retryActivation(container: HTMLElement): Promise<void> {
+  if (isLicensePromptOpen()) {
+    return;
+  }
+
   const activated = await requestActivation(container);
   if (!activated) {
     showLicenseGate(container, () => {

@@ -22,6 +22,11 @@ declare module "uxp" {
     formats: {
       utf8: string;
     };
+    secureStorage?: {
+      getItem(key: string): Promise<string | ArrayBuffer | Uint8Array | null | undefined>;
+      setItem(key: string, value: string | Uint8Array): Promise<void>;
+      removeItem?(key: string): Promise<void>;
+    };
   };
 
   export interface FileSystemEntry {

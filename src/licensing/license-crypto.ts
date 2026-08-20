@@ -13,8 +13,29 @@ function getSecretBytes(): Uint8Array {
   return secretBytes;
 }
 
+const UNICODE_HYPHENS = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\uFE58\uFE63\uFF0D]/g;
+const SERIAL_EXTRACT = /EAC1-?[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}/;
+
+/** Aceita cola com espaços, hífens unicode ou o bloco inteiro do terminal. */
 export function normalizeSerialInput(input: string): string {
-  return input.trim().replace(/\s+/g, "").toUpperCase();
+  const cleaned = String(input || "")
+    .replace(UNICODE_HYPHENS, "-")
+    .replace(/[\s\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]+/g, "")
+    .toUpperCase();
+
+  const match = cleaned.match(SERIAL_EXTRACT);
+  if (!match) {
+    return cleaned;
+  }
+
+  const compact = match[0].replace(/-/g, "");
+  return [
+    compact.slice(0, 4),
+    compact.slice(4, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+  ].join("-");
 }
 
 function computeChecksum(licenseId: string): string {

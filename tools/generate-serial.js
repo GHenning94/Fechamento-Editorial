@@ -17,7 +17,19 @@ function loadSecret() {
     console.error("  npm run license:secret");
     process.exit(1);
   }
-  return Buffer.from(fs.readFileSync(SECRET_PATH, "utf8").trim(), "hex");
+
+  const secretHex = fs.readFileSync(SECRET_PATH, "utf8").trim();
+  const secretTsPath = path.join(TOOLS_DIR, "..", "src", "licensing", "license-verify-secret.ts");
+  if (fs.existsSync(secretTsPath)) {
+    const embedded = fs.readFileSync(secretTsPath, "utf8");
+    if (!embedded.includes(secretHex)) {
+      console.error("O segredo em tools/.license-secret não é o mesmo embutido no plugin.");
+      console.error("Execute: npm run license:secret && npm run build");
+      process.exit(1);
+    }
+  }
+
+  return Buffer.from(secretHex, "hex");
 }
 
 function randomLicenseId(length = 12) {
@@ -70,8 +82,14 @@ function generateSerial(note) {
 const note = process.argv.slice(2).join(" ") || "";
 const { serial, licenseId } = generateSerial(note);
 
+try {
+  require("child_process").execSync("pbcopy", { input: serial });
+} catch {
+  // área de transferência indisponível
+}
+
 console.log("");
-console.log("Serial gerado (uso único):");
+console.log("Serial gerado:");
 console.log("");
 console.log(serial);
 console.log("");
@@ -81,4 +99,6 @@ if (note) {
 }
 console.log("");
 console.log(`Registrado em: ${LEDGER_PATH}`);
-console.log("Envie este código ao usuário. Para reinstalação, gere um novo serial.");
+console.log("Este serial vale em qualquer máquina e também após reinstalação.");
+console.log("Depois de ativar, o plugin não pede o código de novo neste computador.");
+console.log("O serial foi copiado. No InDesign, abra o painel e clique em Ativar (ou Colar).");

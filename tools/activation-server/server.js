@@ -126,17 +126,13 @@ const server = http.createServer(async (req, res) => {
     const { licenseId, serial } = verifySerial(body.serial);
     const machineId = body.machineId || "unknown";
     const used = loadUsed();
-
     const key = body.jti || licenseId;
-    if (used[key]) {
-      sendJson(res, 409, { error: "Serial já utilizado." });
-      return;
-    }
 
     used[key] = {
       machineId,
       activatedAt: new Date().toISOString(),
       serial,
+      activations: (used[key]?.activations || 0) + 1,
     };
     saveUsed(used);
 

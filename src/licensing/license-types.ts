@@ -5,7 +5,7 @@ export interface LicensePayload {
 export interface StoredLicense {
   serial: string;
   licenseId: string;
-  machineId: string;
+  machineId?: string;
   activatedAt: string;
 }
 
