@@ -7,6 +7,23 @@ declare module "indesign" {
     PNG_FORMAT: string;
   };
 
+  export const MeasurementUnits: {
+    POINTS: number;
+    MILLIMETERS: number;
+    INCHES: number;
+  };
+
+  export const CornerOptions: {
+    ROUNDED_CORNER: number;
+    NONE: number;
+  };
+
+  export const LocationOptions: {
+    AT_BEGINNING: number;
+    AT_END: number;
+    UNKNOWN: number;
+  };
+
   export const ColorModel: {
     PROCESS: number;
     SPOT: number;
@@ -92,6 +109,17 @@ declare module "indesign" {
     ): unknown;
   }
 
+  export interface ViewPreferences {
+    horizontalMeasurementUnits: number;
+    verticalMeasurementUnits: number;
+  }
+
+  export interface Swatches {
+    length: number;
+    item(index: number): Swatch;
+    itemByName(name: string): Swatch;
+  }
+
   export interface Documents {
     length: number;
     item(index: number): Document;
@@ -125,6 +153,9 @@ declare module "indesign" {
     preflightOptions: PreflightOption;
     preflightProfiles: PreflightProfiles;
     documentPreferences: DocumentPreferences;
+    viewPreferences?: ViewPreferences;
+    textFrames?: TextFrames;
+    swatches?: Swatches;
     save(file?: File | string): void;
     saveACopy(file: File | string): void;
     exportFile(
@@ -157,6 +188,7 @@ declare module "indesign" {
     length: number;
     item(index: number): Layer;
     itemByName(name: string): Layer;
+    add(properties?: object): Layer;
   }
 
   export interface Layer {
@@ -170,11 +202,13 @@ declare module "indesign" {
   export interface PageItems {
     length: number;
     item(index: number): PageItem;
+    everyItem?(): { remove(): void };
   }
 
   export interface PageItem {
     constructor: { name: string };
     name: string;
+    label?: string;
     fillColor: Swatch | Color;
     strokeColor: Swatch | Color;
     strokeWeight: number;
@@ -192,6 +226,49 @@ declare module "indesign" {
     parent?: PageItem | Spread;
     graphics?: Graphics;
     images?: Images;
+    remove?(): void;
+    texts?: Texts;
+    textFramePreferences?: TextFramePreferences;
+    topLeftCornerOption?: number;
+    topRightCornerOption?: number;
+    bottomLeftCornerOption?: number;
+    bottomRightCornerOption?: number;
+    topLeftCornerRadius?: number;
+    topRightCornerRadius?: number;
+    bottomLeftCornerRadius?: number;
+    bottomRightCornerRadius?: number;
+    paths?: Paths;
+  }
+
+  export interface Paths {
+    length: number;
+    item(index: number): Path;
+  }
+
+  export interface Path {
+    entirePath: number[][] | number[][][];
+  }
+
+  export interface TextFramePreferences {
+    insetSpacing?: number | number[];
+    autoSizingType?: number;
+    autoSizingReferencePoint?: number;
+  }
+
+  export interface TextFrames {
+    length: number;
+    item(index: number): PageItem;
+    add(properties?: object): PageItem;
+  }
+
+  export interface Polygons {
+    length: number;
+    item(index: number): PageItem;
+    add(properties?: object): PageItem;
+  }
+
+  export interface Groups {
+    add(pageItems: PageItem[], at?: unknown, reference?: unknown): PageItem;
   }
 
   export interface Graphics {
@@ -236,6 +313,7 @@ declare module "indesign" {
     overprintFill: boolean;
     overprintStroke: boolean;
     parentColorGroup?: ColorGroup | null;
+    colorValue?: number[];
     isValid: boolean;
   }
 
@@ -298,6 +376,7 @@ declare module "indesign" {
   export interface CharacterStyles {
     length: number;
     item(index: number): CharacterStyle;
+    itemByName(name: string): CharacterStyle;
   }
 
   export interface CharacterStyle {
@@ -341,6 +420,19 @@ declare module "indesign" {
     isValid: boolean;
     textStyleRanges: TextStyleRanges;
     tables: Tables;
+    paragraphs?: Paragraphs;
+    characters?: Characters;
+    itemLayer?: Layer;
+  }
+
+  export interface Paragraphs {
+    length: number;
+    item(index: number): Text;
+  }
+
+  export interface Characters {
+    length: number;
+    item(index: number): Text;
   }
 
   export interface TextStyleRanges {
@@ -350,6 +442,9 @@ declare module "indesign" {
 
   export interface TextStyleRange {
     appliedFont: Font | string;
+    appliedParagraphStyle?: ParagraphStyle;
+    appliedCharacterStyle?: CharacterStyle;
+    characters?: Characters;
     length: number;
     isValid: boolean;
   }
@@ -372,6 +467,7 @@ declare module "indesign" {
   export interface Cell {
     texts: Texts;
     textStyleRanges?: TextStyleRanges;
+    paragraphs?: Paragraphs;
     isValid: boolean;
   }
 
@@ -382,6 +478,19 @@ declare module "indesign" {
 
   export interface Text {
     textStyleRanges?: TextStyleRanges;
+    paragraphs?: Paragraphs;
+    characters?: Characters;
+    appliedParagraphStyle?: ParagraphStyle;
+    appliedCharacterStyle?: CharacterStyle;
+    appliedFont?: Font | string;
+    fontStyle?: string;
+    pointSize?: number;
+    fillColor?: Swatch | Color;
+    justification?: number;
+    contents?: string;
+    horizontalOffset?: number;
+    baseline?: number;
+    parentTextFrames?: PageItems | PageItem[];
     isValid: boolean;
   }
 
@@ -400,10 +509,15 @@ declare module "indesign" {
     name: string;
     bounds: number[];
     side?: number;
+    documentOffset?: number;
+    parent?: Spread | unknown;
     pageItems: PageItems;
     allPageItems: PageItems;
     equals(other: Page): boolean;
     exportFile(format: string, to: File | string, showingOptions?: boolean): void;
+    textFrames?: TextFrames;
+    polygons?: Polygons;
+    groups?: Groups;
     isValid: boolean;
   }
 

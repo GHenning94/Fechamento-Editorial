@@ -24,6 +24,7 @@ const PANEL_HTML = `
 
   <section class="actions">
     <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
+    <div id="btn-create-styles" class="btn btn-secondary" role="button" tabindex="0">Criar Estilos</div>
     <div id="btn-download-report" class="btn btn-download-report hidden" role="button" tabindex="0">
       Baixar relatório
     </div>

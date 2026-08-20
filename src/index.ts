@@ -17,6 +17,7 @@ import {
 import { PackageCancelledError, promptChecklistReportFile } from "./utils/file-system";
 import { ensureInDesignReady, getDefaultReportUserName } from "./utils/indesign-runtime";
 import { yieldToHost } from "./utils/yield-to-host";
+import { createMemorialStyleTags } from "./services/style-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
 
 const { entrypoints } = require("uxp");
@@ -124,6 +125,18 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         orchestrator.cacheCurrentDocumentChecklist(filtered);
       });
       controller.renderSummary(summary, "Checklist");
+    },
+
+    onCreateStyles: async () => {
+      controller.resetProgress();
+      controller.setStatus("Criando tags de estilos...", "info");
+      await yieldToHost(40);
+      const result = createMemorialStyleTags();
+      controller.setProgress(100, "Estilos criados");
+      controller.setStatus(
+        `Layer "${result.layerName}": ${result.total} tags (${result.paragraph} parágrafo, ${result.character} caractere).`,
+        "success"
+      );
     },
 
     onDownloadReport: async () => {

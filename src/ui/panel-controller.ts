@@ -21,6 +21,7 @@ export type ProgressHandler = (percent: number, label: string) => void;
 
 export class PanelController {
   private btnChecklist: HTMLElement | null;
+  private btnCreateStyles: HTMLElement | null;
   private btnDownloadReport: HTMLElement | null;
   private btnClose: HTMLElement | null;
   private progressBar: HTMLProgressElement | null;
@@ -39,6 +40,7 @@ export class PanelController {
 
   constructor(private root: HTMLElement) {
     this.btnChecklist = root.querySelector("#btn-checklist");
+    this.btnCreateStyles = root.querySelector("#btn-create-styles");
     this.btnDownloadReport = root.querySelector("#btn-download-report");
     this.btnClose = root.querySelector("#btn-close");
     this.progressBar = root.querySelector("#progress-bar");
@@ -104,6 +106,7 @@ export class PanelController {
   isReady(): boolean {
     return Boolean(
       this.btnChecklist &&
+      this.btnCreateStyles &&
       this.btnDownloadReport &&
       this.btnClose &&
       this.progressBar &&
@@ -124,6 +127,7 @@ export class PanelController {
 
   bindHandlers(handlers: {
     onChecklist: () => Promise<void>;
+    onCreateStyles: () => Promise<void>;
     onDownloadReport: () => Promise<void>;
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>;
   }): void {
@@ -131,6 +135,9 @@ export class PanelController {
 
     onActionActivate(this.btnChecklist, () => {
       void this.runAction(handlers.onChecklist);
+    });
+    onActionActivate(this.btnCreateStyles, () => {
+      void this.runAction(handlers.onCreateStyles);
     });
     onActionActivate(this.btnDownloadReport, () => {
       void this.runAction(handlers.onDownloadReport);
@@ -205,6 +212,7 @@ export class PanelController {
 
   setBusy(busy: boolean): void {
     setActionDisabled(this.btnChecklist, busy);
+    setActionDisabled(this.btnCreateStyles, busy);
     setActionDisabled(this.btnClose, busy);
     setActionDisabled(this.btnDownloadReport, busy || !this.reportDownloadAllowed);
   }
