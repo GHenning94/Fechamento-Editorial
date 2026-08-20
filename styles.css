@@ -96,6 +96,20 @@ button::-moz-focus-inner {
 .panel-header {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.panel-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.panel-brand {
+  flex: 1;
+  margin-right: 10px;
+  text-align: left;
 }
 
 .panel-header-row {
@@ -125,6 +139,7 @@ button::-moz-focus-inner {
   letter-spacing: 0.08em;
   color: var(--accent);
   text-transform: uppercase;
+  text-align: left !important;
 }
 
 .update-banner {
@@ -191,6 +206,7 @@ button::-moz-focus-inner {
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 11px;
+  text-align: left !important;
 }
 
 .actions {
@@ -884,6 +900,12 @@ progress::-webkit-progress-value {
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
+}
+
+.license-gate .panel-title,
+.license-gate .panel-subtitle {
+  text-align: center !important;
 }
 
 .license-gate-btn {
