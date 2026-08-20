@@ -16,6 +16,8 @@
   --error: #e87474;
   --danger-border: #a84a4a;
   --danger-text: #f0c8c8;
+  --styles-border: #4a74b0;
+  --styles-text: #c5daf5;
   --radius: 8px;
   --radius-sm: 6px;
   --space: 12px;
@@ -94,34 +96,25 @@ button::-moz-focus-inner {
 }
 
 .panel-header {
+  width: 100%;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
-  text-align: left;
+  text-align: left !important;
 }
 
 .panel-header-row {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .panel-brand {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
   margin-right: 10px;
-  text-align: left;
-}
-
-.panel-header-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.panel-brand {
-  flex: 1;
-  margin-right: 10px;
+  text-align: left !important;
 }
 
 .panel-footer {
@@ -133,13 +126,15 @@ button::-moz-focus-inner {
 
 .panel-title {
   display: block;
+  width: 100%;
   margin: 0;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--accent);
   text-transform: uppercase;
-  text-align: left !important;
+  text-align: start !important;
+  align-self: flex-start;
 }
 
 .update-banner {
@@ -203,10 +198,12 @@ button::-moz-focus-inner {
 
 .panel-subtitle {
   display: block;
+  width: 100%;
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 11px;
-  text-align: left !important;
+  text-align: start !important;
+  align-self: flex-start;
 }
 
 .actions {
@@ -291,6 +288,18 @@ button::-moz-focus-inner {
 .btn-danger:hover:not(.is-disabled):not([aria-disabled="true"]) {
   background-color: #2e1e1e !important;
   border-color: #c45a5a !important;
+  color: #ffffff !important;
+}
+
+.btn-create-styles {
+  background-color: var(--surface) !important;
+  color: var(--styles-text) !important;
+  border-color: var(--styles-border) !important;
+}
+
+.btn-create-styles:hover:not(.is-disabled):not([aria-disabled="true"]) {
+  background-color: #1c2838 !important;
+  border-color: #6d9adf !important;
   color: #ffffff !important;
 }
 
