@@ -15,8 +15,9 @@ import { forEachCollectionItem, getCollectionItem, getCollectionLength } from ".
 import { findEditorialLayer, isEditorialLayerName } from "../utils/editorial-layer";
 import {
   getActiveDocument,
+  getInDesignApp,
   getInDesignModule,
-  runInDesignMutation,
+  runInDesignHeavyMutation,
 } from "../utils/indesign-runtime";
 
 const TAG_LABEL = "eac-style-tag";
@@ -282,7 +283,7 @@ function ensureProcessColor(doc: Document, name: string, cmyk: number[]): Color 
   }
 
   if (!color) {
-    color = doc.colors.add({
+    doc.colors.add({
       name,
       model: ColorModel.PROCESS,
       space: ColorSpace.CMYK,
@@ -298,7 +299,7 @@ function ensureProcessColor(doc: Document, name: string, cmyk: number[]): Color 
     }
   }
 
-  return color;
+  return doc.colors.itemByName(name);
 }
 
 function swatchByName(doc: Document, name: string): Swatch | Color | null {
@@ -317,55 +318,84 @@ function swatchByName(doc: Document, name: string): Swatch | Color | null {
   return null;
 }
 
-function applyMinionRegular(text: Text): void {
-  const attempts = ["Minion Pro\tRegular", "Minion Pro", "MinionPro-Regular"];
-  for (const name of attempts) {
-    try {
-      text.appliedFont = name;
-      break;
-    } catch {
-      // tenta o próximo
-    }
-  }
-  try {
-    text.fontStyle = "Regular";
-  } catch {
-    // ignore
-  }
-  text.pointSize = 12;
+function quoteExtendScript(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-function applyRoundedCorners(item: PageItem, radius: number): void {
-  const { CornerOptions } = getInDesignModule() as { CornerOptions?: { ROUNDED_CORNER?: number } };
-  const rounded = CornerOptions?.ROUNDED_CORNER;
-  if (rounded == null) return;
+function runExtendScript(source: string, commandName = "EDITORIAL AUTOCLOSE — Estilos"): void {
+  const app = getInDesignApp();
+  const mod = getInDesignModule();
+  if (typeof app.doScript !== "function") {
+    throw new Error("doScript indisponível para operar layers no InDesign.");
+  }
+  const undoMode = mod.UndoModes?.FAST_ENTIRE_SCRIPT ?? mod.UndoModes?.ENTIRE_SCRIPT;
+  app.doScript(source, mod.ScriptLanguage?.JAVASCRIPT, [], undoMode, commandName);
+}
 
+/**
+ * Ativa/destrava a layer no motor nativo do InDesign.
+ * No UXP, atribuir um proxy Layer a activeLayer/itemLayer gera
+ * "Esperado Layer, mas recebido Layer".
+ */
+function prepareLayerNative(name: string): void {
+  const quoted = quoteExtendScript(name);
+  runExtendScript(
+    [
+      "var doc = app.activeDocument;",
+      `var layer = doc.layers.itemByName(${quoted});`,
+      "if (!layer.isValid) { throw new Error('Layer não encontrada.'); }",
+      "layer.visible = true;",
+      "layer.locked = false;",
+      "doc.activeLayer = layer;",
+    ].join("\n")
+  );
+}
+
+function restoreLayerNative(name: string): void {
+  const quoted = quoteExtendScript(name);
   try {
-    item.topLeftCornerOption = rounded;
-    item.topRightCornerOption = rounded;
-    item.bottomLeftCornerOption = rounded;
-    item.bottomRightCornerOption = rounded;
-    item.topLeftCornerRadius = radius;
-    item.topRightCornerRadius = radius;
-    item.bottomLeftCornerRadius = radius;
-    item.bottomRightCornerRadius = radius;
+    runExtendScript(
+      [
+        "var doc = app.activeDocument;",
+        `var layer = doc.layers.itemByName(${quoted});`,
+        "if (layer.isValid) { doc.activeLayer = layer; }",
+      ].join("\n")
+    );
   } catch {
-    // ignore
+    // ignora
   }
 }
 
-function deletePreviousTags(layer: Layer): void {
+function isStyleTagItem(item: PageItem): boolean {
+  try {
+    return item.label === TAG_LABEL || (item.name || "").startsWith("EAC_TAG_");
+  } catch {
+    return false;
+  }
+}
+
+function deletePreviousTags(doc: Document, layerName: string): void {
   const items: PageItem[] = [];
-  forEachCollectionItem<PageItem>(layer.pageItems, (item) => {
-    if (!item?.isValid) return;
-    try {
-      if (item.label === TAG_LABEL || (item.name || "").startsWith("EAC_TAG_")) {
+
+  forEachCollectionItem<Layer>(doc.layers, (layer) => {
+    if (!layer?.isValid || layer.name !== layerName) return;
+    forEachCollectionItem<PageItem>(layer.pageItems, (item) => {
+      if (item?.isValid && isStyleTagItem(item)) {
         items.push(item);
       }
-    } catch {
-      // ignore
-    }
+    });
   });
+
+  if (!items.length) {
+    forEachCollectionItem<Page>(doc.pages, (page) => {
+      if (!page?.isValid) return;
+      forEachCollectionItem<PageItem>(page.pageItems, (item) => {
+        if (item?.isValid && isStyleTagItem(item)) {
+          items.push(item);
+        }
+      });
+    });
+  }
 
   for (let i = items.length - 1; i >= 0; i--) {
     try {
@@ -376,15 +406,21 @@ function deletePreviousTags(layer: Layer): void {
   }
 }
 
-function ensureMemorialLayer(doc: Document): Layer {
+function ensureMemorialLayerName(doc: Document): string {
   const existing = findEditorialLayer(doc);
   if (existing?.isValid) {
-    existing.visible = true;
-    existing.locked = false;
-    return existing;
+    return existing.name;
   }
 
-  return doc.layers.add({ name: LAYER_MEMORIAL_DESCRITIVO });
+  const quoted = quoteExtendScript(LAYER_MEMORIAL_DESCRITIVO);
+  runExtendScript(
+    [
+      "var doc = app.activeDocument;",
+      `var layer = doc.layers.itemByName(${quoted});`,
+      "if (!layer.isValid) { doc.layers.add({ name: " + quoted + " }); }",
+    ].join("\n")
+  );
+  return LAYER_MEMORIAL_DESCRITIVO;
 }
 
 function estimateTagWidth(name: string): number {
@@ -409,90 +445,75 @@ function shiftIfCollision(hit: StyleHit, placed: Array<{ pageIndex: number; boun
   return y;
 }
 
-function createTag(
-  doc: Document,
-  layer: Layer,
+function buildTagScript(
   hit: StyleHit,
-  fill: Color,
-  ink: Swatch | Color,
-  none: Swatch | Color | null,
-  placed: Array<{ pageIndex: number; bounds: number[] }>
-): void {
-  const { Justification } = getInDesignModule() as {
-    Justification?: { CENTER_ALIGN?: number };
-  };
-
+  fillName: string,
+  inkName: string,
+  noneName: string | null
+): { script: string; bounds: number[] } {
   const width = estimateTagWidth(hit.name);
-  const y = shiftIfCollision(hit, placed);
+  const y = hit.y;
   const top = y - TAG_HEIGHT + 3;
   const bottom = y + 4;
   const left = hit.x + 2;
   const frameLeft = left + POINTER_W;
   const right = frameLeft + width;
   const midY = (top + bottom) / 2;
+  const frameName = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
+  const noneLine = noneName
+    ? `var noneSwatch = doc.swatches.itemByName(${quoteExtendScript(noneName)});`
+    : "var noneSwatch = null;";
+  const pageName = hit.page.name || "";
 
-  const frame = hit.page.textFrames?.add();
-  if (!frame) {
-    throw new Error("Não foi possível criar o quadro da tag.");
-  }
+  const script = [
+    "(function () {",
+    "var doc = app.activeDocument;",
+    `var page = doc.pages.item(${hit.pageIndex});`,
+    "try {",
+    `  var namedPage = doc.pages.itemByName(${quoteExtendScript(pageName)});`,
+    "  if (namedPage.isValid) { page = namedPage; }",
+    "} catch (e) {}",
+    `var fill = doc.colors.itemByName(${quoteExtendScript(fillName)});`,
+    `var ink = doc.swatches.itemByName(${quoteExtendScript(inkName)});`,
+    noneLine,
+    "var tf = page.textFrames.add();",
+    `tf.geometricBounds = [${top}, ${frameLeft}, ${bottom}, ${right}];`,
+    `tf.contents = ${quoteExtendScript(hit.name)};`,
+    `tf.name = ${quoteExtendScript(frameName)};`,
+    `tf.label = ${quoteExtendScript(TAG_LABEL)};`,
+    "if (fill.isValid) { tf.fillColor = fill; }",
+    "if (noneSwatch && noneSwatch.isValid) { tf.strokeColor = noneSwatch; }",
+    "tf.strokeWeight = 0;",
+    "try {",
+    "  tf.topLeftCornerOption = CornerOptions.ROUNDED_CORNER;",
+    "  tf.topRightCornerOption = CornerOptions.ROUNDED_CORNER;",
+    "  tf.bottomLeftCornerOption = CornerOptions.ROUNDED_CORNER;",
+    "  tf.bottomRightCornerOption = CornerOptions.ROUNDED_CORNER;",
+    "  tf.topLeftCornerRadius = 3;",
+    "  tf.topRightCornerRadius = 3;",
+    "  tf.bottomLeftCornerRadius = 3;",
+    "  tf.bottomRightCornerRadius = 3;",
+    "} catch (e) {}",
+    "try { tf.textFramePreferences.insetSpacing = [1, 3, 1, 3]; } catch (e) {}",
+    "var t = tf.texts[0];",
+    'try { t.appliedFont = "Minion Pro"; t.fontStyle = "Regular"; } catch (e) {}',
+    "t.pointSize = 12;",
+    "if (ink.isValid) { t.fillColor = ink; }",
+    "try { t.justification = Justification.CENTER_ALIGN; } catch (e) {}",
+    "try {",
+    "  var pointer = page.polygons.add();",
+    `  pointer.name = ${quoteExtendScript(`${frameName}_p`)};`,
+    `  pointer.label = ${quoteExtendScript(TAG_LABEL)};`,
+    "  if (fill.isValid) { pointer.fillColor = fill; }",
+    "  if (noneSwatch && noneSwatch.isValid) { pointer.strokeColor = noneSwatch; }",
+    "  pointer.strokeWeight = 0;",
+    `  pointer.paths[0].entirePath = [[${left}, ${midY}], [${frameLeft + 0.4}, ${top + 3}], [${frameLeft + 0.4}, ${bottom - 3}]];`,
+    "  try { page.groups.add([pointer, tf]); } catch (e2) {}",
+    "} catch (e) {}",
+    "})();",
+  ].join("\n");
 
-  frame.itemLayer = layer;
-  frame.geometricBounds = [top, frameLeft, bottom, right];
-  frame.contents = hit.name;
-  frame.name = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
-  frame.label = TAG_LABEL;
-  frame.fillColor = fill;
-  if (none) {
-    frame.strokeColor = none;
-  }
-  frame.strokeWeight = 0;
-  applyRoundedCorners(frame, 3);
-
-  try {
-    if (frame.textFramePreferences) {
-      frame.textFramePreferences.insetSpacing = [1, 3, 1, 3];
-    }
-  } catch {
-    // ignore
-  }
-
-  const text = getCollectionItem<Text>(frame.texts, 0);
-  if (text) {
-    applyMinionRegular(text);
-    text.fillColor = ink;
-    if (Justification?.CENTER_ALIGN != null) {
-      try {
-        text.justification = Justification.CENTER_ALIGN;
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  try {
-    const pointer = hit.page.polygons?.add();
-    if (pointer) {
-      pointer.itemLayer = layer;
-      pointer.label = TAG_LABEL;
-      pointer.name = `${frame.name}_p`;
-      pointer.fillColor = fill;
-      if (none) pointer.strokeColor = none;
-      pointer.strokeWeight = 0;
-      const path = getCollectionItem<{ entirePath: number[][] }>(pointer.paths, 0);
-      if (path) {
-        path.entirePath = [
-          [left, midY],
-          [frameLeft + 0.4, top + 3],
-          [frameLeft + 0.4, bottom - 3],
-        ];
-      }
-      hit.page.groups?.add([pointer, frame]);
-    }
-  } catch {
-    // tag sem ponteiro ainda é útil
-  }
-
-  placed.push({ pageIndex: hit.pageIndex, bounds: [top, left, bottom, right] });
+  return { script, bounds: [top, left, bottom, right] };
 }
 
 function withPointUnits<T>(doc: Document, fn: () => T): T {
@@ -522,46 +543,76 @@ function withPointUnits<T>(doc: Document, fn: () => T): T {
 }
 
 export function createMemorialStyleTags(): StyleTagsResult {
-  return runInDesignMutation("EDITORIAL AUTOCLOSE — Criar estilos", () => {
+  return runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — Criar estilos", () => {
     const doc = getActiveDocument();
 
     return withPointUnits(doc, () => {
-      const layer = ensureMemorialLayer(doc);
-      layer.visible = true;
-      layer.locked = false;
-      deletePreviousTags(layer);
+      const previousLayerName = doc.activeLayer?.name || "";
+      const layerName = ensureMemorialLayerName(doc);
+      prepareLayerNative(layerName);
+      deletePreviousTags(doc, layerName);
 
-      const hits = scanStories(doc);
-      if (!hits.length) {
-        throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
+      try {
+        const hits = scanStories(doc);
+        if (!hits.length) {
+          throw new Error("Nenhum estilo de parágrafo ou caractere em uso neste documento.");
+        }
+
+        const palette = pickContrastingColors(collectUsedCmyk(doc));
+        ensureProcessColor(doc, COLOR_PARA, palette.paragraph);
+        ensureProcessColor(doc, COLOR_CHAR, palette.character);
+        const inkName = swatchByName(doc, "Black") ? "Black" : swatchByName(doc, "Preto") ? "Preto" : null;
+        const noneName = swatchByName(doc, "None") ? "None" : swatchByName(doc, "Nenhum") ? "Nenhum" : null;
+        if (!inkName) {
+          throw new Error("Swatch Black não encontrado no documento.");
+        }
+
+        const placed: Array<{ pageIndex: number; bounds: number[] }> = [];
+        const scripts: string[] = [];
+        let paragraph = 0;
+        let character = 0;
+
+        for (const hit of hits) {
+          const adjusted: StyleHit = { ...hit, y: shiftIfCollision(hit, placed) };
+          const fillName = hit.kind === "character" ? COLOR_CHAR : COLOR_PARA;
+          const built = buildTagScript(adjusted, fillName, inkName, noneName);
+          scripts.push(built.script);
+          placed.push({ pageIndex: hit.pageIndex, bounds: built.bounds });
+          if (hit.kind === "character") character += 1;
+          else paragraph += 1;
+        }
+
+        runExtendScript(
+          [
+            "var doc = app.activeDocument;",
+            "var vp = doc.viewPreferences;",
+            "var oldH = vp.horizontalMeasurementUnits;",
+            "var oldV = vp.verticalMeasurementUnits;",
+            "vp.horizontalMeasurementUnits = MeasurementUnits.POINTS;",
+            "vp.verticalMeasurementUnits = MeasurementUnits.POINTS;",
+            `var memorialLayer = doc.layers.itemByName(${quoteExtendScript(layerName)});`,
+            "if (memorialLayer.isValid) { memorialLayer.visible = true; memorialLayer.locked = false; doc.activeLayer = memorialLayer; }",
+            "try {",
+            scripts.join("\n"),
+            "} finally {",
+            "vp.horizontalMeasurementUnits = oldH;",
+            "vp.verticalMeasurementUnits = oldV;",
+            "}",
+          ].join("\n"),
+          "EDITORIAL AUTOCLOSE — Criar tags de estilo"
+        );
+
+        return {
+          layerName,
+          paragraph,
+          character,
+          total: paragraph + character,
+        };
+      } finally {
+        if (previousLayerName) {
+          restoreLayerNative(previousLayerName);
+        }
       }
-
-      const palette = pickContrastingColors(collectUsedCmyk(doc));
-      const paraColor = ensureProcessColor(doc, COLOR_PARA, palette.paragraph);
-      const charColor = ensureProcessColor(doc, COLOR_CHAR, palette.character);
-      const black = swatchByName(doc, "Black") || swatchByName(doc, "Preto");
-      const none = swatchByName(doc, "None") || swatchByName(doc, "Nenhum");
-      if (!black) {
-        throw new Error("Swatch Black não encontrado no documento.");
-      }
-
-      const placed: Array<{ pageIndex: number; bounds: number[] }> = [];
-      let paragraph = 0;
-      let character = 0;
-
-      for (const hit of hits) {
-        const fill = hit.kind === "character" ? charColor : paraColor;
-        createTag(doc, layer, hit, fill, black, none, placed);
-        if (hit.kind === "character") character += 1;
-        else paragraph += 1;
-      }
-
-      return {
-        layerName: layer.name,
-        paragraph,
-        character,
-        total: paragraph + character,
-      };
     });
   });
 }

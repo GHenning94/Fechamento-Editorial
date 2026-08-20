@@ -3,8 +3,8 @@ const PANEL_HTML = `
   <header class="panel-header">
     <div class="panel-header-row">
       <div class="panel-brand">
-        <h1 class="panel-title">EDITORIAL AUTOCLOSE</h1>
-        <p class="panel-subtitle">Fechamento editorial automatizado</p>
+        <div class="panel-title">EDITORIAL AUTOCLOSE</div>
+        <div class="panel-subtitle">Fechamento editorial automatizado</div>
       </div>
       <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">
         Resetar licença
@@ -24,7 +24,7 @@ const PANEL_HTML = `
 
   <section class="actions">
     <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
-    <div id="btn-create-styles" class="btn btn-secondary" role="button" tabindex="0">Criar Estilos</div>
+    <div id="btn-create-styles" class="btn btn-create-styles" role="button" tabindex="0">Criar Estilos</div>
     <div id="btn-download-report" class="btn btn-download-report hidden" role="button" tabindex="0">
       Baixar relatório
     </div>

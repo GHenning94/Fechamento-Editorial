@@ -101,7 +101,7 @@ declare module "indesign" {
     userName: string;
     selection: unknown;
     doScript?(
-      fn: () => unknown,
+      script: (() => unknown) | string,
       language?: unknown,
       args?: unknown[],
       undoMode?: unknown,
@@ -156,6 +156,7 @@ declare module "indesign" {
     viewPreferences?: ViewPreferences;
     textFrames?: TextFrames;
     swatches?: Swatches;
+    activeLayer?: Layer;
     save(file?: File | string): void;
     saveACopy(file: File | string): void;
     exportFile(
