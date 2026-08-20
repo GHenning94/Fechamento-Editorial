@@ -1,6 +1,6 @@
 {
   "name": "editorial-autoclose",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Plugin UXP para fechamento editorial automático no Adobe InDesign",
   "private": true,
   "scripts": {

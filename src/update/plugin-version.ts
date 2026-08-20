@@ -1,2 +1,2 @@
 /** Versão instalada neste build. Gerada a partir do arquivo VERSION. */
-export const PLUGIN_VERSION = "1.0.1";
+export const PLUGIN_VERSION = "1.0.0";

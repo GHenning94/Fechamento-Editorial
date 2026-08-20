@@ -11,4 +11,4 @@ export const LICENSE_ACTIVATION_URL: string = "";
  * Exibe botão "Resetar licença" no painel (somente para testes).
  * Defina false antes de distribuir o plugin aos clientes.
  */
-export const LICENSE_DEV_ALLOW_RESET = true;
+export const LICENSE_DEV_ALLOW_RESET = false;
