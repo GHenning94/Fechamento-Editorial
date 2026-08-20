@@ -1,5 +1,5 @@
 import { PLUGIN_VERSION } from "./plugin-version";
-import { GITHUB_SOURCE_BRANCH, githubRawUrl } from "./update-config";
+import { GITHUB_SOURCE_BRANCH, UPDATE_DEV_FORCE_BANNER, githubRawUrl } from "./update-config";
 
 export interface PluginUpdateInfo {
   version: string;
@@ -66,6 +66,10 @@ export async function checkForPluginUpdate(): Promise<PluginUpdateInfo | null> {
       (await fetchText(githubRawUrl(GITHUB_SOURCE_BRANCH, "VERSION"))) ||
       (await fetchJsonVersion(githubRawUrl(GITHUB_SOURCE_BRANCH, "update.json")));
 
+    if (UPDATE_DEV_FORCE_BANNER) {
+      return { version: remoteVersion || "99.0.0" };
+    }
+
     if (!remoteVersion || !isRemoteVersionNewer(remoteVersion)) {
       return null;
     }
@@ -76,6 +80,9 @@ export async function checkForPluginUpdate(): Promise<PluginUpdateInfo | null> {
 
     return { version: remoteVersion };
   } catch {
+    if (UPDATE_DEV_FORCE_BANNER) {
+      return { version: "99.0.0" };
+    }
     return null;
   }
 }
