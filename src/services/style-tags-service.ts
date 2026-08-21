@@ -12,7 +12,6 @@ const PARA_CMYK = [0, 28, 52, 0];
 const CHAR_CMYK = [52, 18, 0, 0];
 const TAG_HEIGHT = 18;
 const TAG_PADDING_X = 8;
-const POINTER_W = 5;
 const TAG_BATCH = 6;
 
 export interface StyleTagsResult {
@@ -229,7 +228,7 @@ function shiftIfCollision(hit: StyleHit, placed: Array<{ pageKey: string; bounds
     const top = y - TAG_HEIGHT + 3;
     const bottom = y + 4;
     const left = hit.x + 2;
-    const right = left + POINTER_W + estimateTagWidth(hit.name);
+    const right = left + estimateTagWidth(hit.name);
     const collides = placed.some((item) => {
       if (item.pageKey !== hit.pageKey) return false;
       const [t, l, b, r] = item.bounds;
@@ -657,7 +656,6 @@ function placeTag(
   hit: StyleHit,
   top: number,
   left: number,
-  frameLeft: number,
   bottom: number,
   right: number,
   fill: Color | null,
@@ -667,7 +665,7 @@ function placeTag(
   const frame = page.textFrames?.add();
   if (!frame?.isValid) return;
 
-  frame.geometricBounds = [top, frameLeft, bottom, right];
+  frame.geometricBounds = [top, left, bottom, right];
   frame.label = TAG_LABEL;
   frame.name = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
   if (fill) {
@@ -689,38 +687,6 @@ function placeTag(
   frame.contents = hit.name;
   lockTagText(frame, paraStyle, doc);
   fitTagFrame(frame);
-
-  const bounds = frame.geometricBounds;
-  const finalTop = bounds?.[0] ?? top;
-  const finalBottom = bounds?.[2] ?? bottom;
-  const finalRight = bounds?.[3] ?? right;
-  const midY = (finalTop + finalBottom) / 2;
-  if (![left, midY, frameLeft, finalTop, finalBottom, finalRight].every(Number.isFinite)) return;
-
-  try {
-    const pointer = page.polygons?.add();
-    if (!pointer?.isValid) return;
-    pointer.label = TAG_LABEL;
-    pointer.name = `${frame.name}_p`;
-    if (fill) {
-      try {
-        pointer.fillColor = fill;
-      } catch {
-        // ignore
-      }
-    }
-    applyNoStroke(pointer, none);
-    const path = getCollectionItem<{ entirePath: number[][] }>(pointer.paths, 0);
-    if (path) {
-      path.entirePath = [
-        [left, midY],
-        [frameLeft + 0.4, finalTop + 3],
-        [frameLeft + 0.4, finalBottom - 3],
-      ];
-    }
-  } catch {
-    // tag sem ponteiro ainda serve
-  }
 }
 
 export async function createMemorialStyleTags(
@@ -768,8 +734,7 @@ export async function createMemorialStyleTags(
       const top = y - TAG_HEIGHT + 3;
       const bottom = y + 4;
       const left = hit.x + 2;
-      const frameLeft = left + POINTER_W;
-      const right = frameLeft + width;
+      const right = left + width;
       placed.push({ pageKey: hit.pageKey, bounds: [top, left, bottom, right] });
 
       placeTag(
@@ -778,7 +743,6 @@ export async function createMemorialStyleTags(
         hit,
         top,
         left,
-        frameLeft,
         bottom,
         right,
         hit.kind === "character" ? charFill : paraFill,
