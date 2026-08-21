@@ -383,26 +383,53 @@ function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
   }
 }
 
+function unlockLayer(layer: Layer): void {
+  try {
+    layer.visible = true;
+    layer.locked = false;
+  } catch {
+    // ignore
+  }
+}
+
+function layerByExactName(doc: Document, name: string): Layer | null {
+  try {
+    const layer = doc.layers.itemByName(name);
+    return layer?.isValid ? layer : null;
+  } catch {
+    return null;
+  }
+}
+
 function ensureMemorialLayer(doc: Document): string {
+  const target = LAYER_MEMORIAL_DESCRITIVO;
+  const exact = layerByExactName(doc, target);
+  if (exact) {
+    unlockLayer(exact);
+    activateLayerByIndex(doc, target);
+    return target;
+  }
+
   const existing = findEditorialLayer(doc);
   if (existing?.isValid) {
+    unlockLayer(existing);
     try {
-      existing.visible = true;
-      existing.locked = false;
+      existing.name = target;
+      activateLayerByIndex(doc, target);
+      return target;
     } catch {
-      // ignore
+      activateLayerByIndex(doc, existing.name);
+      return existing.name;
     }
-    activateLayerByIndex(doc, existing.name);
-    return existing.name;
   }
 
   try {
-    doc.layers.add({ name: LAYER_MEMORIAL_DESCRITIVO });
+    doc.layers.add({ name: target });
   } catch {
     // pode já existir
   }
-  activateLayerByIndex(doc, LAYER_MEMORIAL_DESCRITIVO);
-  return LAYER_MEMORIAL_DESCRITIVO;
+  activateLayerByIndex(doc, target);
+  return target;
 }
 
 function activateLayerByIndex(doc: Document, name: string): void {

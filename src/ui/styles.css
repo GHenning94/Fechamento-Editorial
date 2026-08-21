@@ -14,10 +14,11 @@
   --success: #5ecf8e;
   --warning: #e6c35c;
   --error: #e87474;
-  --danger-border: #a84a4a;
-  --danger-text: #f0c8c8;
-  --styles-border: #4a74b0;
-  --styles-text: #c5daf5;
+  --close-border: #3d8f5f;
+  --close-text: #b8ebcd;
+  --styles-fill: #6b9ae0;
+  --styles-fill-hover: #7eabeb;
+  --styles-fill-border: #4a74b0;
   --radius: 8px;
   --radius-sm: 6px;
   --space: 12px;
@@ -279,28 +280,26 @@ button::-moz-focus-inner {
   background-color: var(--surface-hover) !important;
 }
 
-.btn-danger {
+.btn-close-material {
   background-color: var(--surface) !important;
-  color: var(--danger-text) !important;
-  border-color: var(--danger-border) !important;
+  color: var(--close-text) !important;
+  border-color: var(--close-border) !important;
 }
 
-.btn-danger:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #2e1e1e !important;
-  border-color: #c45a5a !important;
+.btn-close-material:hover:not(.is-disabled):not([aria-disabled="true"]) {
+  background-color: #1a3324 !important;
+  border-color: var(--success) !important;
   color: #ffffff !important;
 }
 
 .btn-create-styles {
-  background-color: var(--surface) !important;
-  color: var(--styles-text) !important;
-  border-color: var(--styles-border) !important;
+  background-color: var(--styles-fill) !important;
+  color: #101820 !important;
+  border-color: var(--styles-fill-border) !important;
 }
 
 .btn-create-styles:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #1c2838 !important;
-  border-color: #6d9adf !important;
-  color: #ffffff !important;
+  background-color: var(--styles-fill-hover) !important;
 }
 
 .counters {

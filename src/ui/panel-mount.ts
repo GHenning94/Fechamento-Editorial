@@ -23,12 +23,12 @@ const PANEL_HTML = `
   </section>
 
   <section class="actions">
-    <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
     <div id="btn-create-styles" class="btn btn-create-styles" role="button" tabindex="0">Criar Estilos</div>
+    <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar checklist</div>
     <div id="btn-download-report" class="btn btn-download-report hidden" role="button" tabindex="0">
       Baixar relatório
     </div>
-    <div id="btn-close" class="btn btn-danger" role="button" tabindex="0">Fechar material</div>
+    <div id="btn-close" class="btn btn-close-material" role="button" tabindex="0">Fechar material</div>
   </section>
 
   <section class="counters">

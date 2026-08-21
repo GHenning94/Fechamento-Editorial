@@ -1,7 +1,7 @@
 import type { Document, PageItem } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult } from "../models/validation-result";
-import { LAYER_MEMORIAL, VALIDATOR_IDS } from "../utils/constants";
+import { LAYER_MEMORIAL_DESCRITIVO, VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import { findEditorialLayer } from "../utils/editorial-layer";
 
@@ -16,7 +16,7 @@ export class MemorialDescritivoValidator extends BaseValidator {
         return createResult(
           this.id,
           this.name,
-          [{ message: "Layer sem conteúdo", details: `Layer ${LAYER_MEMORIAL} inexistente` }],
+          [{ message: "Layer sem conteúdo", details: `Layer ${LAYER_MEMORIAL_DESCRITIVO} inexistente` }],
           "error"
         );
       }

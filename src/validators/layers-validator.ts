@@ -4,7 +4,7 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import {
   LAYER_GUIAS_ALT,
   LAYER_GUIAS_DELETAR,
-  LAYER_MEMORIAL,
+  LAYER_MEMORIAL_DESCRITIVO,
   VALIDATOR_IDS,
 } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
@@ -39,8 +39,8 @@ export class LayersObrigatoriasValidator extends BaseValidator {
 
       if (!findEditorialLayer(doc)) {
         issues.push({
-          message: `Layer "${LAYER_MEMORIAL}" inexistente`,
-          details: "Crie uma layer ESTILOS ou MEMORIAL DESCRITIVO no documento.",
+          message: `Layer "${LAYER_MEMORIAL_DESCRITIVO}" inexistente`,
+          details: `Crie a layer "${LAYER_MEMORIAL_DESCRITIVO}" no documento.`,
         });
       }
 
@@ -64,6 +64,15 @@ export class LayersNomenclaturaValidator extends BaseValidator {
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
+
+      const editorial = findEditorialLayer(doc);
+      if (editorial && !hasExactLayer(doc, LAYER_MEMORIAL_DESCRITIVO)) {
+        issues.push({
+          message: "Nomenclatura incorreta de layer",
+          object: editorial.name,
+          details: `Renomeie "${editorial.name}" para "${LAYER_MEMORIAL_DESCRITIVO}".`,
+        });
+      }
 
       const guias = findLayerByNormalizedKeys(doc, [LAYER_GUIAS_DELETAR, LAYER_GUIAS_ALT]);
       if (guias && !hasExactLayer(doc, LAYER_GUIAS_DELETAR)) {
