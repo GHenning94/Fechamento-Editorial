@@ -150,6 +150,7 @@ declare module "indesign" {
     pages: Pages;
     stories: Stories;
     spreads: Spreads;
+    masterSpreads?: Spreads;
     preflightOptions: PreflightOption;
     preflightProfiles: PreflightProfiles;
     documentPreferences: DocumentPreferences;
@@ -225,6 +226,7 @@ declare module "indesign" {
     appliedParagraphStyle?: ParagraphStyle;
     overflows?: boolean;
     parent?: PageItem | Spread;
+    parentStory?: Story;
     graphics?: Graphics;
     images?: Images;
     remove?(): void;
@@ -254,6 +256,8 @@ declare module "indesign" {
     insetSpacing?: number | number[];
     autoSizingType?: number;
     autoSizingReferencePoint?: number;
+    useMinimumHeightForAutoSizing?: boolean;
+    useMinimumWidthForAutoSizing?: boolean;
   }
 
   export interface TextFrames {
@@ -493,6 +497,8 @@ declare module "indesign" {
     horizontalOffset?: number;
     baseline?: number;
     parentTextFrames?: PageItems | PageItem[];
+    hyphenation?: boolean;
+    noBreak?: boolean;
     isValid: boolean;
   }
 

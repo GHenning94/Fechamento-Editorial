@@ -10,8 +10,8 @@ const COLOR_PARA = "EAC_TAG_PARAGRAFO";
 const COLOR_CHAR = "EAC_TAG_CARACTERE";
 const PARA_CMYK = [0, 28, 52, 0];
 const CHAR_CMYK = [52, 18, 0, 0];
-const TAG_HEIGHT = 16;
-const TAG_PADDING_X = 5;
+const TAG_HEIGHT = 18;
+const TAG_PADDING_X = 8;
 const POINTER_W = 5;
 const TAG_BATCH = 6;
 
@@ -29,6 +29,8 @@ interface StyleHit {
   kind: StyleKind;
   pageIndex: number;
   pageName: string;
+  pageKey: string;
+  onMaster: boolean;
   x: number;
   y: number;
 }
@@ -73,13 +75,17 @@ function isOnEditorialLayer(item: { itemLayer?: { isValid?: boolean; name?: stri
 }
 
 function isMasterPage(page: Page | null): boolean {
-  if (!page?.isValid) return true;
+  if (!page?.isValid) return false;
   try {
     const parent = page.parent as { constructor?: { name?: string } } | undefined;
     return /master/i.test(parent?.constructor?.name || "");
   } catch {
-    return true;
+    return false;
   }
+}
+
+function pageKeyOf(page: Page, onMaster: boolean, pageIndex: number, pageName: string): string {
+  return onMaster ? `m:${pageName || page.name || pageIndex}` : `d:${pageIndex}`;
 }
 
 function getPageIndex(page: Page): number {
@@ -113,7 +119,7 @@ function getAnchorFromText(text: Text | null): Omit<StyleHit, "name" | "kind"> |
     if (!frame?.isValid || isOnEditorialLayer(frame) || isTagRelated(frame)) return null;
 
     const page = frame.parentPage;
-    if (!page || typeof page === "number" || !page.isValid || isMasterPage(page)) {
+    if (!page || typeof page === "number" || !page.isValid) {
       return null;
     }
 
@@ -121,7 +127,17 @@ function getAnchorFromText(text: Text | null): Omit<StyleHit, "name" | "kind"> |
     const y = Number(character.baseline);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-    return { pageIndex: getPageIndex(page), pageName: page.name || "", x, y };
+    const onMaster = isMasterPage(page);
+    const pageIndex = getPageIndex(page);
+    const pageName = page.name || "";
+    return {
+      pageIndex,
+      pageName,
+      pageKey: pageKeyOf(page, onMaster, pageIndex, pageName),
+      onMaster,
+      x,
+      y,
+    };
   } catch {
     return null;
   }
@@ -162,23 +178,52 @@ function scanCharacterRanges(collection: unknown, hits: Map<string, StyleHit>): 
   });
 }
 
+function scanTextFrameStory(frame: PageItem, hits: Map<string, StyleHit>): void {
+  if (!frame?.isValid || isOnEditorialLayer(frame) || isTagRelated(frame)) return;
+  try {
+    const story = frame.parentStory;
+    if (!story?.isValid) return;
+    scanParagraphs(story.paragraphs, hits);
+    scanCharacterRanges(story.textStyleRanges, hits);
+  } catch {
+    // ignore
+  }
+}
+
+function scanSpreadPages(spreads: unknown, hits: Map<string, StyleHit>): void {
+  forEachCollectionItem<{ pages?: unknown; isValid?: boolean }>(spreads, (spread) => {
+    if (!spread?.isValid) return;
+    forEachCollectionItem<Page>(spread.pages, (page) => {
+      if (!page?.isValid) return;
+      forEachCollectionItem<PageItem>(page.allPageItems || page.pageItems, (item) => {
+        if (!item?.isValid) return;
+        try {
+          if (item.parentStory) scanTextFrameStory(item, hits);
+        } catch {
+          // ignore
+        }
+      });
+    });
+  });
+}
+
 function scanStories(doc: Document): StyleHit[] {
   const hits = new Map<string, StyleHit>();
-
+  scanSpreadPages(doc.masterSpreads, hits);
+  scanSpreadPages(doc.spreads, hits);
   forEachCollectionItem<Story>(doc.stories, (story) => {
     if (!story?.isValid) return;
     scanParagraphs(story.paragraphs, hits);
     scanCharacterRanges(story.textStyleRanges, hits);
   });
-
   return Array.from(hits.values());
 }
 
 function estimateTagWidth(name: string): number {
-  return Math.max(36, name.length * 6.2 + TAG_PADDING_X * 2);
+  return Math.max(48, name.length * 8.4 + TAG_PADDING_X * 2 + 8);
 }
 
-function shiftIfCollision(hit: StyleHit, placed: Array<{ pageIndex: number; bounds: number[] }>): number {
+function shiftIfCollision(hit: StyleHit, placed: Array<{ pageKey: string; bounds: number[] }>): number {
   let y = hit.y;
   for (let guard = 0; guard < 12; guard++) {
     const top = y - TAG_HEIGHT + 3;
@@ -186,7 +231,7 @@ function shiftIfCollision(hit: StyleHit, placed: Array<{ pageIndex: number; boun
     const left = hit.x + 2;
     const right = left + POINTER_W + estimateTagWidth(hit.name);
     const collides = placed.some((item) => {
-      if (item.pageIndex !== hit.pageIndex) return false;
+      if (item.pageKey !== hit.pageKey) return false;
       const [t, l, b, r] = item.bounds;
       return !(right < l || left > r || bottom < t || top > b);
     });
@@ -324,6 +369,11 @@ function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
       // ignore
     }
   }
+  try {
+    style.hyphenation = false;
+  } catch {
+    // ignore
+  }
   const { Justification } = getInDesignModule() as { Justification?: { CENTER_ALIGN?: number } };
   if (Justification?.CENTER_ALIGN != null) {
     try {
@@ -404,13 +454,18 @@ function groupContainsTag(item: PageItem): boolean {
 function deletePreviousTags(doc: Document): void {
   const doomed: PageItem[] = [];
 
-  forEachCollectionItem<{ pageItems?: unknown; isValid?: boolean }>(doc.spreads, (spread) => {
-    if (!spread?.isValid) return;
-    forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
-      if (!item?.isValid) return;
-      if (isDirectTag(item) || groupContainsTag(item)) doomed.push(item);
+  const collectFromSpreads = (spreads: unknown): void => {
+    forEachCollectionItem<{ pageItems?: unknown; isValid?: boolean }>(spreads, (spread) => {
+      if (!spread?.isValid) return;
+      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
+        if (!item?.isValid) return;
+        if (isDirectTag(item) || groupContainsTag(item)) doomed.push(item);
+      });
     });
-  });
+  };
+
+  collectFromSpreads(doc.masterSpreads);
+  collectFromSpreads(doc.spreads);
 
   for (let i = doomed.length - 1; i >= 0; i--) {
     try {
@@ -421,7 +476,25 @@ function deletePreviousTags(doc: Document): void {
   }
 }
 
+function resolveMasterPage(doc: Document, hit: StyleHit): Page | null {
+  let found: Page | null = null;
+  forEachCollectionItem<{ pages?: unknown; isValid?: boolean }>(doc.masterSpreads, (spread) => {
+    if (found || !spread?.isValid) return;
+    forEachCollectionItem<Page>(spread.pages, (page) => {
+      if (found || !page?.isValid) return;
+      if (hit.pageName && page.name === hit.pageName) {
+        found = page;
+      }
+    });
+  });
+  return found;
+}
+
 function resolvePage(doc: Document, hit: StyleHit): Page | null {
+  if (hit.onMaster) {
+    const masterPage = resolveMasterPage(doc, hit);
+    if (masterPage?.isValid) return masterPage;
+  }
   try {
     if (hit.pageName) {
       const named = doc.pages.itemByName?.(hit.pageName);
@@ -471,6 +544,113 @@ function applyRoundedCorners(item: PageItem): void {
   }
 }
 
+function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Document): void {
+  const text = getCollectionItem<Text>(frame.texts, 0);
+  if (!text) return;
+
+  if (paraStyle) {
+    try {
+      text.appliedParagraphStyle = paraStyle;
+    } catch {
+      // ignore
+    }
+  }
+
+  const noneChar =
+    (() => {
+      try {
+        const style = doc.characterStyles.itemByName("[None]");
+        if (style?.isValid) return style;
+      } catch {
+        // ignore
+      }
+      try {
+        const style = doc.characterStyles.itemByName("[Nenhum]");
+        if (style?.isValid) return style;
+      } catch {
+        // ignore
+      }
+      return null;
+    })();
+  if (noneChar) {
+    try {
+      text.appliedCharacterStyle = noneChar;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    text.hyphenation = false;
+  } catch {
+    // ignore
+  }
+  try {
+    text.noBreak = true;
+  } catch {
+    // ignore
+  }
+  try {
+    text.appliedFont = "Minion Pro";
+  } catch {
+    // ignore
+  }
+  try {
+    text.fontStyle = "Regular";
+  } catch {
+    // ignore
+  }
+  try {
+    text.pointSize = 12;
+  } catch {
+    // ignore
+  }
+  const ink = colorByName(doc, "EAC_TAG_INK") || swatchByName(doc, ["Black", "Preto"]);
+  if (ink) {
+    try {
+      text.fillColor = ink;
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function fitTagFrame(frame: PageItem): void {
+  const prefs = frame.textFramePreferences;
+  const mod = getInDesignModule() as {
+    AutoSizingTypeEnum?: { WIDTH_ONLY?: number; HEIGHT_AND_WIDTH?: number };
+    AutoSizingReferencePointEnum?: { LEFT_CENTER_POINT?: number; TOP_LEFT_POINT?: number };
+  };
+
+  try {
+    if (prefs) {
+      const widthOnly = mod.AutoSizingTypeEnum?.WIDTH_ONLY ?? mod.AutoSizingTypeEnum?.HEIGHT_AND_WIDTH;
+      const anchor = mod.AutoSizingReferencePointEnum?.LEFT_CENTER_POINT ?? mod.AutoSizingReferencePointEnum?.TOP_LEFT_POINT;
+      if (anchor != null) prefs.autoSizingReferencePoint = anchor;
+      if (widthOnly != null) prefs.autoSizingType = widthOnly;
+    }
+  } catch {
+    // fallback abaixo
+  }
+
+  try {
+    for (let i = 0; i < 30 && frame.overflows === true; i++) {
+      const bounds = frame.geometricBounds;
+      if (!bounds || bounds.length < 4) break;
+      bounds[3] += 12;
+      frame.geometricBounds = bounds;
+    }
+    for (let i = 0; i < 8 && frame.overflows === true; i++) {
+      const bounds = frame.geometricBounds;
+      if (!bounds || bounds.length < 4) break;
+      bounds[2] += 3;
+      frame.geometricBounds = bounds;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function placeTag(
   doc: Document,
   page: Page,
@@ -501,23 +681,21 @@ function placeTag(
   applyRoundedCorners(frame);
   try {
     if (frame.textFramePreferences) {
-      frame.textFramePreferences.insetSpacing = [1, 3, 1, 3];
+      frame.textFramePreferences.insetSpacing = [1.5, 4, 1.5, 4];
     }
   } catch {
     // ignore
   }
   frame.contents = hit.name;
-  if (paraStyle) {
-    try {
-      const text = getCollectionItem<Text>(frame.texts, 0);
-      if (text) text.appliedParagraphStyle = paraStyle;
-    } catch {
-      // ignore
-    }
-  }
+  lockTagText(frame, paraStyle, doc);
+  fitTagFrame(frame);
 
-  const midY = (top + bottom) / 2;
-  if (![left, midY, frameLeft, top, bottom].every(Number.isFinite)) return;
+  const bounds = frame.geometricBounds;
+  const finalTop = bounds?.[0] ?? top;
+  const finalBottom = bounds?.[2] ?? bottom;
+  const finalRight = bounds?.[3] ?? right;
+  const midY = (finalTop + finalBottom) / 2;
+  if (![left, midY, frameLeft, finalTop, finalBottom, finalRight].every(Number.isFinite)) return;
 
   try {
     const pointer = page.polygons?.add();
@@ -536,8 +714,8 @@ function placeTag(
     if (path) {
       path.entirePath = [
         [left, midY],
-        [frameLeft + 0.4, top + 3],
-        [frameLeft + 0.4, bottom - 3],
+        [frameLeft + 0.4, finalTop + 3],
+        [frameLeft + 0.4, finalBottom - 3],
       ];
     }
   } catch {
@@ -576,7 +754,7 @@ export async function createMemorialStyleTags(
     onProgress?.(40, "Criando tags…");
     await yieldToHost(20);
 
-    const placed: Array<{ pageIndex: number; bounds: number[] }> = [];
+    const placed: Array<{ pageKey: string; bounds: number[] }> = [];
     let paragraph = 0;
     let character = 0;
 
@@ -592,7 +770,7 @@ export async function createMemorialStyleTags(
       const left = hit.x + 2;
       const frameLeft = left + POINTER_W;
       const right = frameLeft + width;
-      placed.push({ pageIndex: hit.pageIndex, bounds: [top, left, bottom, right] });
+      placed.push({ pageKey: hit.pageKey, bounds: [top, left, bottom, right] });
 
       placeTag(
         doc,
