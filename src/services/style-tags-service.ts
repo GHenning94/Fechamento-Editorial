@@ -450,15 +450,45 @@ function groupContainsTag(item: PageItem): boolean {
   }
 }
 
+function collectTagItems(collection: unknown, doomed: PageItem[]): void {
+  forEachCollectionItem<PageItem>(collection, (item) => {
+    if (!item?.isValid) return;
+    if (isDirectTag(item) || groupContainsTag(item)) doomed.push(item);
+  });
+}
+
+function unlockForRemoval(item: PageItem): void {
+  try {
+    const layer = item.itemLayer;
+    if (layer?.isValid) layer.locked = false;
+  } catch {
+    // ignore
+  }
+  try {
+    (item as PageItem & { locked?: boolean }).locked = false;
+  } catch {
+    // ignore
+  }
+}
+
 function deletePreviousTags(doc: Document): void {
   const doomed: PageItem[] = [];
 
   const collectFromSpreads = (spreads: unknown): void => {
-    forEachCollectionItem<{ pageItems?: unknown; isValid?: boolean }>(spreads, (spread) => {
+    forEachCollectionItem<{
+      pageItems?: unknown;
+      allPageItems?: unknown;
+      pages?: unknown;
+      isValid?: boolean;
+    }>(spreads, (spread) => {
       if (!spread?.isValid) return;
-      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
-        if (!item?.isValid) return;
-        if (isDirectTag(item) || groupContainsTag(item)) doomed.push(item);
+      collectTagItems(spread.allPageItems, doomed);
+      collectTagItems(spread.pageItems, doomed);
+      forEachCollectionItem<Page>(spread.pages, (page) => {
+        if (!page?.isValid) return;
+        collectTagItems(page.allPageItems, doomed);
+        collectTagItems(page.pageItems, doomed);
+        collectTagItems(page.polygons, doomed);
       });
     });
   };
@@ -466,9 +496,22 @@ function deletePreviousTags(doc: Document): void {
   collectFromSpreads(doc.masterSpreads);
   collectFromSpreads(doc.spreads);
 
-  for (let i = doomed.length - 1; i >= 0; i--) {
+  const editorial = findEditorialLayer(doc);
+  if (editorial?.isValid) {
     try {
-      doomed[i].remove?.();
+      editorial.visible = true;
+      editorial.locked = false;
+    } catch {
+      // ignore
+    }
+    collectTagItems(editorial.pageItems, doomed);
+  }
+
+  for (let i = doomed.length - 1; i >= 0; i--) {
+    const item = doomed[i];
+    unlockForRemoval(item);
+    try {
+      item.remove?.();
     } catch {
       // ignore
     }
@@ -705,9 +748,8 @@ export async function createMemorialStyleTags(
 
     onProgress?.(25, "Removendo tags anteriores…");
     await yieldToHost(20);
-    deletePreviousTags(doc);
-
     const layerName = ensureMemorialLayer(doc);
+    deletePreviousTags(doc);
     ensureProcessColor(doc, "EAC_TAG_INK", [0, 0, 0, 100]);
     ensureProcessColor(doc, COLOR_PARA, PARA_CMYK);
     ensureProcessColor(doc, COLOR_CHAR, CHAR_CMYK);
