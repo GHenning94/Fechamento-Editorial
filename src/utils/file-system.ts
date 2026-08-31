@@ -19,7 +19,7 @@ interface FileSystemEntry {
   getEntry(name: string): Promise<FileSystemEntry>;
   createFolder(name: string): Promise<FileSystemFolder>;
   createFile?(name: string, options?: { overwrite?: boolean }): Promise<FileSystemEntry>;
-  write(content: string, options?: { format?: string }): Promise<void>;
+  write(content: string | ArrayBuffer | Uint8Array, options?: { format?: string }): Promise<void>;
   copyTo(destFolder: FileSystemFolder, options?: { overwrite?: boolean }): Promise<FileSystemEntry>;
   rename(newName: string): Promise<void>;
 }
@@ -30,7 +30,7 @@ interface FileSystemFolder extends FileSystemEntry {
 }
 
 const fs = uxp.storage.localFileSystem;
-const formats = uxp.storage.formats;
+const formats = uxp.storage.formats as { utf8: string; binary?: string };
 
 export class PackageCancelledError extends Error {
   constructor(message = "Operação cancelada pelo usuário.") {
@@ -105,6 +105,36 @@ export async function writeTextFile(filePath: string, content: string): Promise<
   await file.write(content, { format: formats.utf8 });
 }
 
+export async function writeBinaryFile(filePath: string, content: Uint8Array): Promise<void> {
+  const normalized = filePath.replace(/\\/g, "/");
+  const lastSlash = normalized.lastIndexOf("/");
+  if (lastSlash === -1) {
+    throw new Error(`Caminho de arquivo inválido: ${filePath}`);
+  }
+
+  const dirPath = normalized.substring(0, lastSlash);
+  const fileName = normalized.substring(lastSlash + 1);
+  const folder = (await fs.getEntryWithUrl(toFileUrl(dirPath))) as FileSystemFolder;
+
+  let file: FileSystemEntry;
+  try {
+    file = await folder.getEntry(fileName);
+  } catch {
+    if (typeof folder.createFile === "function") {
+      file = await folder.createFile(fileName, { overwrite: true });
+    } else {
+      throw new Error(`Não foi possível criar o arquivo: ${fileName}`);
+    }
+  }
+
+  if (formats.binary) {
+    await file.write(content, { format: formats.binary });
+    return;
+  }
+
+  await file.write(content);
+}
+
 export async function copyFileToFolder(sourcePath: string, destFolderPath: string, fileName: string): Promise<string> {
   const source = await fs.getEntryWithUrl(toFileUrl(sourcePath));
   const destFolder = (await fs.getEntryWithUrl(toFileUrl(destFolderPath))) as FileSystemFolder;
@@ -130,7 +160,7 @@ export function sanitizeFileName(name: string): string {
 
 export async function promptChecklistReportFile(documentName: string): Promise<string | null> {
   const baseName = sanitizeFileName(documentName.replace(/\.indd$/i, "") || "documento");
-  const suggestedName = `Relatorio_Checklist_${baseName}.html`;
+  const suggestedName = `Relatorio_Checklist_${baseName}.pdf`;
 
   const file = await fs.getFileForSaving?.(suggestedName);
   if (!file) {

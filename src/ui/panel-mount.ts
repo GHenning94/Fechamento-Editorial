@@ -6,8 +6,11 @@ const PANEL_HTML = `
         <div class="panel-title">EDITORIAL AUTOCLOSE</div>
         <div class="panel-subtitle">Fechamento editorial automatizado</div>
       </div>
-      <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">
-        Resetar licença
+      <div class="panel-header-aside">
+        <span class="panel-beta-tag">Beta</span>
+        <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">
+          Resetar licença
+        </div>
       </div>
     </div>
   </header>

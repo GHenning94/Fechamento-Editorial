@@ -14,7 +14,7 @@ export class PackageService {
 
     return {
       packageRoot,
-      reportPath: joinPath(packageRoot, "Relatorio_Fechamento.html"),
+      reportPath: joinPath(packageRoot, "Relatorio_Fechamento.pdf"),
     };
   }
 

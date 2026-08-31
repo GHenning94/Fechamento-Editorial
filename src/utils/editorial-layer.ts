@@ -22,6 +22,10 @@ export function isEditorialLayerName(name: string): boolean {
   return EDITORIAL_LAYER_NAMES.has(normalizeLayerName(name));
 }
 
+export function isRendimentoLayerName(name: string): boolean {
+  return normalizeLayerName(name) === "rendimento";
+}
+
 /** Localiza a layer de estilos/memorial sem depender de visibilidade ou caixa. */
 export function findEditorialLayer(doc: Document): Layer | null {
   let exact: Layer | null = null;

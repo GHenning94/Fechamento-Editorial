@@ -1,7 +1,7 @@
 import type { CharacterStyle, Color, Document, Layer, Page, PageItem, ParagraphStyle, Story, Swatch, Text } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
-import { findEditorialLayer, isEditorialLayerName } from "../utils/editorial-layer";
+import { findEditorialLayer, isEditorialLayerName, isRendimentoLayerName } from "../utils/editorial-layer";
 import { getActiveDocument, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
 
@@ -73,6 +73,19 @@ function isOnEditorialLayer(item: { itemLayer?: { isValid?: boolean; name?: stri
   }
 }
 
+function isOnRendimentoLayer(item: { itemLayer?: { isValid?: boolean; name?: string } } | null): boolean {
+  try {
+    const layer = item?.itemLayer;
+    return Boolean(layer?.isValid && isRendimentoLayerName(layer.name || ""));
+  } catch {
+    return false;
+  }
+}
+
+function shouldSkipStyleTagSource(item: { itemLayer?: { isValid?: boolean; name?: string } } | null): boolean {
+  return isOnEditorialLayer(item) || isOnRendimentoLayer(item);
+}
+
 function isMasterPage(page: Page | null): boolean {
   if (!page?.isValid) return false;
   try {
@@ -115,7 +128,7 @@ function getAnchorFromText(text: Text | null): Omit<StyleHit, "name" | "kind"> |
     } else if (frames) {
       frame = getCollectionItem<PageItem>(frames, 0);
     }
-    if (!frame?.isValid || isOnEditorialLayer(frame) || isTagRelated(frame)) return null;
+    if (!frame?.isValid || shouldSkipStyleTagSource(frame) || isTagRelated(frame)) return null;
 
     const page = frame.parentPage;
     if (!page || typeof page === "number" || !page.isValid) {
@@ -178,7 +191,7 @@ function scanCharacterRanges(collection: unknown, hits: Map<string, StyleHit>): 
 }
 
 function scanTextFrameStory(frame: PageItem, hits: Map<string, StyleHit>): void {
-  if (!frame?.isValid || isOnEditorialLayer(frame) || isTagRelated(frame)) return;
+  if (!frame?.isValid || shouldSkipStyleTagSource(frame) || isTagRelated(frame)) return;
   try {
     const story = frame.parentStory;
     if (!story?.isValid) return;
