@@ -1,6 +1,11 @@
 declare module "indesign" {
   export const app: Application;
 
+  export const PageRange: {
+    ALL_PAGES: number | string;
+    SELECTED_ITEMS?: number | string;
+  };
+
   export const ExportFormat: {
     PDF_TYPE: string;
     INDESIGN_MARKUP: string;
@@ -559,6 +564,7 @@ declare module "indesign" {
     isValid: boolean;
     exportReaderSpreads?: boolean;
     exportAsSinglePages?: boolean;
+    pageRange?: unknown;
     properties: PDFExportPresetProperties;
     remove(): void;
   }
@@ -566,6 +572,8 @@ declare module "indesign" {
   export interface PDFExportPreferences {
     exportReaderSpreads: boolean;
     exportAsSinglePages: boolean;
+    pageRange?: unknown;
+    viewPDF?: boolean;
   }
 
   export interface PDFExportPresetProperties {

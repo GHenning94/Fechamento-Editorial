@@ -2,7 +2,7 @@ import type { Document, Layer, PDFExportPreset } from "indesign";
 import { ExportFormat, UserInteractionLevels } from "indesign";
 import { LAYER_MEMORIAL, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
 import { joinPath } from "../utils/file-system";
-import { getInDesignApp } from "../utils/indesign-runtime";
+import { getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { findEditorialLayer } from "../utils/editorial-layer";
 import { toPdfExportTarget } from "../utils/pdf-export-path";
 import { withPresetSpreadSettings, PdfSpreadSettings } from "../utils/pdf-preset-session";
@@ -50,6 +50,40 @@ function withSuppressedUi<T>(fn: () => T): T {
   }
 }
 
+function forceAllPagesRange(doc: Document): void {
+  const prefs = getInDesignApp().pdfExportPreferences as { pageRange?: unknown };
+  const mod = getInDesignModule() as { PageRange?: { ALL_PAGES?: unknown } };
+
+  try {
+    if (mod.PageRange?.ALL_PAGES != null) {
+      prefs.pageRange = mod.PageRange.ALL_PAGES;
+      return;
+    }
+  } catch {
+    // tenta string
+  }
+
+  try {
+    const count = doc.pages.length;
+    if (count > 0) {
+      const first = doc.pages.item(0).name;
+      const last = doc.pages.item(count - 1).name;
+      if (first && last) {
+        prefs.pageRange = first === last ? String(first) : `${first}-${last}`;
+        return;
+      }
+    }
+  } catch {
+    // tenta vazio = todas
+  }
+
+  try {
+    prefs.pageRange = "";
+  } catch {
+    // ignore
+  }
+}
+
 function exportPdf(
   doc: Document,
   preset: PDFExportPreset,
@@ -60,6 +94,7 @@ function exportPdf(
 
   withPresetSpreadSettings(preset, settings, () => {
     withSuppressedUi(() => {
+      forceAllPagesRange(doc);
       doc.exportFile(ExportFormat.PDF_TYPE, target, false, preset);
     });
   });
