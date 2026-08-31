@@ -715,7 +715,6 @@ progress::-webkit-progress-value {
 .error-icon { color: var(--error); }
 
 #editorial-user-name-dialog,
-#editorial-confirm-dialog,
 #editorial-license-dialog {
   padding: 22px;
   min-width: 340px;
@@ -726,7 +725,6 @@ progress::-webkit-progress-value {
 }
 
 #editorial-user-name-dialog::backdrop,
-#editorial-confirm-dialog::backdrop,
 #editorial-license-dialog::backdrop {
   background-color: rgba(0, 0, 0, 0.6);
 }
@@ -857,7 +855,35 @@ progress::-webkit-progress-value {
   margin-left: 0;
 }
 
-#editorial-confirm-dialog .user-name-dialog-actions {
+#uxp-confirm-fields .user-name-dialog-body {
+  margin: 0 0 12px 0;
+}
+
+#uxp-confirm-fields .user-name-dialog-body:last-child {
+  margin-bottom: 0;
+}
+
+#editorial-user-name-dialog .is-width-lock {
+  margin: 0 !important;
+}
+
+#editorial-user-name-dialog .is-width-lock .user-name-dialog-body,
+#editorial-user-name-dialog .is-width-lock .user-name-dialog-label,
+#editorial-user-name-dialog .is-width-lock .user-name-dialog-error {
+  display: none;
+}
+
+#editorial-user-name-dialog .is-width-lock .user-name-dialog-native-input {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.user-name-dialog-content.is-confirm-mode .user-name-dialog-actions {
   margin-top: 16px;
 }
 
