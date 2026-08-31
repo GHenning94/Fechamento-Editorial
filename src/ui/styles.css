@@ -715,7 +715,6 @@ progress::-webkit-progress-value {
 .error-icon { color: var(--error); }
 
 #editorial-user-name-dialog,
-#editorial-confirm-dialog,
 #editorial-license-dialog {
   padding: 22px;
   min-width: 340px;
@@ -726,26 +725,15 @@ progress::-webkit-progress-value {
 }
 
 #editorial-confirm-dialog {
-  width: 420px;
-  max-width: 420px;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.confirm-dialog-content {
+  padding: 0;
+  margin: 0;
+  border: none;
   width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-
-#editorial-confirm-dialog .user-name-dialog-body {
-  white-space: normal;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-}
-
-#editorial-confirm-dialog .confirm-dialog-actions {
-  margin-top: 20px;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: #232329;
+  color: #f2f0ec;
 }
 
 #editorial-user-name-dialog::backdrop,
