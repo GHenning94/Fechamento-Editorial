@@ -1,15 +1,35 @@
 import { getInDesignUserName } from "../utils/indesign-runtime";
 import { userInfo } from "os";
 import { ClosureReport } from "../models/closure-report";
-import { ValidationSummary } from "../models/validation-result";
+import { getIssueSeverity, ValidationSummary } from "../models/validation-result";
 import { writeBinaryFile } from "../utils/file-system";
 import { buildChecklistPdf, ChecklistPdfItem } from "./checklist-pdf";
 
 function itemsFromSummary(summary: ValidationSummary): ChecklistPdfItem[] {
-  return (summary.results || []).map((result) => ({
-    label: result.validatorName,
-    checked: result.severity === "success",
-  }));
+  return (summary.results || []).map((result) => {
+    const details: string[] = [];
+    if (result.severity === "success") {
+      details.push("Aprovado");
+    } else {
+      const issues = Array.isArray(result.issues) ? result.issues : [];
+      for (const issue of issues.slice(0, 12)) {
+        const kind = getIssueSeverity(result, issue) === "warning" ? "Alerta" : "Erro";
+        const parts = [`${kind}: ${issue.message}`];
+        if (issue.object) parts.push(issue.object);
+        if (issue.page) parts.push(`pág. ${issue.page}`);
+        if (issue.details) parts.push(issue.details);
+        details.push(parts.join(" — "));
+      }
+      if (issues.length > 12) {
+        details.push(`e mais ${issues.length - 12} itens`);
+      }
+    }
+    return {
+      label: result.validatorName,
+      checked: result.severity === "success",
+      details,
+    };
+  });
 }
 
 function toPdfPath(filePath: string): string {
