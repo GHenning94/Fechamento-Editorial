@@ -105,6 +105,7 @@ declare module "indesign" {
     scriptPreferences: ScriptPreferences;
     userName: string;
     selection: unknown;
+    dialogs: InDesignDialogs;
     doScript?(
       script: (() => unknown) | string,
       language?: unknown,
@@ -112,6 +113,39 @@ declare module "indesign" {
       undoMode?: unknown,
       commandName?: string
     ): unknown;
+  }
+
+  export interface InDesignDialogs {
+    add(properties?: { name?: string; canCancel?: boolean }): InDesignDialog;
+  }
+
+  export interface InDesignDialog {
+    name: string;
+    canCancel: boolean;
+    dialogColumns: {
+      add(): InDesignDialogColumn;
+    };
+    show(): boolean;
+    destroy(): void;
+  }
+
+  export interface InDesignDialogColumn {
+    staticTexts: {
+      add(properties?: { staticLabel?: string; minWidth?: number }): InDesignStaticText;
+    };
+    textEditboxes: {
+      add(properties?: { editContents?: string; minWidth?: number }): InDesignTextEditbox;
+    };
+  }
+
+  export interface InDesignStaticText {
+    staticLabel: string;
+    minWidth?: number;
+  }
+
+  export interface InDesignTextEditbox {
+    editContents: string;
+    minWidth?: number;
   }
 
   export interface ViewPreferences {
