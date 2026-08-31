@@ -119,12 +119,12 @@ function applyModalMode(mode: ModalMode): void {
   if (mode === "confirm") {
     heading.textContent = "Layer de memorial descritivo";
     confirmFields.classList.remove("hidden");
-    nameFields.classList.add("is-width-lock");
+    nameFields.classList.add("hidden");
     btnConfirm.textContent = "Fechar mesmo assim";
   } else {
     heading.textContent = "Nome para o relatório";
     confirmFields.classList.add("hidden");
-    nameFields.classList.remove("is-width-lock");
+    nameFields.classList.remove("hidden");
     btnConfirm.textContent = "Continuar";
   }
 }
