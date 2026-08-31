@@ -155,12 +155,7 @@ export class PanelController {
   ): Promise<void> {
     try {
       if (!hasMemorialLayer()) {
-        const proceed = await promptConfirmDialog({
-          title: "Layer de memorial descritivo",
-          body: "Não existe a layer de memorial descritivo neste documento. O PDF de arte (páginas simples) e o PDF em spreads serão gerados mesmo assim, sem essa layer. Deseja fechar o material mesmo assim?",
-          confirmLabel: "Fechar mesmo assim",
-          cancelLabel: "Cancelar",
-        });
+        const proceed = await promptConfirmDialog();
         if (!proceed) {
           this.setStatus("Fechamento cancelado.", "info");
           return;

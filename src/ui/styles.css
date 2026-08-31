@@ -715,6 +715,7 @@ progress::-webkit-progress-value {
 .error-icon { color: var(--error); }
 
 #editorial-user-name-dialog,
+#editorial-confirm-dialog,
 #editorial-license-dialog {
   padding: 22px;
   min-width: 340px;
@@ -722,18 +723,6 @@ progress::-webkit-progress-value {
   border-radius: 10px;
   background-color: var(--uxp-host-background-color, var(--surface));
   color: var(--uxp-host-text-color, var(--text));
-}
-
-#editorial-confirm-dialog {
-  padding: 0;
-  margin: 0;
-  border: none;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  box-sizing: border-box;
-  background-color: #232329;
-  color: #f2f0ec;
 }
 
 #editorial-user-name-dialog::backdrop,
@@ -866,6 +855,10 @@ progress::-webkit-progress-value {
 
 .user-name-dialog-actions > .btn:first-child {
   margin-left: 0;
+}
+
+#editorial-confirm-dialog .user-name-dialog-actions {
+  margin-top: 16px;
 }
 
 .license-activation-panel {
