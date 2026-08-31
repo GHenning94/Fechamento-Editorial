@@ -83,7 +83,7 @@ export class LayersNomenclaturaValidator extends BaseValidator {
         });
       }
 
-      return createResult(this.id, this.name, issues, "warning");
+      return createResult(this.id, this.name, issues, "error");
     });
   }
 }

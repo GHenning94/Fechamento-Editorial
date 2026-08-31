@@ -12,6 +12,7 @@ import {
   ensureDocumentSaved,
   PackageCancelledError,
 } from "../utils/file-system";
+import { findEditorialLayer } from "../utils/editorial-layer";
 import { yieldForUi, yieldToHost } from "../utils/yield-to-host";
 import {
   getCachedChecklistResult,
@@ -64,6 +65,12 @@ export class ClosureOrchestrator {
     });
   }
 
+  hasMemorialLayer(): boolean {
+    return runInDesignReadOnly("EDITORIAL AUTOCLOSE — Layer memorial", () =>
+      Boolean(findEditorialLayer(getActiveDocument()))
+    );
+  }
+
   cacheCurrentDocumentChecklist(summary: ValidationSummary): void {
     const docInfo = runInDesignReadOnly("EDITORIAL AUTOCLOSE — Cache Checklist", () => {
       const doc = getActiveDocument();
@@ -112,7 +119,7 @@ export class ClosureOrchestrator {
     clearInDesignSelection();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
-    onProgress?.(3, totalSteps, "Exportando PDF principal...");
+    onProgress?.(3, totalSteps, "Exportando PDF páginas simples (sem memorial)...");
     await yieldForUi();
     const pdfArteResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Arte", () =>
       this.exportService.runPdfArte(getActiveDocument(), paths)
@@ -129,7 +136,7 @@ export class ClosureOrchestrator {
     };
 
     if (!skipEstilosPdf) {
-      onProgress?.(4, totalSteps, "Exportando PDF _ESTILOS (spreads)...");
+      onProgress?.(4, totalSteps, "Exportando PDF spreads (com memorial)...");
       await yieldForUi();
       pdfEstilosResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Estilos", () =>
         this.exportService.runPdfEstilos(getActiveDocument(), paths)

@@ -1,4 +1,5 @@
 import type { Document, Layer } from "indesign";
+import { LAYER_MEMORIAL_DESCRITIVO } from "./constants";
 import { forEachCollectionItem } from "./collection-helpers";
 
 const EDITORIAL_LAYER_NAMES = new Set([
@@ -23,14 +24,19 @@ export function isEditorialLayerName(name: string): boolean {
 
 /** Localiza a layer de estilos/memorial sem depender de visibilidade ou caixa. */
 export function findEditorialLayer(doc: Document): Layer | null {
-  let found: Layer | null = null;
+  let exact: Layer | null = null;
+  let alias: Layer | null = null;
 
   forEachCollectionItem<Layer>(doc.layers, (layer) => {
-    if (found || !layer?.isValid) return;
-    if (isEditorialLayerName(layer.name)) {
-      found = layer;
+    if (!layer?.isValid) return;
+    if (layer.name === LAYER_MEMORIAL_DESCRITIVO) {
+      exact = layer;
+      return;
+    }
+    if (!alias && isEditorialLayerName(layer.name)) {
+      alias = layer;
     }
   });
 
-  return found;
+  return exact || alias;
 }

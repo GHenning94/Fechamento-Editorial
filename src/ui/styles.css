@@ -715,6 +715,7 @@ progress::-webkit-progress-value {
 .error-icon { color: var(--error); }
 
 #editorial-user-name-dialog,
+#editorial-confirm-dialog,
 #editorial-license-dialog {
   padding: 22px;
   min-width: 340px;
@@ -724,7 +725,31 @@ progress::-webkit-progress-value {
   color: var(--uxp-host-text-color, var(--text));
 }
 
+#editorial-confirm-dialog {
+  width: 420px;
+  max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.confirm-dialog-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#editorial-confirm-dialog .user-name-dialog-body {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+#editorial-confirm-dialog .confirm-dialog-actions {
+  margin-top: 20px;
+}
+
 #editorial-user-name-dialog::backdrop,
+#editorial-confirm-dialog::backdrop,
 #editorial-license-dialog::backdrop {
   background-color: rgba(0, 0, 0, 0.6);
 }

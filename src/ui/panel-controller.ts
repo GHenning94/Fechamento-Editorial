@@ -12,6 +12,7 @@ import { PackageCancelledError, promptPackageFolder } from "../utils/file-system
 import { yieldToHost } from "../utils/yield-to-host";
 import { getDefaultReportUserName } from "../utils/indesign-runtime";
 import { onActionActivate, setActionDisabled } from "./action-control";
+import { promptConfirmDialog } from "./confirm-dialog";
 import { promptUserNameDialog } from "./user-name-dialog";
 import { showResultsDetailDialog } from "./results-detail-dialog";
 import { bindResultGroupToggles } from "./result-group-toggle";
@@ -130,6 +131,7 @@ export class PanelController {
     onCreateStyles: () => Promise<void>;
     onDownloadReport: () => Promise<void>;
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>;
+    hasMemorialLayer: () => boolean;
   }): void {
     if (!this.isReady()) return;
 
@@ -143,13 +145,33 @@ export class PanelController {
       void this.runAction(handlers.onDownloadReport);
     });
     onActionActivate(this.btnClose, () => {
-      void this.runClose(handlers.onClose);
+      void this.runClose(handlers.onClose, handlers.hasMemorialLayer);
     });
   }
 
   private async runClose(
-    onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>
+    onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>,
+    hasMemorialLayer: () => boolean
   ): Promise<void> {
+    try {
+      if (!hasMemorialLayer()) {
+        const proceed = await promptConfirmDialog({
+          title: "Layer de memorial descritivo",
+          body: "Não existe a layer de memorial descritivo neste documento. O PDF de arte (páginas simples) e o PDF em spreads serão gerados mesmo assim, sem essa layer. Deseja fechar o material mesmo assim?",
+          confirmLabel: "Fechar mesmo assim",
+          cancelLabel: "Cancelar",
+        });
+        if (!proceed) {
+          this.setStatus("Fechamento cancelado.", "info");
+          return;
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setStatus(message, "error");
+      return;
+    }
+
     let userName: string;
     try {
       userName = await promptUserNameDialog(getDefaultReportUserName());

@@ -1,6 +1,6 @@
 import type { Document, Layer, PDFExportPreset } from "indesign";
 import { ExportFormat, UserInteractionLevels } from "indesign";
-import { LAYER_MEMORIAL, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
+import { LAYER_MEMORIAL_DESCRITIVO, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
 import { joinPath } from "../utils/file-system";
 import { getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { findEditorialLayer } from "../utils/editorial-layer";
@@ -84,6 +84,11 @@ function forceAllPagesRange(doc: Document): void {
   }
 }
 
+/**
+ * Dois PDFs por fechamento:
+ * - arte: um arquivo, páginas simples, layer de memorial oculta
+ * - _ESTILOS: um arquivo, spreads, layer de memorial visível
+ */
 function exportPdf(
   doc: Document,
   preset: PDFExportPreset,
@@ -165,24 +170,19 @@ export function exportPdfEstilos(
   }
 
   const memorial = findMemorialLayer(doc);
-  if (!memorial) {
-    return {
-      memorialLayerMissing: true,
-      estilosGenerated: false,
-      warnings: [
-        `Layer "${LAYER_MEMORIAL}" inexistente. PDF "${docBaseName}_ESTILOS.pdf" não foi exportado.`,
-      ],
-    };
-  }
-
-  const memorialWasVisible = memorial.visible;
+  const memorialWasVisible = memorial?.visible ?? null;
   const estilosPath = joinPath(packageRoot, `${docBaseName}_ESTILOS.pdf`);
 
   try {
     setMemorialVisibility(memorial, true);
     exportPdf(doc, preset, estilosPath, { exportReaderSpreads: true });
+    if (!memorial) {
+      warnings.push(
+        `Layer "${LAYER_MEMORIAL_DESCRITIVO}" inexistente. PDF _ESTILOS gerado em spreads sem memorial.`
+      );
+    }
     return {
-      memorialLayerMissing: false,
+      memorialLayerMissing: !memorial,
       estilosGenerated: true,
       estilosPath,
       warnings,
@@ -191,12 +191,14 @@ export function exportPdfEstilos(
     const message = error instanceof Error ? error.message : String(error);
     warnings.push(`Falha ao exportar PDF _ESTILOS: ${message}`);
     return {
-      memorialLayerMissing: false,
+      memorialLayerMissing: !memorial,
       estilosGenerated: false,
       warnings,
     };
   } finally {
-    memorial.visible = memorialWasVisible;
+    if (memorial && memorialWasVisible !== null) {
+      memorial.visible = memorialWasVisible;
+    }
   }
 }
 

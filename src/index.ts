@@ -189,6 +189,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         controller.setProgress(percent, label);
       });
     },
+    hasMemorialLayer: () => orchestrator.hasMemorialLayer(),
   });
 
   controller.setStatus("Pronto.", "info");

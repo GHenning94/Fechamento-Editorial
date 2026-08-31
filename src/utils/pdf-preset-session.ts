@@ -38,7 +38,10 @@ function applyPageRange(target: { pageRange?: unknown }, value: unknown): void {
   }
 }
 
-/** Aplica spreads e intervalo de páginas na sessão — restaura tudo ao final. */
+/**
+ * Um único PDF por exportação: páginas simples ou spreads.
+ * Nunca ativa exportAsSinglePages (gera 1 arquivo por página).
+ */
 export function withPresetSpreadSettings(
   preset: PDFExportPreset,
   settings: PdfSpreadSettings,
@@ -47,7 +50,6 @@ export function withPresetSpreadSettings(
   const mutable = preset as MutablePreset;
   const appPrefs = getInDesignApp().pdfExportPreferences as MutablePrefs;
   const pagesToken = allPagesToken();
-  const exportAsSinglePages = !settings.exportReaderSpreads;
 
   const saved = {
     directSpreads: mutable.exportReaderSpreads,
@@ -62,12 +64,24 @@ export function withPresetSpreadSettings(
   };
 
   mutable.exportReaderSpreads = settings.exportReaderSpreads;
-  mutable.exportAsSinglePages = exportAsSinglePages;
+  try {
+    mutable.exportAsSinglePages = false;
+  } catch {
+    // ignore
+  }
   applyPageRange(mutable, pagesToken);
   preset.properties.exportReaderSpreads = settings.exportReaderSpreads;
-  preset.properties.exportAsSinglePages = exportAsSinglePages;
+  try {
+    preset.properties.exportAsSinglePages = false;
+  } catch {
+    // ignore
+  }
   appPrefs.exportReaderSpreads = settings.exportReaderSpreads;
-  appPrefs.exportAsSinglePages = exportAsSinglePages;
+  try {
+    appPrefs.exportAsSinglePages = false;
+  } catch {
+    // ignore
+  }
   applyPageRange(appPrefs, pagesToken);
   try {
     appPrefs.viewPDF = false;
@@ -83,17 +97,29 @@ export function withPresetSpreadSettings(
       mutable.exportReaderSpreads = saved.directSpreads;
     }
     if (saved.directSingle !== undefined) {
-      mutable.exportAsSinglePages = saved.directSingle;
+      try {
+        mutable.exportAsSinglePages = saved.directSingle;
+      } catch {
+        // ignore
+      }
     }
     if (saved.directRange !== undefined) {
       applyPageRange(mutable, saved.directRange);
     }
     preset.properties.exportReaderSpreads = saved.propsSpreads;
     if (saved.propsSingle !== undefined) {
-      preset.properties.exportAsSinglePages = saved.propsSingle;
+      try {
+        preset.properties.exportAsSinglePages = saved.propsSingle;
+      } catch {
+        // ignore
+      }
     }
     appPrefs.exportReaderSpreads = saved.appSpreads;
-    appPrefs.exportAsSinglePages = saved.appSingle;
+    try {
+      appPrefs.exportAsSinglePages = saved.appSingle;
+    } catch {
+      // ignore
+    }
     if (saved.appRange !== undefined) {
       applyPageRange(appPrefs, saved.appRange);
     }
