@@ -473,6 +473,36 @@ progress::-webkit-progress-value {
   margin-right: 7px;
 }
 
+.result-header-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.result-ignore-all {
+  flex-shrink: 0;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border: 1px solid #6b5a28;
+  border-radius: 4px;
+  background-color: #2e2a1a;
+  color: var(--warning);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.result-ignore-all:hover {
+  color: #fff3c4;
+  border-color: var(--warning);
+  background-color: #3a2f18;
+}
+
 .result-expand {
   flex-shrink: 0;
   margin-left: 10px;
@@ -610,6 +640,27 @@ progress::-webkit-progress-value {
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
+}
+
+#list-errors .result-group-count,
+.result-group-count-error {
+  color: var(--error);
+  border-color: #6b3030;
+  background-color: #2e1a1a;
+}
+
+#list-warnings .result-group-count,
+.result-group-count-warning {
+  color: var(--warning);
+  border-color: #6b5a28;
+  background-color: #2e2a1a;
+}
+
+#list-approved .result-group-count,
+.result-group-count-success {
+  color: var(--success);
+  border-color: #2f6b48;
+  background-color: #1a2e22;
 }
 
 .result-group-body {
