@@ -1,5 +1,6 @@
 import { getIssueSeverity, ValidationIssue, ValidationSummary } from "../models/validation-result";
 import { VALIDATOR_IDS as V } from "../utils/constants";
+import { formatIssueLine } from "../utils/issue-text";
 import type { ChecklistPdfItem } from "./checklist-pdf";
 
 export const ORIGINAL_CHECKLIST_INSTRUCTIONS = [
@@ -146,11 +147,11 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
 function formatIssue(summary: ValidationSummary, issue: ValidationIssue, validatorId: string): string {
   const result = (summary.results || []).find((item) => item.validatorId === validatorId);
   const kind = result && getIssueSeverity(result, issue) === "warning" ? "Alerta" : "Erro";
-  const parts = [`${kind}: ${issue.message}`];
-  if (issue.object) parts.push(issue.object);
-  if (issue.page) parts.push(`pág. ${issue.page}`);
-  if (issue.details) parts.push(issue.details);
-  return parts.join(" - ");
+  return formatIssueLine(issue, {
+    kind,
+    separator: " - ",
+    includeDetails: true,
+  });
 }
 
 export function mapOriginalChecklist(

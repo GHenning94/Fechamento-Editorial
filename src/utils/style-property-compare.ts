@@ -215,21 +215,122 @@ export function isRightAlign(justification: number): boolean {
   return false;
 }
 
-export function isLeftAlign(justification: number): boolean {
-  try {
-    const { Justification } = getInDesignModule();
-    const J = Justification as {
-      LEFT_ALIGN?: number;
-      LEFT_JUSTIFIED?: number;
-      leftAlign?: number;
-    };
-    if (typeof J.LEFT_ALIGN === "number" && justification === J.LEFT_ALIGN) return true;
-    if (typeof J.LEFT_JUSTIFIED === "number" && justification === J.LEFT_JUSTIFIED) return true;
-    if (typeof J.leftAlign === "number" && justification === J.leftAlign) return true;
-  } catch {
-    // ignore
+/** Códigos de 4 chars do InDesign (Justification). */
+const JUSTIFICATION_LEFT_ALIGN = 1818584692; // left
+const JUSTIFICATION_LEFT_JUSTIFIED = 1818915700; // ljst
+const NOTHING_ENUM = 1851876449;
+
+function justificationNumeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+$/.test(value.trim())) return Number(value);
+  if (value && typeof value === "object") {
+    const rec = value as { value?: unknown };
+    if (typeof rec.value === "number" && Number.isFinite(rec.value)) return rec.value;
+    try {
+      const coerced = Number(value);
+      if (Number.isFinite(coerced) && coerced > 1000) return coerced;
+    } catch {
+      // ignore
+    }
   }
+  return null;
+}
+
+function justificationLabel(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const rec = value as { name?: unknown };
+    if (typeof rec.name === "string") return rec.name;
+    try {
+      const text = String(value);
+      if (text && text !== "[object Object]") return text;
+    } catch {
+      // ignore
+    }
+  }
+  return "";
+}
+
+function isNothingStyleValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "number") return value === 0 || value === NOTHING_ENUM;
   return false;
+}
+
+/**
+ * Com hifenização ativa: Justificado à esquerda (Left Justified) ou Esquerda.
+ * O UXP às vezes devolve string, objeto enum ou o código de 4 chars — sem o fallback
+ * o estilo 02_texto_geral (já correto) era marcado como erro.
+ */
+export function isLeftJustifiedAlignment(value: unknown): boolean {
+  const label = justificationLabel(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+  if (label) {
+    if (/leftjustified|ljst|justificadoa?esquerda/.test(label)) return true;
+    if (/leftalign|^left$|^esquerda$/.test(label)) return true;
+  }
+
+  const code = justificationNumeric(value);
+  if (code == null || isNothingStyleValue(code)) return false;
+
+  try {
+    const { Justification } = getInDesignModule() as {
+      Justification?: {
+        LEFT_JUSTIFIED?: number;
+        LEFT_ALIGN?: number;
+        leftJustified?: number;
+        leftAlign?: number;
+      };
+    };
+    const J = Justification || {};
+    const accepted = [J.LEFT_JUSTIFIED, J.LEFT_ALIGN, J.leftJustified, J.leftAlign].filter(
+      (item): item is number => typeof item === "number"
+    );
+    if (accepted.includes(code)) return true;
+  } catch {
+    // host sem enum
+  }
+
+  return code === JUSTIFICATION_LEFT_JUSTIFIED || code === JUSTIFICATION_LEFT_ALIGN;
+}
+
+export function readParagraphJustification(style: ParagraphStyle): unknown {
+  const seen = new Set<unknown>();
+  let current: unknown = style;
+
+  for (let i = 0; i < 12; i++) {
+    if (!current || typeof current !== "object" || seen.has(current)) break;
+    seen.add(current);
+    const candidate = current as ParagraphStyle & {
+      basedOn?: unknown;
+      properties?: { justification?: unknown };
+    };
+
+    try {
+      const value = candidate.justification;
+      if (!isNothingStyleValue(value)) return value;
+    } catch {
+      // tenta properties / basedOn
+    }
+
+    try {
+      const fromProps = candidate.properties?.justification;
+      if (!isNothingStyleValue(fromProps)) return fromProps;
+    } catch {
+      // ignore
+    }
+
+    current = candidate.basedOn;
+  }
+
+  return undefined;
+}
+
+export function isLeftAlign(justification: number): boolean {
+  return isLeftJustifiedAlignment(justification);
 }
 
 export function normalizeLanguageName(name: string): string {

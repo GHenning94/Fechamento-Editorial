@@ -17,6 +17,7 @@ import { promptUserNameDialog } from "./user-name-dialog";
 import { showResultsDetailDialog } from "./results-detail-dialog";
 import { bindResultGroupToggles } from "./result-group-toggle";
 import { tryExpandPanelToHostHeight } from "./panel-expand";
+import { formatIssueLine } from "../utils/issue-text";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -456,10 +457,7 @@ export class PanelController {
         const count = entries.length;
         const issuesHtml = entries
           .map(({ result, issue, index }) => {
-            const parts = [issue.message];
-            if (issue.page) parts.push(`Pág: ${issue.page}`);
-            if (issue.object) parts.push(`Objeto: ${issue.object}`);
-            if (issue.value) parts.push(issue.value);
+            const partsLine = formatIssueLine(issue, { objectPrefix: "Objeto: " });
 
             const ignoreKey = makeIssueKey(result, issue, index);
             const ignoreBtn =
@@ -467,7 +465,7 @@ export class PanelController {
                 ? `<span class="issue-ignore" data-ignore-key="${this.escape(ignoreKey)}" role="button" tabindex="0">Ignorar</span>`
                 : "";
 
-            let line = `<div class="issue-line-row"><div class="issue-line">${this.escape(parts.join(" — "))}</div>${ignoreBtn}</div>`;
+            let line = `<div class="issue-line-row"><div class="issue-line">${this.escape(partsLine)}</div>${ignoreBtn}</div>`;
             if (issue.details) {
               line += `<div class="issue-detail">${this.escape(issue.details)}</div>`;
             }

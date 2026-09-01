@@ -57,11 +57,17 @@ function bindIgnoreHandlers(
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      const issueEl = button.closest(".result-group-issue");
+      const group = button.closest(".result-group");
       onIgnore(key);
-      button.closest("li")?.remove();
-      if (!listEl.querySelector("li")) {
+      issueEl?.remove();
+      if (group && !group.querySelector(".result-group-issue")) {
+        group.remove();
+      }
+      if (!listEl.querySelector("li:not(.results-scroll-spacer)")) {
         listEl.innerHTML = '<li class="empty-item">Nenhum item</li>';
       }
+      ensureScrollSpacer(listEl);
     };
   });
 }
@@ -154,22 +160,31 @@ function applyStaticStyles(
     "width:100%",
     "min-height:0",
     "margin:0",
-    "padding:12px 16px",
+    "padding:12px 16px 88px 16px",
     "list-style:none",
     "box-sizing:border-box",
     "overflow-x:hidden",
-    "overflow-y:scroll",
+    "overflow-y:auto",
     `background-color:${BG}`,
   ].join(";");
+}
+
+function ensureScrollSpacer(listEl: HTMLElement): void {
+  listEl.querySelector(".results-scroll-spacer")?.remove();
+  const spacer = document.createElement("li");
+  spacer.className = "results-scroll-spacer";
+  spacer.setAttribute("aria-hidden", "true");
+  listEl.appendChild(spacer);
 }
 
 /**
  * Altura da lista em px: no UXP o scroll só funciona com altura explícita,
  * então acompanhamos a janela nativa conforme o usuário redimensiona.
  */
-function syncListHeight(root: HTMLElement, listEl: HTMLElement): number {
+function syncListHeight(root: HTMLElement, header: HTMLElement, listEl: HTMLElement): number {
   const rootHeight = root.clientHeight || DIALOG_HEIGHT;
-  const listHeight = Math.max(120, rootHeight - HEADER_HEIGHT);
+  const headerH = header.offsetHeight || HEADER_HEIGHT;
+  const listHeight = Math.max(120, rootHeight - headerH - 20);
   listEl.style.height = `${listHeight}px`;
   listEl.style.maxHeight = `${listHeight}px`;
   return listHeight;
@@ -218,7 +233,8 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   document.body.appendChild(dialog);
 
   applyStaticStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor);
-  syncListHeight(root, listEl);
+  ensureScrollSpacer(listEl);
+  syncListHeight(root, header, listEl);
 
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
@@ -233,9 +249,9 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
       window.clearInterval(resizePoll);
       return;
     }
-    const target = Math.max(120, (root.clientHeight || DIALOG_HEIGHT) - HEADER_HEIGHT);
+    const target = Math.max(120, (root.clientHeight || DIALOG_HEIGHT) - (header.offsetHeight || HEADER_HEIGHT) - 20);
     if (target !== lastListHeight) {
-      lastListHeight = syncListHeight(root, listEl);
+      lastListHeight = syncListHeight(root, header, listEl);
     }
   }, 150);
 
@@ -263,7 +279,7 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
 
   const opened = openModelessDialog(dialog, windowOpts);
   window.setTimeout(() => {
-    if (!closed) lastListHeight = syncListHeight(root, listEl);
+    if (!closed) lastListHeight = syncListHeight(root, header, listEl);
   }, 60);
 
   if (!opened) {

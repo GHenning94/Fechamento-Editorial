@@ -9,8 +9,21 @@ import {
   containsInvalidSpaces,
   isParagraphStyleNomenclatureSkipped,
   isValidParagraphStyleName,
-  PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES,
 } from "../utils/paleta-estilos";
+
+function nomenclatureDetails(name: string): string {
+  const suggestion = buildParagraphStyleSuggestion(name);
+  if (containsInvalidSpaces(name) && suggestion) {
+    return `Remova os espaços. Use: ${suggestion}`;
+  }
+  if (containsInvalidSpaces(name)) {
+    return "Remova os espaços do nome (use _).";
+  }
+  if (suggestion) {
+    return `Use: ${suggestion}`;
+  }
+  return "O tronco deve coincidir com a paleta (ex.: 02_texto_geral).";
+}
 
 export class EstilosNomenclaturaValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.ESTILOS_NOMENCLATURA;
@@ -30,16 +43,10 @@ export class EstilosNomenclaturaValidator extends BaseValidator {
 
         if (isValidParagraphStyleName(name)) return;
 
-        const suggestion = buildParagraphStyleSuggestion(name);
-        const suggestionText = suggestion ? ` Sugestão: ${suggestion}.` : "";
-        const spaceHint = containsInvalidSpaces(name)
-          ? " Não use espaços: substitua por _ ou, antes de número final, remova o espaço."
-          : "";
-
         issues.push({
-          message: "Nomenclatura inválida",
+          message: "Tronco fora da paleta",
           object: name,
-          details: `O tronco do estilo deve corresponder à paleta padrão (sem espaços; sufixo numérico permitido, ex.: 05_legenda_proporcao2). Exemplos: ${PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES}.${spaceHint}${suggestionText}`,
+          details: nomenclatureDetails(name),
         });
       });
 

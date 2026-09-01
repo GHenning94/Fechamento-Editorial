@@ -4,21 +4,10 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { getInDesignModule } from "../utils/indesign-runtime";
-
-function isLeftJustified(justification: number): boolean {
-  try {
-    const { Justification } = getInDesignModule() as {
-      Justification?: { LEFT_JUSTIFIED?: number; leftJustified?: number };
-    };
-    const J = Justification || {};
-    if (typeof J.LEFT_JUSTIFIED === "number" && justification === J.LEFT_JUSTIFIED) return true;
-    if (typeof J.leftJustified === "number" && justification === J.leftJustified) return true;
-  } catch {
-    // host sem enum
-  }
-  return false;
-}
+import {
+  isLeftJustifiedAlignment,
+  readParagraphJustification,
+} from "../utils/style-property-compare";
 
 export class HifenizacaoValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.HIFENIZACAO;
@@ -35,19 +24,18 @@ export class HifenizacaoValidator extends BaseValidator {
         try {
           if (!style.hyphenation) return;
 
-          if (!isLeftJustified(style.justification)) {
-            issues.push({
-              message: "Alinhamento incompatível com hifenização",
-              object: style.name,
-              details:
-                "Com hifenização ativa, o alinhamento deve ser Justificado à esquerda (Left Justified). Sem hifenização, qualquer alinhamento é aceito.",
-            });
-          }
-        } catch {
+          const justification = readParagraphJustification(style);
+          if (justification == null) return;
+          if (isLeftJustifiedAlignment(justification)) return;
+
           issues.push({
-            message: "Não foi possível validar hifenização/alinhamento",
+            message: "Alinhamento incompatível com hifenização",
             object: style.name,
+            details:
+              "Com hifenização ativa, use Justificado à esquerda. Sem hifenização, qualquer alinhamento é aceito.",
           });
+        } catch {
+          // Sem leitura confiável, não marca falso positivo.
         }
       });
 
