@@ -45,7 +45,7 @@ export class ClosureOrchestrator {
 
     return this.reportService.generateChecklistReport(
       {
-        date: new Date().toLocaleString("pt-BR"),
+        date: new Date().toLocaleDateString("pt-BR"),
         user: userName,
         documentName: docInfo.name,
         documentPath: docInfo.path,
@@ -163,7 +163,7 @@ export class ClosureOrchestrator {
       await yieldToHost(400);
 
       const report: ClosureReport = {
-        date: new Date().toLocaleString("pt-BR"),
+        date: new Date().toLocaleDateString("pt-BR"),
         user: userName,
         documentName: docInfo.name,
         documentPath: docInfo.path,
@@ -195,7 +195,7 @@ export class ClosureOrchestrator {
     clearInDesignSelection();
 
     return {
-      date: new Date().toLocaleString("pt-BR"),
+      date: new Date().toLocaleDateString("pt-BR"),
       user: userName,
       documentName: docInfo.name,
       documentPath: docInfo.path,
