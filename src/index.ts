@@ -18,6 +18,7 @@ import { PackageCancelledError, promptChecklistReportFile } from "./utils/file-s
 import { ensureInDesignReady, getDefaultReportUserName } from "./utils/indesign-runtime";
 import { yieldToHost } from "./utils/yield-to-host";
 import { createMemorialStyleTags } from "./services/style-tags-service";
+import { createRendimentoTags } from "./services/rendimento-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
 
 const { entrypoints } = require("uxp");
@@ -141,6 +142,20 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       );
     },
 
+    onCreateRendimento: async () => {
+      controller.resetProgress();
+      controller.setStatus("Criando tags de rendimento…", "info");
+      await yieldToHost(40);
+      const result = await createRendimentoTags((percent, label) => {
+        controller.setProgress(percent, label);
+      });
+      controller.setProgress(100, "Rendimento criado");
+      controller.setStatus(
+        `Layer "${result.layerName}": ${result.pages} tag(s) de caracteres por página.`,
+        "success"
+      );
+    },
+
     onDownloadReport: async () => {
       const reportSummary = controller.getSummaryForReport() || lastChecklistSummary;
       if (!reportSummary) {
@@ -190,6 +205,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       });
     },
     hasMemorialLayer: () => orchestrator.hasMemorialLayer(),
+    hasRendimentoLayer: () => orchestrator.hasRendimentoLayer(),
   });
 
   controller.setStatus("Pronto.", "info");

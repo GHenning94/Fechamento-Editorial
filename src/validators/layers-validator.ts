@@ -5,10 +5,11 @@ import {
   LAYER_GUIAS_ALT,
   LAYER_GUIAS_DELETAR,
   LAYER_MEMORIAL_DESCRITIVO,
+  LAYER_RENDIMENTO,
   VALIDATOR_IDS,
 } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { findEditorialLayer, normalizeLayerName } from "../utils/editorial-layer";
+import { findEditorialLayer, findRendimentoLayer, normalizeLayerName } from "../utils/editorial-layer";
 import { layerExists } from "../utils/indesign-helpers";
 
 function findLayerByNormalizedKeys(doc: Document, keys: string[]): Layer | null {
@@ -44,6 +45,13 @@ export class LayersObrigatoriasValidator extends BaseValidator {
         });
       }
 
+      if (!findRendimentoLayer(doc)) {
+        issues.push({
+          message: `Layer "${LAYER_RENDIMENTO}" inexistente`,
+          details: `Crie a layer "${LAYER_RENDIMENTO}" no documento.`,
+        });
+      }
+
       const guias = findLayerByNormalizedKeys(doc, [LAYER_GUIAS_DELETAR, LAYER_GUIAS_ALT]);
       if (!guias) {
         issues.push({
@@ -71,6 +79,15 @@ export class LayersNomenclaturaValidator extends BaseValidator {
           message: "Nomenclatura incorreta de layer",
           object: editorial.name,
           details: `Renomeie "${editorial.name}" para "${LAYER_MEMORIAL_DESCRITIVO}".`,
+        });
+      }
+
+      const rendimento = findRendimentoLayer(doc);
+      if (rendimento && !hasExactLayer(doc, LAYER_RENDIMENTO)) {
+        issues.push({
+          message: "Nomenclatura incorreta de layer",
+          object: rendimento.name,
+          details: `Renomeie "${rendimento.name}" para "${LAYER_RENDIMENTO}".`,
         });
       }
 

@@ -24,6 +24,7 @@ export type ProgressHandler = (percent: number, label: string) => void;
 export class PanelController {
   private btnChecklist: HTMLElement | null;
   private btnCreateStyles: HTMLElement | null;
+  private btnCreateRendimento: HTMLElement | null;
   private btnDownloadReport: HTMLElement | null;
   private btnClose: HTMLElement | null;
   private progressBar: HTMLProgressElement | null;
@@ -44,6 +45,7 @@ export class PanelController {
   constructor(private root: HTMLElement) {
     this.btnChecklist = root.querySelector("#btn-checklist");
     this.btnCreateStyles = root.querySelector("#btn-create-styles");
+    this.btnCreateRendimento = root.querySelector("#btn-create-rendimento");
     this.btnDownloadReport = root.querySelector("#btn-download-report");
     this.btnClose = root.querySelector("#btn-close");
     this.progressBar = root.querySelector("#progress-bar");
@@ -115,6 +117,7 @@ export class PanelController {
     return Boolean(
       this.btnChecklist &&
       this.btnCreateStyles &&
+      this.btnCreateRendimento &&
       this.btnDownloadReport &&
       this.btnClose &&
       this.progressBar &&
@@ -136,9 +139,11 @@ export class PanelController {
   bindHandlers(handlers: {
     onChecklist: () => Promise<void>;
     onCreateStyles: () => Promise<void>;
+    onCreateRendimento: () => Promise<void>;
     onDownloadReport: () => Promise<void>;
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>;
     hasMemorialLayer: () => boolean;
+    hasRendimentoLayer: () => boolean;
   }): void {
     if (!this.isReady()) return;
 
@@ -148,21 +153,44 @@ export class PanelController {
     onActionActivate(this.btnCreateStyles, () => {
       void this.runAction(handlers.onCreateStyles);
     });
+    if (this.btnCreateRendimento) {
+      onActionActivate(this.btnCreateRendimento, () => {
+        void this.runAction(handlers.onCreateRendimento);
+      });
+    }
     onActionActivate(this.btnDownloadReport, () => {
       void this.runAction(handlers.onDownloadReport);
     });
     onActionActivate(this.btnClose, () => {
-      void this.runClose(handlers.onClose, handlers.hasMemorialLayer);
+      void this.runClose(handlers.onClose, handlers.hasMemorialLayer, handlers.hasRendimentoLayer);
     });
   }
 
   private async runClose(
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>,
-    hasMemorialLayer: () => boolean
+    hasMemorialLayer: () => boolean,
+    hasRendimentoLayer: () => boolean
   ): Promise<void> {
     try {
-      if (!hasMemorialLayer()) {
-        const proceed = await promptConfirmDialog();
+      const hasMemorial = hasMemorialLayer();
+      const hasRendimento = hasRendimentoLayer();
+      if (!hasMemorial || !hasRendimento) {
+        const lines: string[] = [];
+        if (!hasMemorial) {
+          lines.push("Não existe a layer de memorial descritivo neste documento.");
+        }
+        if (!hasRendimento) {
+          lines.push("Não existe a layer de rendimento neste documento.");
+        }
+        lines.push("Os PDFs serão gerados mesmo assim, sem essa layer.");
+        lines.push("Deseja fechar o material mesmo assim?");
+        const title =
+          !hasMemorial && !hasRendimento
+            ? "Layers obrigatórias"
+            : !hasMemorial
+              ? "Layer de memorial descritivo"
+              : "Layer de rendimento";
+        const proceed = await promptConfirmDialog(lines.join("\n"), title);
         if (!proceed) {
           this.setStatus("Fechamento cancelado.", "info");
           return;
@@ -237,6 +265,7 @@ export class PanelController {
   setBusy(busy: boolean): void {
     setActionDisabled(this.btnChecklist, busy);
     setActionDisabled(this.btnCreateStyles, busy);
+    setActionDisabled(this.btnCreateRendimento, busy);
     setActionDisabled(this.btnClose, busy);
     setActionDisabled(this.btnDownloadReport, busy || !this.reportDownloadAllowed);
   }

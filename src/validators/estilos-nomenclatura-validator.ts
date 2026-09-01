@@ -5,25 +5,9 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import {
-  buildParagraphStyleSuggestion,
-  containsInvalidSpaces,
   isParagraphStyleNomenclatureSkipped,
   isValidParagraphStyleName,
 } from "../utils/paleta-estilos";
-
-function nomenclatureDetails(name: string): string {
-  const suggestion = buildParagraphStyleSuggestion(name);
-  if (containsInvalidSpaces(name) && suggestion) {
-    return `Remova os espaços. Use: ${suggestion}`;
-  }
-  if (containsInvalidSpaces(name)) {
-    return "Remova os espaços do nome (use _).";
-  }
-  if (suggestion) {
-    return `Use: ${suggestion}`;
-  }
-  return "O tronco deve ser número_palavra da paleta (ex.: 02_texto, 05_legenda).";
-}
 
 export class EstilosNomenclaturaValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.ESTILOS_NOMENCLATURA;
@@ -44,9 +28,8 @@ export class EstilosNomenclaturaValidator extends BaseValidator {
         if (isValidParagraphStyleName(name)) return;
 
         issues.push({
-          message: "Tronco fora da paleta",
+          message: "O tronco deve ser número_palavra da paleta (ex.: 02_texto, 05_legenda).",
           object: name,
-          details: nomenclatureDetails(name),
         });
       });
 

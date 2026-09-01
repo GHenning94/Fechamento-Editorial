@@ -1,5 +1,5 @@
 import type { Document, Layer } from "indesign";
-import { LAYER_MEMORIAL_DESCRITIVO } from "./constants";
+import { LAYER_MEMORIAL_DESCRITIVO, LAYER_RENDIMENTO } from "./constants";
 import { forEachCollectionItem } from "./collection-helpers";
 
 const EDITORIAL_LAYER_NAMES = new Set([
@@ -38,6 +38,25 @@ export function findEditorialLayer(doc: Document): Layer | null {
       return;
     }
     if (!alias && isEditorialLayerName(layer.name)) {
+      alias = layer;
+    }
+  });
+
+  return exact || alias;
+}
+
+/** Localiza a layer de rendimento sem depender de visibilidade ou caixa. */
+export function findRendimentoLayer(doc: Document): Layer | null {
+  let exact: Layer | null = null;
+  let alias: Layer | null = null;
+
+  forEachCollectionItem<Layer>(doc.layers, (layer) => {
+    if (!layer?.isValid) return;
+    if (layer.name === LAYER_RENDIMENTO) {
+      exact = layer;
+      return;
+    }
+    if (!alias && isRendimentoLayerName(layer.name)) {
       alias = layer;
     }
   });

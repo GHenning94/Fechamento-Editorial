@@ -12,7 +12,7 @@ import {
   ensureDocumentSaved,
   PackageCancelledError,
 } from "../utils/file-system";
-import { findEditorialLayer } from "../utils/editorial-layer";
+import { findEditorialLayer, findRendimentoLayer } from "../utils/editorial-layer";
 import { yieldForUi, yieldToHost } from "../utils/yield-to-host";
 import {
   getCachedChecklistResult,
@@ -68,6 +68,12 @@ export class ClosureOrchestrator {
   hasMemorialLayer(): boolean {
     return runInDesignReadOnly("EDITORIAL AUTOCLOSE — Layer memorial", () =>
       Boolean(findEditorialLayer(getActiveDocument()))
+    );
+  }
+
+  hasRendimentoLayer(): boolean {
+    return runInDesignReadOnly("EDITORIAL AUTOCLOSE — Layer rendimento", () =>
+      Boolean(findRendimentoLayer(getActiveDocument()))
     );
   }
 

@@ -217,6 +217,10 @@ function checkboxAppearanceStream(size: number, checked: boolean): string {
   ].join(" ");
 }
 
+function checkboxOnPage(x: number, y: number, size: number, checked: boolean): string {
+  return `q 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} cm ${checkboxAppearanceStream(size, checked)} Q`;
+}
+
 export function displayDocumentTitle(name: string): string {
   const trimmed = (name || "").trim();
   return trimmed.replace(/\.indd$/i, "") || "-";
@@ -244,8 +248,8 @@ function buildPageContent(
   const logoW = 92;
   const logoH = (logoW * logo.h) / logo.w;
   const logoX = (PAGE_W - logoW) / 2;
-  const logoY = PAGE_H - 10 - logoH;
-  let y = logoY - 14;
+  const logoY = PAGE_H - 22 - logoH;
+  let y = logoY - 26;
   const contentW = PAGE_W - MARGIN_X * 2;
   const textX = MARGIN_X + 18;
   const itemWidth = PAGE_W - MARGIN_X - textX;
@@ -320,6 +324,7 @@ function buildPageContent(
       size: CHECK_SIZE,
       checked: item.checked,
     });
+    cmds.push(checkboxOnPage(checkX, checkY, CHECK_SIZE, item.checked));
 
     const itemY = y;
     cmds.push(textAt(textX, y, itemSize, "F1", GRAY, titleLines[0]));
@@ -485,6 +490,11 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     obj(contentIds[i], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   }
 
+  offsets[apOffId] = pos;
+  write(formXObject(apOffId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, false)));
+  offsets[apYesId] = pos;
+  write(formXObject(apYesId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, true)));
+
   const annotsByPage = pageContents.map(() => [] as number[]);
   for (let i = 0; i < c; i++) {
     annotsByPage[comments[i].pageIndex]?.push(commentIds[i]);
@@ -515,19 +525,13 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     );
   }
 
-  offsets[apOffId] = pos;
-  write(formXObject(apOffId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, false)));
-  offsets[apYesId] = pos;
-  write(formXObject(apYesId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, true)));
-
   for (let i = 0; i < k; i++) {
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
-    const on = field.checked;
-    const state = on ? "/Yes" : "/Off";
+    const nAp = field.checked ? apYesId : apOffId;
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV ${state} /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /BC [] /BG [] >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> /D << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /BC [] /BG [] /CA () >> /AP << /N ${nAp} 0 R /D ${nAp} 0 R /R ${nAp} 0 R >> >>`
     );
   }
 

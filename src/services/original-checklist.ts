@@ -32,6 +32,10 @@ function mentionsGuias(issue: ValidationIssue): boolean {
   return /guias/.test(blob(issue));
 }
 
+function mentionsRendimento(issue: ValidationIssue): boolean {
+  return /rendimento/.test(blob(issue));
+}
+
 const ORIGINAL_ROWS: OriginalRowSpec[] = [
   {
     id: "nomenclatura-arquivos",
@@ -48,7 +52,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
     validatorIds: [V.LAYERS_OBRIGATORIAS, V.LAYERS_NOMENCLATURA, V.MEMORIAL_DESCRITIVO],
     issueFilter: (issue, validatorId) => {
       if (validatorId === V.LAYERS_OBRIGATORIAS || validatorId === V.LAYERS_NOMENCLATURA) {
-        return !mentionsGuias(issue);
+        return !mentionsGuias(issue) && !mentionsRendimento(issue);
       }
       return true;
     },

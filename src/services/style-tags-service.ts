@@ -355,7 +355,7 @@ function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
     // ignore
   }
   try {
-    (style as ParagraphStyle & { fontStyle?: string }).fontStyle = "Regular";
+    (style as ParagraphStyle & { fontStyle?: string }).fontStyle = "Medium";
   } catch {
     // ignore
   }
@@ -725,7 +725,7 @@ function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Doc
     // ignore
   }
   try {
-    text.fontStyle = "Regular";
+    text.fontStyle = "Medium";
   } catch {
     // ignore
   }

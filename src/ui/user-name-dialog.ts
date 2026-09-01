@@ -16,13 +16,17 @@ export async function promptUserNameDialog(defaultName: string): Promise<string>
   return trimmed;
 }
 
-export async function promptConfirmDialog(): Promise<boolean> {
+export async function promptConfirmDialog(
+  message?: string,
+  title?: string
+): Promise<boolean> {
   return showNativeConfirm(
-    [
-      "Não existe a layer de memorial descritivo neste documento.",
-      "Os PDFs serão gerados mesmo assim, sem essa layer.",
-      "Deseja fechar o material mesmo assim?",
-    ].join("\n"),
-    "Layer de memorial descritivo"
+    message ||
+      [
+        "Não existe a layer de memorial descritivo neste documento.",
+        "Os PDFs serão gerados mesmo assim, sem essa layer.",
+        "Deseja fechar o material mesmo assim?",
+      ].join("\n"),
+    title || "Layer de memorial descritivo"
   );
 }
