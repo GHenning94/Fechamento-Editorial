@@ -4,18 +4,23 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { isSpotExceptionColor } from "../utils/indesign-helpers";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import type { Color, ColorGroup, ColorGroupSwatch } from "indesign";
+import type { Color, ColorGroup, ColorGroupSwatch, Swatch } from "indesign";
 
 const BUILT_IN_SWATCH_NAMES = new Set([
   "none",
   "registration",
   "paper",
   "black",
+  "cyan",
+  "magenta",
+  "yellow",
   "nenhuma",
   "nenhum",
   "registro",
   "papel",
   "preto",
+  "ciano",
+  "amarelo",
 ]);
 
 function normalizeBuiltInSwatchName(name: string): string {
@@ -34,24 +39,36 @@ function isBuiltInSwatch(name: string): boolean {
   return BUILT_IN_SWATCH_NAMES.has(normalizeBuiltInSwatchName(trimmed));
 }
 
+function isUnnamedColor(name: string): boolean {
+  const key = normalizeBuiltInSwatchName(name);
+  return (
+    !key ||
+    key.includes("unnamed") ||
+    key.includes("sem nome") ||
+    key.includes("semnome") ||
+    /^swatch\s*\d+$/.test(key)
+  );
+}
+
+/** Cores geradas por texto colado do Word — costumam existir em document.colors, não no painel Amostras. */
+function isWordImportColor(name: string): boolean {
+  return normalizeBuiltInSwatchName(name).startsWith("word");
+}
+
 const COR_PREFIX = "Cor";
 const COR_NOMENCLATURE_EXAMPLES = "CorAzul, Cor1, CorCMYK";
 
+/** Cores das tags do memorial descritivo (EAC_TAG_PARAGRAFO, EAC_TAG_CARACTERE, EAC_TAG_INK). */
 function isMemorialTagColor(name: string): boolean {
-  return (name || "").toUpperCase().startsWith("EAC_TAG");
+  return (name || "").toUpperCase().startsWith("EAC_");
 }
 
 function isRootColorGroupName(name: string): boolean {
   const trimmed = (name || "").trim();
   if (!trimmed) return true;
-  // Grupo raiz do InDesign costuma vir entre colchetes / sem nome útil
   return /^\[.*\]$/.test(trimmed);
 }
 
-/**
- * Cores dentro de pastas (Color Groups) nomeadas — tipicamente RGB/CMYK
- * puxadas de ilustrações, não criadas para o material editorial.
- */
 function collectFolderColorNames(doc: Document): Set<string> {
   const names = new Set<string>();
   const groups = doc.colorGroups;
@@ -92,6 +109,26 @@ function isColorInNamedFolder(color: Color, folderNames: Set<string>): boolean {
   return false;
 }
 
+function isProcessColorSwatch(item: Swatch | Color): item is Color {
+  const color = item as Color;
+  return typeof color.space === "number" && typeof color.model === "number";
+}
+
+/**
+ * Amostras visíveis no painel Amostras.
+ * `document.colors` inclui tintas padrão (Cyan/Magenta/Yellow) e cores
+ * sem amostra (ex.: Word_R234_G241_B221 de texto colado) — essas não devem
+ * entrar na checagem de nomenclatura.
+ */
+function eachVisibleColorSwatch(doc: Document, callback: (color: Color) => void): void {
+  const source = doc.swatches ?? doc.colors;
+  forEachCollectionItem<Swatch | Color>(source, (item) => {
+    if (!item || !item.isValid) return;
+    if (!isProcessColorSwatch(item)) return;
+    callback(item);
+  });
+}
+
 export class CoresValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.CORES;
   readonly name = "Cores";
@@ -101,11 +138,15 @@ export class CoresValidator extends BaseValidator {
       const issues: ValidationIssue[] = [];
       const folderColorNames = collectFolderColorNames(doc);
 
-      forEachCollectionItem<Color>(doc.colors, (color) => {
-        if (!color || !color.isValid) return;
-
+      eachVisibleColorSwatch(doc, (color) => {
         const name = (color.name || "").trim();
-        if (isBuiltInSwatch(name) || isSpotExceptionColor(name) || isMemorialTagColor(name)) {
+        if (
+          isBuiltInSwatch(name) ||
+          isUnnamedColor(name) ||
+          isWordImportColor(name) ||
+          isSpotExceptionColor(name) ||
+          isMemorialTagColor(name)
+        ) {
           return;
         }
 

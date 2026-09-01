@@ -1,4 +1,6 @@
-/** Gerador mínimo de PDF 1.4 (Helvetica WinAnsi) — sem dependências. */
+/** Gerador mínimo de PDF 1.4 (Helvetica WinAnsi + logo JPEG + combos AcroForm). */
+
+import { SOMOS_LOGO_JPEG_B64 } from "../assets/somos-logo-data";
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -6,10 +8,11 @@ const MARGIN_X = 42;
 const MAGENTA = "0.847 0.200 0.380";
 const MAGENTA_LIGHT = "0.957 0.769 0.824";
 const GRAY = "0.361 0.361 0.361";
-const GRAY_SOFT = "0.48 0.48 0.48";
 const BLACK = "0 0 0";
 const WHITE = "1 1 1";
 const RULE = "0.85 0.85 0.85";
+const COMBO_W = 168;
+const COMBO_H = 14;
 
 export interface ChecklistPdfItem {
   label: string;
@@ -25,11 +28,13 @@ export interface ChecklistPdfInput {
   notes?: string[];
 }
 
-interface OutlineNode {
-  title: string;
+interface ComboField {
+  name: string;
   pageIndex: number;
+  x: number;
   y: number;
-  children: OutlineNode[];
+  options: string[];
+  value: string;
 }
 
 const WINANSI_EXTRA: Record<number, number> = {
@@ -57,6 +62,53 @@ function pdfString(text: string): string {
     }
   }
   return `(${out})`;
+}
+
+function asciiBytes(value: string): Uint8Array {
+  const out = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i++) {
+    out[i] = value.charCodeAt(i) & 0xff;
+  }
+  return out;
+}
+
+function decodeBase64(b64: string): Uint8Array {
+  const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const padded = b64.replace(/[^A-Za-z0-9+/=]/g, "");
+  const out: number[] = [];
+  for (let i = 0; i < padded.length; i += 4) {
+    const a = table.indexOf(padded[i]);
+    const b = table.indexOf(padded[i + 1] || "A");
+    const cChar = padded[i + 2];
+    const dChar = padded[i + 3];
+    const c = !cChar || cChar === "=" ? -1 : table.indexOf(cChar);
+    const d = !dChar || dChar === "=" ? -1 : table.indexOf(dChar);
+    const n = (a << 18) | (b << 12) | ((c < 0 ? 0 : c) << 6) | (d < 0 ? 0 : d);
+    out.push((n >> 16) & 255);
+    if (c >= 0) out.push((n >> 8) & 255);
+    if (d >= 0) out.push(n & 255);
+  }
+  return Uint8Array.from(out);
+}
+
+function jpegSize(bytes: Uint8Array): { w: number; h: number } {
+  let i = 2;
+  while (i + 8 < bytes.length) {
+    if (bytes[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+    const marker = bytes[i + 1];
+    if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+      return {
+        h: (bytes[i + 5] << 8) | bytes[i + 6],
+        w: (bytes[i + 7] << 8) | bytes[i + 8],
+      };
+    }
+    const len = (bytes[i + 2] << 8) | bytes[i + 3];
+    i += 2 + len;
+  }
+  return { w: 555, h: 313 };
 }
 
 function circlePath(cx: number, cy: number, r: number): string {
@@ -107,37 +159,41 @@ function checkbox(x: number, y: number, checked: boolean): string {
   ].join(" ");
 }
 
-function chevron(x: number, y: number): string {
-  return [
-    `${MAGENTA} rg`,
-    `${x.toFixed(2)} ${(y + 6).toFixed(2)} m`,
-    `${(x + 6).toFixed(2)} ${(y + 6).toFixed(2)} l`,
-    `${(x + 3).toFixed(2)} ${(y + 1.5).toFixed(2)} l`,
-    "h f",
-  ].join(" ");
+export function displayDocumentTitle(name: string): string {
+  const trimmed = (name || "").trim();
+  return trimmed.replace(/\.indd$/i, "") || "-";
 }
 
-function somosLogo(): string {
-  const cx = PAGE_W / 2;
-  const markCy = PAGE_H - 32;
-  const r = 9.2;
-  const somosW = 48;
-  const educW = 36;
-  const somosX = cx - somosW / 2;
-  const educX = somosX + somosW - educW;
+function comboAppearanceStream(width: number, height: number, label: string): string {
+  const clipped = label.length > 28 ? `${label.slice(0, 27)}…` : label;
+  const chevronX = width - 10;
+  const midY = height / 2;
   return [
-    `${MAGENTA} rg ${circlePath(cx, markCy, r)} h f`,
-    `${WHITE} rg ${circlePath(cx + 3.4, markCy + 3.1, 5.1)} h f`,
-    textAt(somosX, PAGE_H - 56, 13, "F2", BLACK, "SOMOS"),
-    textAt(educX, PAGE_H - 66, 6.5, "F1", BLACK, "EDUCAÇÃO"),
+    "q",
+    `${WHITE} rg 0 0 ${width.toFixed(2)} ${height.toFixed(2)} re f`,
+    `${MAGENTA} RG 0.7 w 0.4 0.4 ${(width - 0.8).toFixed(2)} ${(height - 0.8).toFixed(2)} re S`,
+    textAt(5, 3.5, 7.5, "F1", GRAY, clipped),
+    `${MAGENTA} rg`,
+    `${chevronX.toFixed(2)} ${(midY + 2.2).toFixed(2)} m`,
+    `${(chevronX + 6).toFixed(2)} ${(midY + 2.2).toFixed(2)} l`,
+    `${(chevronX + 3).toFixed(2)} ${(midY - 2.2).toFixed(2)} l`,
+    "h f",
+    "Q",
   ].join("\n");
 }
 
-function buildPageContent(input: ChecklistPdfInput): { pages: string[]; outlines: OutlineNode[] } {
+function buildPageContent(
+  input: ChecklistPdfInput,
+  logo: { bytes: Uint8Array; w: number; h: number }
+): { pages: string[]; combos: ComboField[] } {
   const pages: string[] = [];
   const cmds: string[] = [];
-  const outlines: OutlineNode[] = [];
-  let y = PAGE_H - 84;
+  const combos: ComboField[] = [];
+  const logoW = 78;
+  const logoH = (logoW * logo.h) / logo.w;
+  const logoX = (PAGE_W - logoW) / 2;
+  const logoY = PAGE_H - 14 - logoH;
+  let y = logoY - 22;
 
   const flushPage = (): void => {
     pages.push(cmds.join("\n"));
@@ -152,7 +208,7 @@ function buildPageContent(input: ChecklistPdfInput): { pages: string[]; outlines
   };
 
   cmds.push(`${MAGENTA} rg ${circlePath(PAGE_W + 8, PAGE_H - 28, 78)} h f`);
-  cmds.push(somosLogo());
+  cmds.push(`q ${logoW.toFixed(2)} 0 0 ${logoH.toFixed(2)} ${logoX.toFixed(2)} ${logoY.toFixed(2)} cm /ImLogo Do Q`);
 
   cmds.push(textAt(MARGIN_X, y, 18, "F2", MAGENTA, "CHECKLIST DESIGN"));
   y -= 26;
@@ -161,8 +217,7 @@ function buildPageContent(input: ChecklistPdfInput): { pages: string[]; outlines
   y -= 15;
   const instructions = [
     "Esta checklist é gerada automaticamente pelo EDITORIAL AUTOCLOSE após a validação.",
-    "Itens aprovados aparecem marcados. Erros e alertas permanecem sem marcação.",
-    "Abra os detalhes abaixo de cada item (ou o painel de marcadores do PDF).",
+    "Itens aprovados aparecem marcados. Nos demais, abra o menu à direita para ver os detalhes.",
   ];
   for (const line of instructions) {
     cmds.push(textAt(MARGIN_X, y, 8, "F1", GRAY, line));
@@ -172,45 +227,37 @@ function buildPageContent(input: ChecklistPdfInput): { pages: string[]; outlines
 
   cmds.push(textAt(MARGIN_X, y, 8, "F1", MAGENTA, "TÍTULO DA OBRA"));
   y -= 14;
-  cmds.push(textAt(MARGIN_X, y, 11, "F2", BLACK, input.documentName || "-"));
+  cmds.push(textAt(MARGIN_X, y, 11, "F2", BLACK, displayDocumentTitle(input.documentName)));
   y -= 8;
   cmds.push(`${RULE} RG 0.4 w ${MARGIN_X.toFixed(2)} ${y.toFixed(2)} m ${(PAGE_W - MARGIN_X).toFixed(2)} ${y.toFixed(2)} l S`);
-  y -= 18;
+  y -= 20;
 
   for (const item of input.items) {
-    const details = (item.details || []).slice(0, 12);
-    const titleLines = wrapText(item.label, 78);
-    const detailBlocks = details.flatMap((line) => wrapText(line, 82));
-    ensureSpace(16 + (titleLines.length - 1) * 11 + detailBlocks.length * 10 + 8);
+    const details = (item.details || []).filter((line) => line.trim());
+    const titleLines = wrapText(item.label, item.checked ? 62 : 52);
+    ensureSpace(16 + (titleLines.length - 1) * 11 + 8);
 
-    const itemY = y;
-    const children: OutlineNode[] = [];
     cmds.push(checkbox(MARGIN_X, y - 4, item.checked));
     cmds.push(textAt(MARGIN_X + 20, y, 9, "F2", GRAY, titleLines[0]));
-    cmds.push(chevron(PAGE_W - MARGIN_X - 8, y - 1));
+
+    if (item.checked) {
+      cmds.push(textAt(PAGE_W - MARGIN_X - 52, y, 8, "F1", GRAY, "Aprovado"));
+    } else if (details.length > 0) {
+      combos.push({
+        name: `chk_${combos.length + 1}`,
+        pageIndex: pages.length,
+        x: PAGE_W - MARGIN_X - COMBO_W,
+        y: y - 3,
+        options: details.map((line) => line.slice(0, 140)),
+        value: "ver detalhes",
+      });
+    }
+
     y -= 13;
     for (let i = 1; i < titleLines.length; i++) {
       cmds.push(textAt(MARGIN_X + 20, y, 8, "F1", GRAY, titleLines[i]));
       y -= 11;
     }
-
-    for (let d = 0; d < detailBlocks.length; d++) {
-      const line = detailBlocks[d];
-      children.push({
-        title: line.slice(0, 90),
-        pageIndex: pages.length,
-        y,
-        children: [],
-      });
-      cmds.push(textAt(MARGIN_X + 28, y, 7.5, "F1", GRAY_SOFT, `- ${line}`));
-      y -= 10;
-    }
-    outlines.push({
-      title: item.label,
-      pageIndex: pages.length,
-      y: itemY,
-      children,
-    });
     y -= 6;
   }
 
@@ -240,64 +287,36 @@ function buildPageContent(input: ChecklistPdfInput): { pages: string[]; outlines
   }
 
   flushPage();
-  return { pages, outlines };
+  return { pages, combos };
 }
 
-interface AssignedOutline {
-  id: number;
-  title: string;
-  pageIndex: number;
-  y: number;
-  parentId: number;
-  childIds: number[];
-}
-
-function assignOutlineIds(nodes: OutlineNode[], parentId: number, nextId: { n: number }): AssignedOutline[] {
-  const assigned: AssignedOutline[] = [];
-  for (const node of nodes) {
-    const id = nextId.n++;
-    const children = assignOutlineIds(node.children || [], id, nextId);
-    assigned.push({
-      id,
-      title: node.title,
-      pageIndex: node.pageIndex,
-      y: node.y,
-      parentId,
-      childIds: children.filter((child) => child.parentId === id).map((child) => child.id),
-    });
-    assigned.push(...children);
-  }
-  return assigned;
-}
-
-function asciiBytes(value: string): Uint8Array {
-  const out = new Uint8Array(value.length);
-  for (let i = 0; i < value.length; i++) {
-    out[i] = value.charCodeAt(i) & 0xff;
-  }
-  return out;
-}
-
-export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
-  const { pages: pageContents, outlines } = buildPageContent(input);
+export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Array): Uint8Array {
+  const logoBytes = logoJpeg && logoJpeg.length > 0 ? logoJpeg : decodeBase64(SOMOS_LOGO_JPEG_B64);
+  const size = jpegSize(logoBytes);
+  const { pages: pageContents, combos } = buildPageContent(input, { bytes: logoBytes, ...size });
   const n = pageContents.length;
-  const contentId = (i: number) => 3 + i;
-  const pageId = (i: number) => 3 + n + i;
-  const pagesId = 3 + 2 * n;
-  const catalogId = pagesId + 1;
-  const outlineRootId = catalogId + 1;
-  const firstOutlineItemId = outlineRootId + 1;
-  const assignedOutlines =
-    outlines.length > 0 ? assignOutlineIds(outlines, outlineRootId, { n: firstOutlineItemId }) : [];
-  const lastObjId = assignedOutlines.length > 0 ? assignedOutlines[assignedOutlines.length - 1].id : catalogId;
+  const k = combos.length;
 
-  const chunks: string[] = [];
+  const font1 = 1;
+  const font2 = 2;
+  const imageId = 3;
+  const contentId = (i: number) => 4 + i;
+  const pageId = (i: number) => 4 + n + i;
+  const pagesId = 4 + 2 * n;
+  const apId = (i: number) => pagesId + 1 + i;
+  const widgetId = (i: number) => pagesId + 1 + k + i;
+  const acroId = k > 0 ? pagesId + 1 + 2 * k : -1;
+  const catalogId = k > 0 ? acroId + 1 : pagesId + 1;
+  const lastObjId = catalogId;
+
+  const chunks: Uint8Array[] = [];
   const offsets: number[] = new Array(lastObjId + 1).fill(0);
   let pos = 0;
 
-  const write = (s: string): void => {
-    chunks.push(s);
-    pos += s.length;
+  const write = (chunk: string | Uint8Array): void => {
+    const bytes = typeof chunk === "string" ? asciiBytes(chunk) : chunk;
+    chunks.push(bytes);
+    pos += bytes.length;
   };
 
   const obj = (id: number, body: string): void => {
@@ -305,58 +324,69 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
     write(`${id} 0 obj\n${body}\nendobj\n`);
   };
 
-  write("%PDF-1.4\n");
-  obj(1, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-  obj(2, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+  write("%PDF-1.4\n%\x80\x81\x82\x83\n");
+  obj(font1, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+  obj(font2, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+
+  offsets[imageId] = pos;
+  write(
+    `${imageId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${size.w} /Height ${size.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBytes.length} >>\nstream\n`
+  );
+  write(logoBytes);
+  write("\nendstream\nendobj\n");
 
   for (let i = 0; i < n; i++) {
     const stream = pageContents[i];
     obj(contentId(i), `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   }
 
-  const kids = pageContents.map((_, i) => `${pageId(i)} 0 R`).join(" ");
+  const annotsByPage = pageContents.map(() => [] as number[]);
+  for (let i = 0; i < k; i++) {
+    annotsByPage[combos[i].pageIndex]?.push(widgetId(i));
+  }
+
   for (let i = 0; i < n; i++) {
+    const annots = annotsByPage[i];
+    const annotsPart =
+      annots.length > 0 ? ` /Annots [${annots.map((id) => `${id} 0 R`).join(" ")}]` : "";
     obj(
       pageId(i),
-      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentId(i)} 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> >>`
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentId(i)} 0 R /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> /XObject << /ImLogo ${imageId} 0 R >> >>${annotsPart} >>`
     );
   }
 
+  const kids = pageContents.map((_, i) => `${pageId(i)} 0 R`).join(" ");
   obj(pagesId, `<< /Type /Pages /Count ${n} /Kids [${kids}] >>`);
 
-  const catalogExtras =
-    assignedOutlines.length > 0 ? ` /Outlines ${outlineRootId} 0 R /PageMode /UseOutlines` : "";
-  obj(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${catalogExtras} >>`);
-
-  if (assignedOutlines.length > 0) {
-    const topLevel = assignedOutlines.filter((entry) => entry.parentId === outlineRootId);
+  for (let i = 0; i < k; i++) {
+    const field = combos[i];
+    const stream = comboAppearanceStream(COMBO_W, COMBO_H, field.value);
     obj(
-      outlineRootId,
-      `<< /Type /Outlines /First ${topLevel[0].id} 0 R /Last ${topLevel[topLevel.length - 1].id} 0 R /Count ${topLevel.length} >>`
+      apId(i),
+      `<< /Type /XObject /Subtype /Form /BBox [0 0 ${COMBO_W} ${COMBO_H}] /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> >> /Length ${stream.length} >>\nstream\n${stream}\nendstream`
     );
+  }
 
-    const byParent = new Map<number, AssignedOutline[]>();
-    for (const entry of assignedOutlines) {
-      const siblings = byParent.get(entry.parentId) || [];
-      siblings.push(entry);
-      byParent.set(entry.parentId, siblings);
-    }
+  const COMBO_FLAGS = 131072;
+  for (let i = 0; i < k; i++) {
+    const field = combos[i];
+    const destPage = pageId(Math.min(field.pageIndex, n - 1));
+    const opt = field.options.map((line) => pdfString(line)).join(" ");
+    obj(
+      widgetId(i),
+      `<< /Type /Annot /Subtype /Widget /FT /Ch /T ${pdfString(field.name)} /Ff ${COMBO_FLAGS} /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + COMBO_W).toFixed(2)} ${(field.y + COMBO_H).toFixed(2)}] /F 4 /P ${destPage} 0 R /V ${pdfString(field.value)} /DV ${pdfString(field.value)} /Opt [${opt}] /DA (/F1 8 Tf 0.36 0.36 0.36 rg) /MK << /BG [1 1 1] /BC [0.847 0.200 0.380] >> /AP << /N ${apId(i)} 0 R >> >>`
+    );
+  }
 
-    for (const entry of assignedOutlines) {
-      const siblings = byParent.get(entry.parentId) || [];
-      const index = siblings.findIndex((item) => item.id === entry.id);
-      const parts = [`/Title ${pdfString(entry.title)}`, `/Parent ${entry.parentId} 0 R`];
-      if (index > 0) parts.push(`/Prev ${siblings[index - 1].id} 0 R`);
-      if (index < siblings.length - 1) parts.push(`/Next ${siblings[index + 1].id} 0 R`);
-      if (entry.childIds.length > 0) {
-        parts.push(`/First ${entry.childIds[0]} 0 R`);
-        parts.push(`/Last ${entry.childIds[entry.childIds.length - 1]} 0 R`);
-        parts.push(`/Count ${-entry.childIds.length}`);
-      }
-      const destPage = pageId(Math.min(entry.pageIndex, n - 1));
-      parts.push(`/Dest [${destPage} 0 R /XYZ ${MARGIN_X} ${entry.y.toFixed(2)} 0]`);
-      obj(entry.id, `<< ${parts.join(" ")} >>`);
-    }
+  if (k > 0) {
+    const fields = combos.map((_, i) => `${widgetId(i)} 0 R`).join(" ");
+    obj(
+      acroId,
+      `<< /Fields [${fields}] /NeedAppearances true /DA (/F1 8 Tf 0 g) /DR << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> >> >>`
+    );
+    obj(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R /AcroForm ${acroId} 0 R >>`);
+  } else {
+    obj(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
   }
 
   const xrefStart = pos;
@@ -367,5 +397,12 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
   write(xref);
   write(`trailer\n<< /Size ${lastObjId + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
 
-  return asciiBytes(chunks.join(""));
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }
