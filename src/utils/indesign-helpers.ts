@@ -588,7 +588,8 @@ export function shouldSkipParagraphStyleValidation(name: string): boolean {
   const trimmed = (name || "").trim();
   if (!trimmed) return true;
   if (isDefaultParagraphStyle(trimmed)) return true;
-  return trimmed.startsWith("00_");
+  if (trimmed.startsWith("00_") || trimmed.toUpperCase().startsWith("EAC_")) return true;
+  return false;
 }
 
 export function isMixedInkColor(color: Color): boolean {

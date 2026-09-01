@@ -76,20 +76,20 @@ export class PanelController {
       if (!entry) return;
 
       onActionActivate(expander, () => {
-        void this.openResultDetailModal(entry.listId, entry.title, entry.kind);
+    void this.openResultDetailModal(entry.listId, entry.title, entry.kind);
       });
     });
   }
 
-  private async openResultDetailModal(
+  private openResultDetailModal(
     listId: string,
     title: string,
     kind: "approved" | "warning" | "error"
-  ): Promise<void> {
+  ): void {
     const list = this.root.querySelector(`#${listId}`) as HTMLElement | null;
     const html = list?.innerHTML || '<li class="empty-item">Nenhum item</li>';
 
-    await showResultsDetailDialog({
+    showResultsDetailDialog({
       title,
       kind,
       html,

@@ -106,6 +106,7 @@ declare module "indesign" {
     userName: string;
     selection: unknown;
     dialogs: InDesignDialogs;
+    languagesWithVendors?: Languages;
     doScript?(
       script: (() => unknown) | string,
       language?: unknown,
@@ -414,8 +415,15 @@ declare module "indesign" {
     overprintFill: boolean;
   }
 
+  export interface Languages {
+    length: number;
+    item(index: number): Language;
+    itemByName(name: string): Language;
+  }
+
   export interface Language {
     name: string;
+    isValid?: boolean;
   }
 
   export interface CharacterStyles {

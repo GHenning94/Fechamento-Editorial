@@ -9,6 +9,14 @@ type UxpDialog = HTMLDialogElement & {
     minSize?: { width: number; height: number };
     maxSize?: { width: number; height: number };
   }): Promise<unknown>;
+  uxpShow?(options: {
+    title: string;
+    resize?: "none" | "both" | "horizontal" | "vertical";
+    size?: { width: number; height: number };
+    minSize?: { width: number; height: number };
+    maxSize?: { width: number; height: number };
+  }): Promise<unknown>;
+  show(options?: unknown): unknown;
   close(returnValue?: string): void;
 };
 
@@ -37,16 +45,6 @@ const KIND_TITLE_COLOR: Record<ResultDetailKind, string> = {
   warning: "#e6c35c",
   error: "#e87474",
 };
-
-function waitForDialogClose(dialog: UxpDialog): Promise<void> {
-  return new Promise((resolve) => {
-    const onClose = (): void => {
-      dialog.removeEventListener("close", onClose);
-      resolve();
-    };
-    dialog.addEventListener("close", onClose);
-  });
-}
 
 function bindIgnoreHandlers(
   listEl: HTMLElement,
@@ -177,16 +175,20 @@ function syncListHeight(root: HTMLElement, listEl: HTMLElement): number {
   return listHeight;
 }
 
-export async function showResultsDetailDialog(options: ResultDetailOptions): Promise<void> {
-  document.querySelectorAll("[id^='editorial-results-detail-dialog']").forEach((el) => {
-    el.remove();
+export function showResultsDetailDialog(options: ResultDetailOptions): void {
+  document.querySelectorAll(`[data-results-kind="${options.kind}"]`).forEach((el) => {
+    try {
+      (el as UxpDialog).close();
+    } catch {
+      el.remove();
+    }
   });
 
   const titleColor = KIND_TITLE_COLOR[options.kind];
 
-  // ID único: evita o InDesign reaproveitar geometria antiga da janela
   const dialog = document.createElement("dialog") as UxpDialog;
-  dialog.id = `editorial-results-detail-dialog-${Date.now()}`;
+  dialog.id = `editorial-results-detail-dialog-${options.kind}`;
+  dialog.setAttribute("data-results-kind", options.kind);
 
   const root = document.createElement("div");
   root.className = "results-detail-dialog-content";
@@ -224,11 +226,6 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
 
   bindResultGroupToggles(listEl);
 
-  onActionActivate(closeBtn, () => {
-    dialog.close();
-  });
-
-  // UXP não emite resize confiável: acompanha a janela por polling leve
   let closed = false;
   let lastListHeight = 0;
   const resizePoll = window.setInterval(() => {
@@ -236,41 +233,72 @@ export async function showResultsDetailDialog(options: ResultDetailOptions): Pro
       window.clearInterval(resizePoll);
       return;
     }
-    const rootHeight = root.clientHeight || DIALOG_HEIGHT;
-    const target = Math.max(120, rootHeight - HEADER_HEIGHT);
+    const target = Math.max(120, (root.clientHeight || DIALOG_HEIGHT) - HEADER_HEIGHT);
     if (target !== lastListHeight) {
       lastListHeight = syncListHeight(root, listEl);
     }
   }, 150);
 
-  try {
-    if (typeof dialog.uxpShowModal === "function") {
-      const showPromise = dialog.uxpShowModal({
-        title: options.title,
-        resize: "both",
-        size: { width: DIALOG_WIDTH, height: DIALOG_HEIGHT },
-        minSize: { width: MIN_WIDTH, height: MIN_HEIGHT },
-        maxSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
-      });
+  onActionActivate(closeBtn, () => {
+    dialog.close();
+  });
 
-      window.setTimeout(() => {
-        if (!closed) lastListHeight = syncListHeight(root, listEl);
-      }, 60);
-
-      await showPromise;
-      return;
-    }
-
-    dialog.style.width = `${DIALOG_WIDTH}px`;
-    dialog.style.height = `${DIALOG_HEIGHT}px`;
-    dialog.showModal();
-    lastListHeight = syncListHeight(root, listEl);
-    await waitForDialogClose(dialog);
-  } catch {
-    // usuário fechou / host cancelou
-  } finally {
+  const teardown = (): void => {
+    if (closed) return;
     closed = true;
     window.clearInterval(resizePoll);
+    dialog.removeEventListener("close", teardown);
     dialog.remove();
+  };
+
+  dialog.addEventListener("close", teardown);
+
+  const windowOpts = {
+    title: options.title,
+    resize: "both" as const,
+    size: { width: DIALOG_WIDTH, height: DIALOG_HEIGHT },
+    minSize: { width: MIN_WIDTH, height: MIN_HEIGHT },
+    maxSize: { width: MAX_WIDTH, height: MAX_HEIGHT },
+  };
+
+  const opened = openModelessDialog(dialog, windowOpts);
+  window.setTimeout(() => {
+    if (!closed) lastListHeight = syncListHeight(root, listEl);
+  }, 60);
+
+  if (!opened) {
+    dialog.style.width = `${DIALOG_WIDTH}px`;
+    dialog.style.height = `${DIALOG_HEIGHT}px`;
+    dialog.show();
+  }
+}
+
+function openModelessDialog(
+  dialog: UxpDialog,
+  options: {
+    title: string;
+    resize: "both";
+    size: { width: number; height: number };
+    minSize: { width: number; height: number };
+    maxSize: { width: number; height: number };
+  }
+): boolean {
+  try {
+    if (typeof dialog.uxpShow === "function") {
+      void dialog.uxpShow(options);
+      return true;
+    }
+  } catch {
+    // tenta show()
+  }
+
+  try {
+    const result = dialog.show(options);
+    if (result && typeof (result as Promise<unknown>).then === "function") {
+      void (result as Promise<unknown>);
+    }
+    return true;
+  } catch {
+    return false;
   }
 }

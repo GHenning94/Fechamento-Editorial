@@ -1,8 +1,8 @@
 import type { CharacterStyle, Color, Document, Layer, Page, PageItem, ParagraphStyle, Story, Swatch, Text } from "indesign";
-import { LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
+import { ACCEPTED_LANGUAGES, LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { findEditorialLayer, isEditorialLayerName, isRendimentoLayerName } from "../utils/editorial-layer";
-import { getActiveDocument, getInDesignModule } from "../utils/indesign-runtime";
+import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
 
 const TAG_LABEL = "eac-style-tag";
@@ -393,6 +393,53 @@ function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
     } catch {
       // ignore
     }
+  }
+  applyBrazilianPortuguese(style);
+}
+
+function languageNameLooksBrazilian(name: string): boolean {
+  const key = (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return key.includes("portugu") && key.includes("brasil");
+}
+
+function applyBrazilianPortuguese(style: ParagraphStyle): void {
+  const names = [
+    ...ACCEPTED_LANGUAGES,
+    "Portuguese: Brazilian: 2009 Reforms",
+    "Português: Brasileiro: Reformas de 2009",
+  ];
+
+  try {
+    const langs = getInDesignApp().languagesWithVendors;
+    if (!langs) return;
+
+    for (const name of names) {
+      try {
+        const lang = langs.itemByName(name);
+        if (lang && (lang.isValid === undefined || lang.isValid)) {
+          style.appliedLanguage = lang;
+          return;
+        }
+      } catch {
+        // tenta o próximo nome
+      }
+    }
+
+    forEachCollectionItem<{ name?: string; isValid?: boolean }>(langs, (lang) => {
+      if (!lang || (lang.isValid === false)) return;
+      if (languageNameLooksBrazilian(lang.name || "")) {
+        try {
+          style.appliedLanguage = lang as ParagraphStyle["appliedLanguage"];
+        } catch {
+          // ignore
+        }
+      }
+    });
+  } catch {
+    // idioma indisponível neste host
   }
 }
 
