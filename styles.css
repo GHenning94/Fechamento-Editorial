@@ -784,6 +784,20 @@ progress::-webkit-progress-value {
   margin: 0;
 }
 
+.results-detail-list {
+  padding-bottom: 88px !important;
+}
+
+.results-scroll-spacer {
+  display: block;
+  height: 88px;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .results-detail-list > li {
   width: 100%;
   box-sizing: border-box;
