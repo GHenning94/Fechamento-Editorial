@@ -65,7 +65,10 @@ const PANEL_HTML = `
     <div class="result-block">
       <div class="result-header">
         <span class="result-header-label"><span class="warning-icon">!</span> Alertas</span>
-        <span class="result-expand" role="button" tabindex="0" title="Abrir Alertas em janela">⛶</span>
+        <div class="result-header-actions">
+          <span id="btn-ignore-all-warnings" class="result-ignore-all hidden" role="button" tabindex="0">Ignorar todos</span>
+          <span class="result-expand" role="button" tabindex="0" title="Abrir Alertas em janela">⛶</span>
+        </div>
       </div>
       <ul id="list-warnings" class="result-list"></ul>
     </div>

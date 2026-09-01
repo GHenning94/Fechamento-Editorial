@@ -1,7 +1,7 @@
 /**
- * Troncos de estilos de parágrafo da paleta padrão (modelo_padrao-estilos.pdf).
- * Nomenclatura exata — maiúsculas/minúsculas como no PDF, sem espaços (usar _).
- * Estilos derivados mantêm o tronco (ex.: 02_texto_geral_recuo, 05_legenda_proporcao2).
+ * Paleta padrão (modelo_padrao-estilos.pdf).
+ * O tronco é número + _ + primeira palavra (ex.: 02_texto, 07_secao).
+ * Sufixos depois disso são derivados válidos (ex.: 02_texto_geral_recuo).
  * Estilos 00_ existem na paleta, mas são ignorados na validação de nomenclatura.
  */
 
@@ -97,7 +97,32 @@ export const PARAGRAPH_STYLE_TRUNKS = [
   "10_finais_texto_geral",
 ] as const;
 
-const TRUNKS_BY_LENGTH = [...PARAGRAPH_STYLE_TRUNKS].sort((a, b) => b.length - a.length);
+/** Tronco = número + _ + primeira palavra (ex.: 02_texto, 07_secao). */
+export function extractStyleTrunk(name: string): string | null {
+  const match = name.trim().match(/^(\d+_[^_\s]+)/);
+  return match ? match[1] : null;
+}
+
+function normalizeTrunkKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const PALETTE_SHORT_TRUNKS: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of PARAGRAPH_STYLE_TRUNKS) {
+    const trunk = extractStyleTrunk(name);
+    if (!trunk) continue;
+    const key = normalizeTrunkKey(trunk);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trunk);
+  }
+  return out;
+})();
 
 /** Espaços não são permitidos em nomes de estilo. */
 export function containsInvalidSpaces(name: string): boolean {
@@ -113,14 +138,6 @@ export function fixSpacesInStyleName(name: string): string {
     .trim()
     .replace(/\s+(\d+)\s*$/g, "$1")
     .replace(/\s+/g, "_");
-}
-
-function normalizeForSuggestion(name: string): string {
-  return fixSpacesInStyleName(name)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/_+/g, "_");
 }
 
 function levenshtein(a: string, b: string): number {
@@ -151,31 +168,19 @@ export function isParagraphStyleNomenclatureSkipped(name: string): boolean {
 
 export function styleMatchesTrunk(styleName: string, trunk: string): boolean {
   if (containsInvalidSpaces(styleName)) return false;
-
-  const styleLower = styleName.toLowerCase();
-  const trunkLower = trunk.toLowerCase();
-
-  if (styleLower === trunkLower) return true;
-  if (styleLower.startsWith(`${trunkLower}_`)) return true;
-
-  if (!/\d$/.test(trunk) && styleLower.startsWith(trunkLower) && styleName.length > trunk.length) {
-    const remainder = styleLower.slice(trunkLower.length);
-    if (/^\d+$/.test(remainder)) return true;
-  }
-
-  return false;
+  const styleTrunk = extractStyleTrunk(styleName);
+  const palTrunk = extractStyleTrunk(trunk) || trunk;
+  if (!styleTrunk) return false;
+  return normalizeTrunkKey(styleTrunk) === normalizeTrunkKey(palTrunk);
 }
 
 export function findParagraphStyleTrunk(styleName: string): string | null {
   const trimmed = styleName.trim();
   if (containsInvalidSpaces(trimmed)) return null;
-
-  for (const trunk of TRUNKS_BY_LENGTH) {
-    if (styleMatchesTrunk(trimmed, trunk)) {
-      return trunk;
-    }
-  }
-  return null;
+  const styleTrunk = extractStyleTrunk(trimmed);
+  if (!styleTrunk) return null;
+  const key = normalizeTrunkKey(styleTrunk);
+  return PALETTE_SHORT_TRUNKS.find((item) => normalizeTrunkKey(item) === key) || null;
 }
 
 export function isValidParagraphStyleName(styleName: string): boolean {
@@ -183,62 +188,38 @@ export function isValidParagraphStyleName(styleName: string): boolean {
 }
 
 /**
- * Sugere a nomenclatura correta quando o tronco não bate exatamente com a paleta.
+ * Sugere a nomenclatura correta quando o tronco (número_palavra) não está na paleta.
  */
 export function suggestParagraphStyleName(styleName: string): string | null {
   const trimmed = fixSpacesInStyleName(styleName.trim());
   if (isValidParagraphStyleName(trimmed)) return trimmed;
 
-  const normalizedStyle = normalizeForSuggestion(trimmed);
-  let bestName = "";
+  const short = extractStyleTrunk(trimmed);
+  if (!short) return null;
+
+  const prefix = (short.match(/^\d+/) || [""])[0];
+  const word = short.slice(short.indexOf("_") + 1);
+  const rest = trimmed.slice(short.length);
+  const wordKey = normalizeTrunkKey(word);
+  const candidates = PALETTE_SHORT_TRUNKS.filter((item) =>
+    normalizeTrunkKey(item).startsWith(`${prefix}_`)
+  );
+  const pool = candidates.length > 0 ? candidates : PALETTE_SHORT_TRUNKS;
+
+  let best = "";
   let bestScore = Infinity;
-
-  const consider = (candidate: string, distance: number, trunk: string) => {
-    const stylePrefix = normalizedStyle.slice(0, 3);
-    const trunkPrefix = normalizeForSuggestion(trunk).slice(0, 3);
-    const score = distance + (stylePrefix === trunkPrefix ? 0 : 0.5);
-
+  for (const candidate of pool) {
+    const candWord = candidate.slice(candidate.indexOf("_") + 1);
+    const score = levenshtein(wordKey, normalizeTrunkKey(candWord));
     if (score < bestScore) {
       bestScore = score;
-      bestName = candidate;
-    }
-  };
-
-  for (const trunk of TRUNKS_BY_LENGTH) {
-    const normTrunk = normalizeForSuggestion(trunk);
-
-    if (normalizedStyle === normTrunk) {
-      return trunk;
-    }
-
-    if (normalizedStyle.startsWith(`${normTrunk}_`)) {
-      return trunk + normalizedStyle.slice(normTrunk.length);
-    }
-
-    if (!/\d$/.test(normTrunk) && normalizedStyle.startsWith(normTrunk) && normalizedStyle.length > normTrunk.length) {
-      const remainder = normalizedStyle.slice(normTrunk.length);
-      if (/^\d+$/.test(remainder)) {
-        return trunk + remainder;
-      }
-    }
-
-    consider(trunk, levenshtein(normalizedStyle, normTrunk), trunk);
-
-    if (normalizedStyle.length > normTrunk.length) {
-      const suffix = normalizedStyle.slice(normTrunk.length);
-      if (suffix.startsWith("_")) {
-        const prefix = normalizedStyle.slice(0, normTrunk.length);
-        consider(trunk + suffix, levenshtein(prefix, normTrunk), trunk);
-      }
+      best = candidate;
     }
   }
 
-  const maxDistance = Math.max(4, Math.ceil(normalizedStyle.length * 0.35));
-  if (!bestName || bestScore > maxDistance) {
-    return null;
-  }
-
-  return bestName;
+  const maxDistance = Math.max(3, Math.ceil(word.length * 0.5));
+  if (!best || bestScore > maxDistance) return null;
+  return best + rest;
 }
 
 export function buildParagraphStyleSuggestion(styleName: string): string | null {
@@ -247,5 +228,4 @@ export function buildParagraphStyleSuggestion(styleName: string): string | null 
   return suggestParagraphStyleName(trimmed);
 }
 
-export const PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES =
-  "01_TITULO_UNID, 02_texto_geral, 05_legenda_proporcao, 05_legenda_proporcao2";
+export const PARAGRAPH_STYLE_NOMENCLATURE_EXAMPLES = "02_texto, 05_legenda, 07_secao";

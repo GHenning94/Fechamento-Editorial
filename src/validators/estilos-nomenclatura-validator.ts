@@ -22,7 +22,7 @@ function nomenclatureDetails(name: string): string {
   if (suggestion) {
     return `Use: ${suggestion}`;
   }
-  return "O tronco deve coincidir com a paleta (ex.: 02_texto_geral).";
+  return "O tronco deve ser número_palavra da paleta (ex.: 02_texto, 05_legenda).";
 }
 
 export class EstilosNomenclaturaValidator extends BaseValidator {

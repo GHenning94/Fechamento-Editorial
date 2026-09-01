@@ -27,6 +27,7 @@ export interface ResultDetailOptions {
   kind: ResultDetailKind;
   html: string;
   onIgnore?: (key: string) => void;
+  onIgnoreAll?: () => void;
 }
 
 const DIALOG_WIDTH = 700;
@@ -80,7 +81,8 @@ function applyStaticStyles(
   titleEl: HTMLElement,
   closeBtn: HTMLElement,
   listEl: HTMLElement,
-  titleColor: string
+  titleColor: string,
+  ignoreAllBtn?: HTMLElement
 ): void {
   dialog.style.cssText = [
     "padding:0",
@@ -155,6 +157,27 @@ function applyStaticStyles(
     "cursor:pointer",
   ].join(";");
 
+  if (ignoreAllBtn) {
+    ignoreAllBtn.style.cssText = [
+      "display:flex",
+      "align-items:center",
+      "justify-content:center",
+      "flex:0 0 auto",
+      "height:32px",
+      "margin:0 8px 0 0",
+      "padding:0 10px",
+      "box-sizing:border-box",
+      "border:1px solid #6b5a28",
+      "border-radius:6px",
+      "background-color:#2e2a1a",
+      "color:#e6c35c",
+      "font-size:11px",
+      "font-weight:600",
+      "cursor:pointer",
+      "white-space:nowrap",
+    ].join(";");
+  }
+
   listEl.style.cssText = [
     "flex:1 1 auto",
     "width:100%",
@@ -221,18 +244,31 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   closeBtn.tabIndex = 0;
   closeBtn.textContent = "Fechar";
 
+  const ignoreAllBtn =
+    options.onIgnoreAll && options.kind === "warning" ? document.createElement("div") : null;
+  if (ignoreAllBtn) {
+    ignoreAllBtn.setAttribute("role", "button");
+    ignoreAllBtn.tabIndex = 0;
+    ignoreAllBtn.textContent = "Ignorar todos";
+  }
+
+  const headerActions = document.createElement("div");
+  headerActions.style.cssText = "display:flex;flex-direction:row;align-items:center;flex-shrink:0;";
+
   const listEl = document.createElement("ul");
   listEl.className = "results-detail-list result-list";
   listEl.innerHTML = options.html || '<li class="empty-item">Nenhum item</li>';
 
   header.appendChild(titleEl);
-  header.appendChild(closeBtn);
+  if (ignoreAllBtn) headerActions.appendChild(ignoreAllBtn);
+  headerActions.appendChild(closeBtn);
+  header.appendChild(headerActions);
   root.appendChild(header);
   root.appendChild(listEl);
   dialog.appendChild(root);
   document.body.appendChild(dialog);
 
-  applyStaticStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor);
+  applyStaticStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor, ignoreAllBtn || undefined);
   ensureScrollSpacer(listEl);
   syncListHeight(root, header, listEl);
 
@@ -258,6 +294,13 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   onActionActivate(closeBtn, () => {
     dialog.close();
   });
+
+  if (ignoreAllBtn && options.onIgnoreAll) {
+    onActionActivate(ignoreAllBtn, () => {
+      options.onIgnoreAll?.();
+      dialog.close();
+    });
+  }
 
   const teardown = (): void => {
     if (closed) return;

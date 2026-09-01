@@ -13,7 +13,7 @@ const WHITE = "1 1 1";
 const RULE = "0.82 0.82 0.82";
 const FOOTER_H = 50;
 const BOTTOM_MARGIN = 32;
-const CHECK_SIZE = 12;
+const CHECK_SIZE = 11;
 const INSTRUCTIONS = [
   "Esta checklist deve ser preenchida inicialmente pelo(s) responsável(eis) do projeto e completada por qualquer um do time que venha a finalizar o processo.",
   "Será o documento de referência para atestar a qualidade e cercar possíveis erros que possam ser escalonados durante o processo de produção de arte.",
@@ -201,37 +201,19 @@ function textAt(x: number, y: number, size: number, font: "F1" | "F2", color: st
   return `BT /${font} ${size} Tf ${color} rg ${x.toFixed(2)} ${y.toFixed(2)} Td ${pdfString(value)} Tj ET`;
 }
 
-function checkbox(x: number, y: number, checked: boolean): string {
-  const r = CHECK_SIZE / 2 - 0.5;
-  const cx = x + CHECK_SIZE / 2;
-  const cy = y + CHECK_SIZE / 2;
+function checkboxAppearanceStream(size: number, checked: boolean): string {
+  const r = size / 2 - 0.55;
+  const cx = size / 2;
+  const cy = size / 2;
   if (!checked) {
     return `${MAGENTA_LIGHT} rg ${circlePath(cx, cy, r)} h f`;
   }
   return [
     `${MAGENTA} rg ${circlePath(cx, cy, r)} h f`,
-    `${WHITE} RG 1.35 w 1 J 1 j`,
-    `${(cx - 2.5).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
-    `${(cx - 0.45).toFixed(2)} ${(cy - 2.35).toFixed(2)} l`,
-    `${(cx + 3.0).toFixed(2)} ${(cy + 2.2).toFixed(2)} l S`,
-  ].join(" ");
-}
-
-function checkboxAppearanceStream(size: number, checked: boolean): string {
-  const r = size / 2 - 0.5;
-  const cx = size / 2;
-  const cy = size / 2;
-  const clear = `${WHITE} rg 0 0 ${size.toFixed(2)} ${size.toFixed(2)} re f`;
-  if (!checked) {
-    return `${clear} ${MAGENTA_LIGHT} rg ${circlePath(cx, cy, r)} h f`;
-  }
-  return [
-    clear,
-    `${MAGENTA} rg ${circlePath(cx, cy, r)} h f`,
-    `${WHITE} RG 1.35 w 1 J 1 j`,
-    `${(cx - 2.5).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
-    `${(cx - 0.45).toFixed(2)} ${(cy - 2.35).toFixed(2)} l`,
-    `${(cx + 3.0).toFixed(2)} ${(cy + 2.2).toFixed(2)} l S`,
+    `${WHITE} RG 1.25 w 1 J 1 j`,
+    `${(cx - 2.2).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
+    `${(cx - 0.4).toFixed(2)} ${(cy - 2.1).toFixed(2)} l`,
+    `${(cx + 2.6).toFixed(2)} ${(cy + 2.0).toFixed(2)} l S`,
   ].join(" ");
 }
 
@@ -259,11 +241,11 @@ function buildPageContent(
   const outlines: OutlineNode[] = [];
   const comments: CommentAnnot[] = [];
   const checkboxes: CheckboxField[] = [];
-  const logoW = 72;
+  const logoW = 92;
   const logoH = (logoW * logo.h) / logo.w;
   const logoX = (PAGE_W - logoW) / 2;
-  const logoY = PAGE_H - 12 - logoH;
-  let y = logoY - 16;
+  const logoY = PAGE_H - 10 - logoH;
+  let y = logoY - 14;
   const contentW = PAGE_W - MARGIN_X * 2;
   const textX = MARGIN_X + 18;
   const itemWidth = PAGE_W - MARGIN_X - textX;
@@ -288,7 +270,7 @@ function buildPageContent(
     }
     y -= 1;
   }
-  y -= 8;
+  y -= 16;
 
   const title = displayDocumentTitle(input.documentName);
   cmds.push(`${MAGENTA} rg ${MARGIN_X.toFixed(2)} ${(y - 22).toFixed(2)} 2.2 30 re f`);
@@ -300,7 +282,7 @@ function buildPageContent(
   cmds.push(
     `${RULE} RG 0.35 w ${(MARGIN_X + 70).toFixed(2)} ${y.toFixed(2)} m ${(PAGE_W - MARGIN_X).toFixed(2)} ${y.toFixed(2)} l S`
   );
-  y -= 16;
+  y -= 22;
 
   const itemContentHeight = (item: ChecklistPdfItem): number => {
     const details = (item.details || []).filter((line) => line.trim());
@@ -329,8 +311,7 @@ function buildPageContent(
     const isLast = index === input.items.length - 1;
 
     const checkX = MARGIN_X;
-    const checkY = y - 3;
-    cmds.push(checkbox(checkX, checkY, item.checked));
+    const checkY = y - 2;
     checkboxes.push({
       name: `Item${String(index + 1).padStart(2, "0")}`,
       pageIndex: 0,
@@ -366,7 +347,7 @@ function buildPageContent(
       });
       comments.push({
         title: item.label.slice(0, 60),
-        contents: details.join("\n"),
+        contents: details.join("\n\n"),
         pageIndex: 0,
         x: PAGE_W - MARGIN_X - 16,
         y: itemY - 2,

@@ -35,6 +35,7 @@ export class PanelController {
   private listWarnings: HTMLElement | null;
   private listErrors: HTMLElement | null;
   private statusMessage: HTMLElement | null;
+  private btnIgnoreAllWarnings: HTMLElement | null;
   private reportDownloadAllowed = false;
   private rawSummary: ValidationSummary | null = null;
   private ignoredWarningKeys = new Set<string>();
@@ -54,7 +55,11 @@ export class PanelController {
     this.listWarnings = root.querySelector("#list-warnings");
     this.listErrors = root.querySelector("#list-errors");
     this.statusMessage = root.querySelector("#status-message");
+    this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
     this.bindResultExpanders();
+    if (this.btnIgnoreAllWarnings) {
+      onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
+    }
   }
 
   private bindResultExpanders(): void {
@@ -102,6 +107,7 @@ export class PanelController {
               this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
             }
           : undefined,
+      onIgnoreAll: kind === "warning" ? () => this.ignoreAllWarnings() : undefined,
     });
   }
 
@@ -296,6 +302,10 @@ export class PanelController {
       bindResultGroupToggles(this.listErrors);
     }
 
+    if (this.btnIgnoreAllWarnings) {
+      this.btnIgnoreAllWarnings.classList.toggle("hidden", safe.warnings === 0);
+    }
+
     if (statusMessage) {
       this.setStatus(
         statusMessage,
@@ -304,6 +314,23 @@ export class PanelController {
     }
 
     this.onSummaryFiltered?.(safe);
+  }
+
+  private ignoreAllWarnings(): void {
+    const items = this.collectIssuesBySeverity(this.rawSummary?.results || [], "warning");
+    if (items.length === 0) return;
+    for (const { result, issue, index } of items) {
+      this.ignoredWarningKeys.add(makeIssueKey(result, issue, index));
+    }
+    this.refreshSummaryUi();
+    this.setStatus("Todos os avisos foram ignorados. Eles não sairão no relatório.", "info");
+    document.querySelectorAll('[data-results-kind="warning"]').forEach((el) => {
+      try {
+        (el as HTMLDialogElement).close();
+      } catch {
+        el.remove();
+      }
+    });
   }
 
   private bindIgnoreButtons(): void {
@@ -484,7 +511,7 @@ export class PanelController {
             >
               <span class="result-group-chevron">▸</span>
               <span class="item-title">${this.escape(validatorName)}</span>
-              <span class="result-group-count">${count}</span>
+              <span class="result-group-count result-group-count-${severity}">${count}</span>
             </div>
             <div class="result-group-body">${issuesHtml}</div>
           </li>
