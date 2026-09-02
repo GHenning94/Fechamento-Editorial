@@ -7,6 +7,9 @@ const PAGE_H = 841.89;
 const MARGIN_X = 36;
 const MAGENTA = "0.847 0.200 0.380";
 const MAGENTA_LIGHT = "0.957 0.769 0.824";
+const CHECK_ON = MAGENTA;
+const CHECK_OFF_FILL = "0.94 0.94 0.94";
+const CHECK_OFF_STROKE = "0.55 0.55 0.55";
 const GRAY = "0.361 0.361 0.361";
 const BLACK = "0 0 0";
 const WHITE = "1 1 1";
@@ -205,16 +208,14 @@ function textAt(x: number, y: number, size: number, font: "F1" | "F2", color: st
 
 function checkboxAppearanceStream(size: number, checked: boolean): string {
   const pad = 0.35;
-  const box = [
-    `${pad.toFixed(2)} ${pad.toFixed(2)} ${(size - pad * 2).toFixed(2)} ${(size - pad * 2).toFixed(2)} re f`,
-  ];
+  const inner = `${pad.toFixed(2)} ${pad.toFixed(2)} ${(size - pad * 2).toFixed(2)} ${(size - pad * 2).toFixed(2)} re`;
   if (!checked) {
-    return `${MAGENTA_LIGHT} rg ${box.join(" ")} ${MAGENTA} RG 0.9 w ${pad.toFixed(2)} ${pad.toFixed(2)} ${(size - pad * 2).toFixed(2)} ${(size - pad * 2).toFixed(2)} re S`;
+    return `${CHECK_OFF_FILL} rg ${inner} f ${CHECK_OFF_STROKE} RG 0.8 w ${inner} S`;
   }
   const cx = size / 2;
   const cy = size / 2;
   return [
-    `${MAGENTA} rg ${box.join(" ")}`,
+    `${CHECK_ON} rg ${inner} f`,
     `${WHITE} RG 1.85 w 1 J 1 j`,
     `${(cx - 2.9).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
     `${(cx - 0.45).toFixed(2)} ${(cy - 2.7).toFixed(2)} l`,
@@ -530,10 +531,11 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
     const state = field.checked ? "/Yes" : "/Off";
-    const mkBg = field.checked ? MAGENTA : MAGENTA_LIGHT;
+    const mkBg = field.checked ? CHECK_ON : CHECK_OFF_FILL;
+    const mkBc = field.checked ? CHECK_ON : CHECK_OFF_STROKE;
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /Border [0 0 0] /BS << /W 0 /S /S >> /MK << /BG [${mkBg}] /BC [${MAGENTA}] /CA () >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /Border [0 0 0] /BS << /W 0 /S /S >> /MK << /BG [${mkBg}] /BC [${mkBc}] /CA () >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
     );
   }
 

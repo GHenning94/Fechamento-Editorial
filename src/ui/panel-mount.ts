@@ -57,7 +57,10 @@ const PANEL_HTML = `
       <span id="progress-label" class="progress-label">Aguardando…</span>
       <div id="btn-cancel-checklist" class="btn btn-cancel-checklist hidden" role="button" tabindex="0">Cancelar</div>
     </div>
-    <progress id="progress-bar" max="100" value="0"></progress>
+    <div class="progress-wrap">
+      <progress id="progress-bar" max="100" value="0"></progress>
+      <span class="progress-indeterminate" aria-hidden="true"></span>
+    </div>
   </section>
 
   <section class="results">
@@ -88,7 +91,10 @@ const PANEL_HTML = `
   </section>
 
   <footer class="panel-footer">
-    <div id="status-message" class="status-message status-info">Pronto.</div>
+    <div class="status-row">
+      <span class="work-spinner" aria-hidden="true"></span>
+      <div id="status-message" class="status-message status-info">Pronto.</div>
+    </div>
   </footer>
 </div>
 `;

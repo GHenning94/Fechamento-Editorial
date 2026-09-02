@@ -291,6 +291,7 @@ export class PanelController {
   }
 
   setBusy(busy: boolean): void {
+    this.root.classList.toggle("is-working", busy);
     setActionDisabled(this.btnChecklist, busy);
     setActionDisabled(this.btnCreateStyles, busy);
     setActionDisabled(this.btnCreateRendimento, busy);
