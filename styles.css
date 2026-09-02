@@ -164,20 +164,17 @@ button::-moz-focus-inner {
 .work-spinner span {
   display: block;
   position: absolute;
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   margin: 0;
   padding: 0;
-  border-radius: 50%;
-  background-color: #f0ebe4;
+  font-size: 5px;
+  line-height: 4px;
+  color: #f0ebe4;
 }
 
 .panel.is-working .work-spinner {
   display: block;
-}
-
-.panel.is-cancelling .progress-label {
-  color: #f0a0a0;
 }
 
 .panel-title {
