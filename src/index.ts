@@ -132,6 +132,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         controller.renderSummary(summary, "Checklist");
       } catch (error) {
         if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
           controller.setStatus("Operação cancelada.", "info");
           return;
         }
@@ -159,6 +160,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         );
       } catch (error) {
         if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
           controller.setStatus("Operação cancelada.", "info");
           return;
         }
@@ -183,6 +185,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         );
       } catch (error) {
         if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
           controller.setStatus("Operação cancelada.", "info");
           return;
         }

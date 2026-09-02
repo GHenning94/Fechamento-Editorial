@@ -202,6 +202,28 @@ function textAt(x: number, y: number, size: number, font: "F1" | "F2", color: st
   return `BT /${font} ${size} Tf ${color} rg ${x.toFixed(2)} ${y.toFixed(2)} Td ${pdfString(value)} Tj ET`;
 }
 
+function checkboxAppearanceStream(size: number, checked: boolean): string {
+  const pad = 0.4;
+  const inner = `${pad.toFixed(2)} ${pad.toFixed(2)} ${(size - pad * 2).toFixed(2)} ${(size - pad * 2).toFixed(2)} re`;
+  if (!checked) {
+    return `0.94 0.94 0.94 rg ${inner} f 0.55 0.55 0.55 RG 0.8 w ${inner} S`;
+  }
+  const cx = size / 2;
+  const cy = size / 2;
+  return [
+    `0.94 0.94 0.94 rg ${inner} f`,
+    `0.55 0.55 0.55 RG 0.8 w ${inner} S`,
+    `0 0 0 RG 1.6 w 1 J 1 j`,
+    `${(cx - 2.8).toFixed(2)} ${(cy - 0.2).toFixed(2)} m`,
+    `${(cx - 0.4).toFixed(2)} ${(cy - 2.6).toFixed(2)} l`,
+    `${(cx + 3.2).toFixed(2)} ${(cy + 2.5).toFixed(2)} l S`,
+  ].join(" ");
+}
+
+function formXObject(id: number, size: number, stream: string): string {
+  return `${id} 0 obj\n<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 ${size} ${size}] /Matrix [1 0 0 1 0 0] /Resources << /ProcSet [/PDF] >> /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`;
+}
+
 export function displayDocumentTitle(name: string): string {
   const trimmed = (name || "").trim();
   return trimmed.replace(/\.indd$/i, "") || "-";
@@ -423,6 +445,8 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   const pageIds = Array.from({ length: n }, () => nextId++);
   const pagesId = nextId++;
   const commentIds = Array.from({ length: c }, () => nextId++);
+  const apOffId = nextId++;
+  const apYesId = nextId++;
   const widgetIds = Array.from({ length: k }, () => nextId++);
   const acroFormId = nextId++;
   const outlineRootId = outlines.length > 0 ? nextId++ : -1;
@@ -465,6 +489,11 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     obj(contentIds[i], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   }
 
+  offsets[apOffId] = pos;
+  write(formXObject(apOffId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, false)));
+  offsets[apYesId] = pos;
+  write(formXObject(apYesId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, true)));
+
   const annotsByPage = pageContents.map(() => [] as number[]);
   for (let i = 0; i < c; i++) {
     annotsByPage[comments[i].pageIndex]?.push(commentIds[i]);
@@ -501,12 +530,12 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const state = field.checked ? "/Yes" : "/Off";
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /P /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /MK << /BG [0.94 0.94 0.94] /BC [0.55 0.55 0.55] /CA () >> /BS << /W 1 /S /S >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> /D << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
     );
   }
 
   const fieldRefs = widgetIds.map((id) => `${id} 0 R`).join(" ");
-  obj(acroFormId, `<< /Fields [${fieldRefs}] /NeedAppearances true >>`);
+  obj(acroFormId, `<< /Fields [${fieldRefs}] /NeedAppearances false >>`);
 
   if (assignedOutlines.length > 0) {
     const topLevel = assignedOutlines.filter((entry) => entry.parentId === outlineRootId);

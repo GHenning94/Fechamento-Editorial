@@ -40,6 +40,7 @@ module.exports = (env, argv) => {
           { from: "manifest.json", to: "manifest.json" },
           { from: "VERSION", to: "VERSION", toType: "file", noErrorOnMissing: true },
           { from: "icons", to: "icons", noErrorOnMissing: true },
+          { from: "src/assets/work-spinner.gif", to: "icons/work-spinner.gif" },
         ],
       }),
     ],

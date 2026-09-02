@@ -9,7 +9,7 @@ import {
 } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { PackageCancelledError, promptPackageFolder } from "../utils/file-system";
-import { addUiIdleHook, yieldToHost } from "../utils/yield-to-host";
+import { yieldToHost } from "../utils/yield-to-host";
 import { getDefaultReportUserName } from "../utils/indesign-runtime";
 import { isChecklistCancelled } from "../core/checklist-runner";
 import { onActionActivate, setActionDisabled } from "./action-control";
@@ -35,10 +35,6 @@ export class PanelController {
   private btnCancelChecklist: HTMLElement | null;
   private actionAbort: AbortController | null = null;
   private cancelling = false;
-  private spinnerTimer: ReturnType<typeof setTimeout> | null = null;
-  private spinnerTickIndex = 0;
-  private removeIdleHook: (() => void) | null = null;
-  private workSpinner: HTMLElement | null;
   private countErrors: HTMLElement | null;
   private countWarnings: HTMLElement | null;
   private countApproved: HTMLElement | null;
@@ -70,7 +66,6 @@ export class PanelController {
     this.listErrors = root.querySelector("#list-errors");
     this.statusMessage = root.querySelector("#status-message");
     this.statusText = root.querySelector("#status-message-text");
-    this.workSpinner = root.querySelector(".work-spinner");
     this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
     this.bindResultExpanders();
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
@@ -89,7 +84,6 @@ export class PanelController {
       this.btnCancelChecklist.addEventListener("mousedown", onCancel, true);
       this.btnCancelChecklist.addEventListener("click", onCancel);
     }
-    this.removeIdleHook = addUiIdleHook(() => this.tickSpinner());
   }
 
   private bindResultExpanders(): void {
@@ -295,6 +289,7 @@ export class PanelController {
       await action();
     } catch (error) {
       if (isChecklistCancelled(error)) {
+        this.resetProgress();
         this.setStatus("Operação cancelada.", "info");
         return;
       }
@@ -308,11 +303,6 @@ export class PanelController {
 
   setBusy(busy: boolean): void {
     this.root.classList.toggle("is-working", busy);
-    if (busy) {
-      this.startSpinnerAnimation();
-    } else {
-      this.stopSpinnerAnimation();
-    }
     setActionDisabled(this.btnChecklist, busy);
     setActionDisabled(this.btnCreateStyles, busy);
     setActionDisabled(this.btnCreateRendimento, busy);
@@ -335,7 +325,6 @@ export class PanelController {
   finishCancellableAction(): void {
     this.actionAbort = null;
     this.cancelling = false;
-    this.root.classList.remove("is-cancelling");
     this.setCancelVisible(false);
   }
 
@@ -351,13 +340,9 @@ export class PanelController {
   private cancelRunningAction(): void {
     if (!this.actionAbort || this.cancelling) return;
     this.cancelling = true;
-    this.root.classList.add("is-cancelling");
     this.actionAbort.abort();
     setActionDisabled(this.btnCancelChecklist, true);
-    if (this.statusText) this.statusText.textContent = "Cancelando...";
-    if (this.statusMessage) this.statusMessage.className = "status-message status-info";
-    void this.statusMessage?.offsetHeight;
-    void yieldToHost(0);
+    this.resetProgress();
   }
 
   private setCancelVisible(visible: boolean): void {
@@ -365,72 +350,6 @@ export class PanelController {
     if (visible) {
       setActionDisabled(this.btnCancelChecklist, false);
     }
-  }
-
-  private startSpinnerAnimation(): void {
-    this.layoutSpinnerDots();
-    this.paintSpinner();
-    if (this.spinnerTimer != null) return;
-    const loop = (): void => {
-      this.tickSpinner();
-      this.spinnerTimer = setTimeout(loop, 80);
-    };
-    this.spinnerTimer = setTimeout(loop, 80);
-  }
-
-  private stopSpinnerAnimation(): void {
-    if (this.spinnerTimer != null) {
-      clearTimeout(this.spinnerTimer);
-      this.spinnerTimer = null;
-    }
-    this.spinnerTickIndex = 0;
-  }
-
-  private layoutSpinnerDots(): void {
-    const el = this.workSpinner;
-    if (!el) return;
-    const size = 16;
-    const radius = 6;
-    const cx = size / 2;
-    const cy = size / 2;
-    const kids = el.children;
-    for (let i = 0; i < kids.length; i++) {
-      const angle = ((i * 30 - 90) * Math.PI) / 180;
-      const node = kids[i] as HTMLElement;
-      node.style.position = "absolute";
-      node.style.left = `${(cx + radius * Math.cos(angle) - 2).toFixed(1)}px`;
-      node.style.top = `${(cy + radius * Math.sin(angle) - 2).toFixed(1)}px`;
-      node.style.width = "4px";
-      node.style.height = "4px";
-      node.style.margin = "0";
-      node.style.padding = "0";
-      node.style.fontSize = "5px";
-      node.style.lineHeight = "4px";
-      node.style.color = "#f0ebe4";
-    }
-  }
-
-  private paintSpinner(): void {
-    const el = this.workSpinner;
-    if (!el) return;
-    const kids = el.children;
-    for (let i = 0; i < kids.length; i++) {
-      const dist = (i - this.spinnerTickIndex + 12) % 12;
-      const node = kids[i] as HTMLElement;
-      if (dist > 4) {
-        node.textContent = "";
-      } else {
-        node.textContent = "•";
-        const shades = ["#f7f4ee", "#cfcbc3", "#9c9891", "#6f6b65", "#4a4a54"];
-        node.style.color = shades[dist];
-      }
-    }
-  }
-
-  private tickSpinner(): void {
-    if (!this.workSpinner || !this.root.classList.contains("is-working")) return;
-    this.spinnerTickIndex = (this.spinnerTickIndex + 1) % 12;
-    this.paintSpinner();
   }
 
   setReportDownloadEnabled(enabled: boolean): void {
@@ -451,10 +370,9 @@ export class PanelController {
   }
 
   setProgress(percent: number, label: string): void {
-    this.tickSpinner();
+    if (this.cancelling) return;
     if (this.progressBar) this.progressBar.value = percent;
-    if (!this.progressLabel) return;
-    this.progressLabel.textContent = label;
+    if (this.progressLabel) this.progressLabel.textContent = label;
   }
 
   resetProgress(): void {
@@ -746,13 +664,8 @@ export class PanelController {
   }
 
   setStatus(message: string, type: "success" | "warning" | "error" | "info" = "info"): void {
-    this.tickSpinner();
     if (this.statusMessage) {
       this.statusMessage.className = `status-message status-${type}`;
-    }
-    if (this.cancelling && !/cancelad/i.test(message)) {
-      if (this.statusText) this.statusText.textContent = "Cancelando...";
-      return;
     }
     if (this.statusText) {
       this.statusText.textContent = message;
