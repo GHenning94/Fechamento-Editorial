@@ -14,6 +14,7 @@ const PARA_CMYK = [0, 28, 52, 0];
 const CHAR_CMYK = [52, 18, 0, 0];
 const TAG_HEIGHT = 18;
 const TAG_PADDING_X = 8;
+const TAG_PAGE_INSET = 2;
 const TAG_BATCH = 6;
 
 export interface StyleTagsResult {
@@ -237,22 +238,103 @@ function estimateTagWidth(name: string): number {
   return Math.max(48, name.length * 8.4 + TAG_PADDING_X * 2 + 8);
 }
 
-function shiftIfCollision(hit: StyleHit, placed: Array<{ pageKey: string; bounds: number[] }>): number {
+function readPageBounds(page: Page): number[] | null {
+  try {
+    const bounds = page.bounds;
+    if (!bounds || bounds.length < 4) return null;
+    const top = Number(bounds[0]);
+    const left = Number(bounds[1]);
+    const bottom = Number(bounds[2]);
+    const right = Number(bounds[3]);
+    if (![top, left, bottom, right].every(Number.isFinite)) return null;
+    if (right - left < 8 || bottom - top < 8) return null;
+    return [top, left, bottom, right];
+  } catch {
+    return null;
+  }
+}
+
+function clampTagBounds(rect: number[], pageBounds: number[] | null): number[] {
+  const [top, left, bottom, right] = rect;
+  if (!pageBounds || pageBounds.length < 4) {
+    return [top, left, bottom, right];
+  }
+
+  const pTop = pageBounds[0] + TAG_PAGE_INSET;
+  const pLeft = pageBounds[1] + TAG_PAGE_INSET;
+  const pBottom = pageBounds[2] - TAG_PAGE_INSET;
+  const pRight = pageBounds[3] - TAG_PAGE_INSET;
+  const maxW = Math.max(12, pRight - pLeft);
+  const maxH = Math.max(TAG_HEIGHT, pBottom - pTop);
+
+  let width = Math.min(Math.max(12, right - left), maxW);
+  let height = Math.min(Math.max(TAG_HEIGHT, bottom - top), maxH);
+  let nextLeft = left;
+  let nextRight = left + width;
+  let nextTop = top;
+  let nextBottom = top + height;
+
+  if (nextRight > pRight) {
+    nextLeft = pRight - width;
+    nextRight = pRight;
+  }
+  if (nextLeft < pLeft) {
+    nextLeft = pLeft;
+    nextRight = Math.min(pRight, nextLeft + width);
+  }
+
+  if (nextBottom > pBottom) {
+    nextTop = pBottom - height;
+    nextBottom = pBottom;
+  }
+  if (nextTop < pTop) {
+    nextTop = pTop;
+    nextBottom = Math.min(pBottom, nextTop + height);
+  }
+
+  return [nextTop, nextLeft, nextBottom, nextRight];
+}
+
+function preferredTagRect(hit: StyleHit, y: number, pageBounds: number[] | null): number[] {
+  const width = estimateTagWidth(hit.name);
+  const left = hit.x + 2;
+  return clampTagBounds([y - TAG_HEIGHT + 3, left, y + 4, left + width], pageBounds);
+}
+
+function rectsOverlap(a: number[], b: number[]): boolean {
+  return !(a[3] < b[1] || a[1] > b[3] || a[2] < b[0] || a[0] > b[2]);
+}
+
+function layoutTagRect(
+  hit: StyleHit,
+  placed: Array<{ pageKey: string; bounds: number[] }>,
+  pageBounds: number[] | null
+): number[] {
   let y = hit.y;
   for (let guard = 0; guard < 12; guard++) {
-    const top = y - TAG_HEIGHT + 3;
-    const bottom = y + 4;
-    const left = hit.x + 2;
-    const right = left + estimateTagWidth(hit.name);
-    const collides = placed.some((item) => {
-      if (item.pageKey !== hit.pageKey) return false;
-      const [t, l, b, r] = item.bounds;
-      return !(right < l || left > r || bottom < t || top > b);
-    });
-    if (!collides) return y;
+    const candidate = preferredTagRect(hit, y, pageBounds);
+    const collides = placed.some(
+      (item) => item.pageKey === hit.pageKey && rectsOverlap(candidate, item.bounds)
+    );
+    if (!collides) return candidate;
     y += TAG_HEIGHT + 2;
   }
-  return y;
+  return preferredTagRect(hit, y, pageBounds);
+}
+
+function clampFrameToPage(frame: PageItem, pageBounds: number[] | null): void {
+  if (!pageBounds) return;
+  try {
+    const bounds = frame.geometricBounds;
+    if (!bounds || bounds.length < 4) return;
+    const current = [Number(bounds[0]), Number(bounds[1]), Number(bounds[2]), Number(bounds[3])];
+    const clamped = clampTagBounds(current, pageBounds);
+    if (clamped.some((value, index) => Math.abs(value - current[index]) > 0.2)) {
+      frame.geometricBounds = clamped;
+    }
+  } catch {
+    // ignore
+  }
 }
 
 async function withPointUnitsAsync<T>(doc: Document, fn: () => Promise<T>): Promise<T> {
@@ -723,17 +805,36 @@ function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Doc
   }
 }
 
-function fitTagFrame(frame: PageItem): void {
+function fitTagFrame(frame: PageItem, pageBounds: number[] | null): void {
   const prefs = frame.textFramePreferences;
   const mod = getInDesignModule() as {
-    AutoSizingTypeEnum?: { WIDTH_ONLY?: number; HEIGHT_AND_WIDTH?: number };
-    AutoSizingReferencePointEnum?: { LEFT_CENTER_POINT?: number; TOP_LEFT_POINT?: number };
+    AutoSizingTypeEnum?: { WIDTH_ONLY?: number; HEIGHT_AND_WIDTH?: number; OFF?: number };
+    AutoSizingReferencePointEnum?: {
+      LEFT_CENTER_POINT?: number;
+      RIGHT_CENTER_POINT?: number;
+      TOP_LEFT_POINT?: number;
+      TOP_RIGHT_POINT?: number;
+    };
   };
+
+  let growFromRight = false;
+  try {
+    const bounds = frame.geometricBounds;
+    if (pageBounds && bounds && bounds.length >= 4) {
+      growFromRight = Number(bounds[3]) >= pageBounds[3] - TAG_PAGE_INSET - 0.5;
+    }
+  } catch {
+    growFromRight = false;
+  }
 
   try {
     if (prefs) {
       const widthOnly = mod.AutoSizingTypeEnum?.WIDTH_ONLY ?? mod.AutoSizingTypeEnum?.HEIGHT_AND_WIDTH;
-      const anchor = mod.AutoSizingReferencePointEnum?.LEFT_CENTER_POINT ?? mod.AutoSizingReferencePointEnum?.TOP_LEFT_POINT;
+      const anchor = growFromRight
+        ? mod.AutoSizingReferencePointEnum?.RIGHT_CENTER_POINT ??
+          mod.AutoSizingReferencePointEnum?.TOP_RIGHT_POINT ??
+          mod.AutoSizingReferencePointEnum?.LEFT_CENTER_POINT
+        : mod.AutoSizingReferencePointEnum?.LEFT_CENTER_POINT ?? mod.AutoSizingReferencePointEnum?.TOP_LEFT_POINT;
       if (anchor != null) prefs.autoSizingReferencePoint = anchor;
       if (widthOnly != null) prefs.autoSizingType = widthOnly;
     }
@@ -742,39 +843,65 @@ function fitTagFrame(frame: PageItem): void {
   }
 
   try {
+    const pageLeft = pageBounds ? pageBounds[1] + TAG_PAGE_INSET : Number.NEGATIVE_INFINITY;
+    const pageRight = pageBounds ? pageBounds[3] - TAG_PAGE_INSET : Number.POSITIVE_INFINITY;
+    const pageBottom = pageBounds ? pageBounds[2] - TAG_PAGE_INSET : Number.POSITIVE_INFINITY;
+    const pageTop = pageBounds ? pageBounds[0] + TAG_PAGE_INSET : Number.NEGATIVE_INFINITY;
+
     for (let i = 0; i < 30 && frame.overflows === true; i++) {
       const bounds = frame.geometricBounds;
       if (!bounds || bounds.length < 4) break;
-      bounds[3] += 12;
+      if (growFromRight && Number(bounds[1]) - 12 >= pageLeft) {
+        bounds[1] = Number(bounds[1]) - 12;
+      } else if (Number(bounds[3]) + 12 <= pageRight) {
+        bounds[3] = Number(bounds[3]) + 12;
+      } else if (Number(bounds[1]) - 12 >= pageLeft) {
+        bounds[1] = Number(bounds[1]) - 12;
+      } else {
+        break;
+      }
       frame.geometricBounds = bounds;
     }
     for (let i = 0; i < 8 && frame.overflows === true; i++) {
       const bounds = frame.geometricBounds;
       if (!bounds || bounds.length < 4) break;
-      bounds[2] += 3;
+      if (Number(bounds[2]) + 3 <= pageBottom) {
+        bounds[2] = Number(bounds[2]) + 3;
+      } else if (Number(bounds[0]) - 3 >= pageTop) {
+        bounds[0] = Number(bounds[0]) - 3;
+      } else {
+        break;
+      }
       frame.geometricBounds = bounds;
     }
   } catch {
     // ignore
   }
+
+  try {
+    const off = mod.AutoSizingTypeEnum?.OFF;
+    if (prefs && off != null) prefs.autoSizingType = off;
+  } catch {
+    // ignore
+  }
+
+  clampFrameToPage(frame, pageBounds);
 }
 
 function placeTag(
   doc: Document,
   page: Page,
   hit: StyleHit,
-  top: number,
-  left: number,
-  bottom: number,
-  right: number,
+  rect: number[],
   fill: Color | null,
   none: Swatch | Color | null,
-  paraStyle: ParagraphStyle | null
+  paraStyle: ParagraphStyle | null,
+  pageBounds: number[] | null
 ): void {
   const frame = page.textFrames?.add();
   if (!frame?.isValid) return;
 
-  frame.geometricBounds = [top, left, bottom, right];
+  frame.geometricBounds = rect;
   frame.label = TAG_LABEL;
   frame.name = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
   if (fill) {
@@ -795,7 +922,7 @@ function placeTag(
   }
   frame.contents = hit.name;
   lockTagText(frame, paraStyle, doc);
-  fitTagFrame(frame);
+  fitTagFrame(frame, pageBounds);
 }
 
 export async function createMemorialStyleTags(
@@ -843,25 +970,19 @@ export async function createMemorialStyleTags(
       const page = resolvePage(doc, hit);
       if (!page?.isValid) continue;
 
-      const y = shiftIfCollision(hit, placed);
-      const width = estimateTagWidth(hit.name);
-      const top = y - TAG_HEIGHT + 3;
-      const bottom = y + 4;
-      const left = hit.x + 2;
-      const right = left + width;
-      placed.push({ pageKey: hit.pageKey, bounds: [top, left, bottom, right] });
+      const pageBounds = readPageBounds(page);
+      const rect = layoutTagRect(hit, placed, pageBounds);
+      placed.push({ pageKey: hit.pageKey, bounds: rect });
 
       placeTag(
         doc,
         page,
         hit,
-        top,
-        left,
-        bottom,
-        right,
+        rect,
         hit.kind === "character" ? charFill : paraFill,
         none,
-        paraStyle
+        paraStyle,
+        pageBounds
       );
 
       if (hit.kind === "character") character += 1;

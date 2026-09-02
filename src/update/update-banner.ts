@@ -1,8 +1,7 @@
-import { PLUGIN_RELEASE_NOTES, PLUGIN_RELEASE_TITLE } from "./plugin-notes";
 import { PLUGIN_VERSION } from "./plugin-version";
 import { onActionActivate, setActionDisabled } from "../ui/action-control";
 import { applyPluginUpdate, reloadPluginPanel } from "./update-apply";
-import { checkForPluginUpdate, getVersionNotes, PluginUpdateInfo } from "./update-check";
+import { checkForPluginUpdate, getVersionNotes, PluginUpdateInfo, VersionNotes } from "./update-check";
 
 type StatusFn = (message: string, type: "success" | "warning" | "error" | "info") => void;
 
@@ -18,37 +17,52 @@ function bindVersionTag(root: HTMLElement): void {
   }
 }
 
+function notesElements(root: HTMLElement): {
+  button: HTMLElement | null;
+  card: HTMLElement | null;
+  titleEl: HTMLElement | null;
+  bodyEl: HTMLElement | null;
+} {
+  return {
+    button: root.querySelector("#btn-version-info") as HTMLElement | null,
+    card: root.querySelector("#version-notes-card") as HTMLElement | null,
+    titleEl: root.querySelector("#version-notes-title") as HTMLElement | null,
+    bodyEl: root.querySelector("#version-notes-body") as HTMLElement | null,
+  };
+}
+
 function closeNotes(card: HTMLElement | null): void {
   card?.classList.add("hidden");
 }
 
-function bindNotesButton(root: HTMLElement): void {
-  const button = root.querySelector("#btn-version-info") as HTMLElement | null;
-  const card = root.querySelector("#version-notes-card") as HTMLElement | null;
-  const titleEl = root.querySelector("#version-notes-title") as HTMLElement | null;
-  const bodyEl = root.querySelector("#version-notes-body") as HTMLElement | null;
-  if (!button || !card || !titleEl || !bodyEl) {
-    return;
-  }
+function renderNotes(root: HTMLElement, notes: VersionNotes): void {
+  const { card, titleEl, bodyEl } = notesElements(root);
+  if (!card || !titleEl || !bodyEl) return;
+  titleEl.textContent = notes.title;
+  bodyEl.textContent = notes.notes || "Não há descrição para esta versão.";
+  card.classList.remove("hidden");
+}
 
-  const render = (title: string, notes: string): void => {
-    titleEl.textContent = title;
-    bodyEl.textContent = notes || "Não há descrição para esta versão.";
-  };
+async function showRemoteNotes(root: HTMLElement, version: string = PLUGIN_VERSION): Promise<void> {
+  const { card, titleEl, bodyEl } = notesElements(root);
+  if (!card || !titleEl || !bodyEl) return;
+  titleEl.textContent = "Carregando...";
+  bodyEl.textContent = "";
+  card.classList.remove("hidden");
+  const notes = await getVersionNotes(version);
+  renderNotes(root, notes);
+}
+
+function bindNotesButton(root: HTMLElement): void {
+  const { button, card } = notesElements(root);
+  if (!button || !card) return;
 
   onActionActivate(button, () => {
     if (!card.classList.contains("hidden")) {
       closeNotes(card);
       return;
     }
-
-    titleEl.textContent = PLUGIN_RELEASE_TITLE || "Carregando...";
-    bodyEl.textContent = PLUGIN_RELEASE_NOTES || "";
-    card.classList.remove("hidden");
-
-    void getVersionNotes(PLUGIN_VERSION).then((notes) => {
-      render(notes.title, notes.notes);
-    });
+    void showRemoteNotes(root);
   });
 
   root.addEventListener("pointerdown", (event) => {
@@ -78,6 +92,15 @@ function bindUpdateButton(root: HTMLElement, update: PluginUpdateInfo, setStatus
 
       try {
         const result = await applyPluginUpdate(update.version);
+        if (result === "current") {
+          await showRemoteNotes(root, update.version);
+          setStatus?.("Esta versão já está instalada. Notas atualizadas do GitHub.", "info");
+          button.classList.remove("is-updating");
+          setActionDisabled(button, false);
+          root.classList.remove("is-working");
+          return;
+        }
+
         if (result === "installer") {
           setStatus?.(
             "Instalador aberto. Confirme no Creative Cloud e reabra o painel.",

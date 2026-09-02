@@ -1,3 +1,5 @@
+import { PLUGIN_VERSION } from "./plugin-version";
+import { isRemoteVersionNewer } from "./update-check";
 import { toFileUrl } from "../utils/file-system";
 import {
   CCX_FILE_NAME,
@@ -56,7 +58,7 @@ type NodeOs = {
   homedir?: () => string;
 };
 
-export type UpdateApplyResult = "files" | "installer";
+export type UpdateApplyResult = "files" | "installer" | "current";
 
 function nodeFs(): NodeFs | null {
   try {
@@ -398,6 +400,10 @@ async function openInstaller(nativePath: string): Promise<void> {
 }
 
 export async function applyPluginUpdate(version: string): Promise<UpdateApplyResult> {
+  if (!isRemoteVersionNewer(version, PLUGIN_VERSION)) {
+    return "current";
+  }
+
   const files = await downloadAllFiles();
   const wroteFiles = await writeDownloadedFiles(files);
   if (wroteFiles) {

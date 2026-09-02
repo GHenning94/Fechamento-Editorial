@@ -79,6 +79,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
       headers: {
         Accept: "application/json",
         "User-Agent": "editorial-autoclose",
+        "Cache-Control": "no-cache",
       },
     });
     if (!response.ok) {
@@ -110,6 +111,17 @@ function notesFromUnknown(value: unknown, fallbackVersion: string): VersionNotes
   };
 }
 
+function notesFromCommitMessage(message: string, fallbackVersion: string): VersionNotes | null {
+  const lines = String(message || "")
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split("\n");
+  const title = (lines.shift() || "").trim();
+  const notes = lines.join("\n").replace(/^\n+/, "").trim();
+  if (!title) return null;
+  return { title: title || `Versão ${fallbackVersion}`, notes };
+}
+
 export async function getVersionNotes(version: string = PLUGIN_VERSION): Promise<VersionNotes> {
   const key = cleanVersion(version);
   const bundled: VersionNotes = {
@@ -117,33 +129,38 @@ export async function getVersionNotes(version: string = PLUGIN_VERSION): Promise
     notes: PLUGIN_RELEASE_NOTES || "",
   };
 
-  const changelogUrls = [
-    githubRawUrl(GITHUB_DIST_BRANCH, "changelog.json"),
-    githubRawUrl(GITHUB_SOURCE_BRANCH, "changelog.json"),
-  ];
-
-  for (const url of changelogUrls) {
-    const changelog = await fetchJson<Record<string, unknown>>(url);
-    const entry = notesFromUnknown(changelog?.[key] || changelog?.[version], key);
-    if (entry) {
-      return entry;
-    }
-  }
-
-  const updateJson = await fetchJson<{ title?: string; notes?: string; version?: string }>(
-    githubRawUrl(GITHUB_SOURCE_BRANCH, "update.json")
+  const distChangelog = await fetchJson<Record<string, unknown>>(
+    githubRawUrl(GITHUB_DIST_BRANCH, "changelog.json")
   );
-  if (updateJson && cleanVersion(updateJson.version || "") === key) {
-    const entry = notesFromUnknown(updateJson, key);
-    if (entry) {
-      return entry;
-    }
+  const fromDist = notesFromUnknown(distChangelog?.[key] || distChangelog?.[version], key);
+  if (fromDist) {
+    return fromDist;
   }
 
-  const release = await fetchJson<{ name?: string; body?: string }>(githubApiUrl(`/releases/tags/v${key}`));
+  const release = await fetchJson<{ name?: string; body?: string; tag_name?: string }>(
+    githubApiUrl(`/releases/tags/v${key}`)
+  );
   const fromRelease = notesFromUnknown(release, key);
   if (fromRelease) {
     return fromRelease;
+  }
+
+  const latest = await fetchJson<{ name?: string; body?: string; tag_name?: string }>(
+    githubApiUrl("/releases/latest")
+  );
+  if (latest && cleanVersion(latest.tag_name || "") === key) {
+    const fromLatest = notesFromUnknown(latest, key);
+    if (fromLatest) {
+      return fromLatest;
+    }
+  }
+
+  const commit = await fetchJson<{ commit?: { message?: string } }>(
+    githubApiUrl(`/commits/${GITHUB_SOURCE_BRANCH}`)
+  );
+  const fromCommit = notesFromCommitMessage(commit?.commit?.message || "", key);
+  if (fromCommit) {
+    return fromCommit;
   }
 
   if (bundled.title || bundled.notes) {

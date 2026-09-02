@@ -23,7 +23,7 @@ export const PLUGIN_UPDATE_FILES: Array<{ path: string; binary: boolean; optiona
 ];
 
 export function githubRawUrl(branch: string, filePath: string): string {
-  return `https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/${filePath}`;
+  return `https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/${filePath}?nocache=${Date.now()}`;
 }
 
 export function githubReleaseCcxUrl(version: string): string {
