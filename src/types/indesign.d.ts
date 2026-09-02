@@ -184,7 +184,9 @@ declare module "indesign" {
     colors: Colors;
     colorGroups: ColorGroups;
     paragraphStyles: ParagraphStyles;
+    paragraphStyleGroups?: ParagraphStyleGroups;
     characterStyles: CharacterStyles;
+    characterStyleGroups?: CharacterStyleGroups;
     links: Links;
     fonts: Fonts;
     pages: Pages;
@@ -254,6 +256,7 @@ declare module "indesign" {
     fillColor: Swatch | Color;
     strokeColor: Swatch | Color;
     strokeWeight: number;
+    fillTint?: number;
     fillOverprint: boolean;
     strokeOverprint: boolean;
     geometricBounds: number[];
@@ -395,6 +398,18 @@ declare module "indesign" {
     isValid: boolean;
   }
 
+  export interface ParagraphStyleGroups {
+    length: number;
+    item(index: number): ParagraphStyleGroup;
+  }
+
+  export interface ParagraphStyleGroup {
+    name: string;
+    isValid: boolean;
+    paragraphStyles?: ParagraphStyles;
+    paragraphStyleGroups?: ParagraphStyleGroups;
+  }
+
   export interface ParagraphStyles {
     length: number;
     item(index: number): ParagraphStyle;
@@ -432,6 +447,18 @@ declare module "indesign" {
     isValid?: boolean;
   }
 
+  export interface CharacterStyleGroups {
+    length: number;
+    item(index: number): CharacterStyleGroup;
+  }
+
+  export interface CharacterStyleGroup {
+    name: string;
+    isValid: boolean;
+    characterStyles?: CharacterStyles;
+    characterStyleGroups?: CharacterStyleGroups;
+  }
+
   export interface CharacterStyles {
     length: number;
     item(index: number): CharacterStyle;
@@ -441,6 +468,7 @@ declare module "indesign" {
   export interface CharacterStyle {
     name: string;
     isValid: boolean;
+    overprintFill?: boolean;
   }
 
   export interface Links {
@@ -507,6 +535,11 @@ declare module "indesign" {
     appliedParagraphStyle?: ParagraphStyle;
     appliedCharacterStyle?: CharacterStyle;
     characters?: Characters;
+    fillColor?: Swatch | Color;
+    fillTint?: number;
+    overprintFill?: boolean;
+    fillOverprint?: boolean;
+    contents?: string;
     length: number;
     isValid: boolean;
   }
@@ -530,6 +563,9 @@ declare module "indesign" {
     texts: Texts;
     textStyleRanges?: TextStyleRanges;
     paragraphs?: Paragraphs;
+    fillColor?: Swatch | Color;
+    fillTint?: number;
+    overprintFill?: boolean;
     isValid: boolean;
   }
 
@@ -548,6 +584,9 @@ declare module "indesign" {
     fontStyle?: string;
     pointSize?: number;
     fillColor?: Swatch | Color;
+    fillTint?: number;
+    overprintFill?: boolean;
+    fillOverprint?: boolean;
     justification?: number;
     contents?: string;
     horizontalOffset?: number;

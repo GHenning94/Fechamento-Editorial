@@ -81,6 +81,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
   {
     id: "cinza-overprint",
     label: "Usar cinza nos textos sobre fundo colorido somente com overprint. Preferência por preto 100%",
+    validatorIds: [V.CINZA_OVERPRINT],
   },
   {
     id: "corprof",
@@ -96,6 +97,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
     label: "Verificar se os estilos estão de acordo com a paleta padrão da editora",
     validatorIds: [
       V.ESTILOS_NOMENCLATURA,
+      V.ESTILOS_PASTAS,
       V.ESTILOS_IDIOMA,
       V.ESTILOS_PADRAO_PROFESSOR,
       V.ESTILOS_PADRAO_CREDITO,
@@ -113,7 +115,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
     id: "texturas",
     label:
       "Texturas e elementos gráficos aplicar como imagem (TIFF, JPG, PSD, EPS). Evitar aplicar diretamente no INDD para que os arquivos não fiquem muito pesados",
-    validatorIds: [V.RESOLUCAO],
+    validatorIds: [V.RESOLUCAO, V.IMAGENS_FORMATO],
   },
   {
     id: "links-cmyk",

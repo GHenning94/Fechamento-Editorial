@@ -57,4 +57,10 @@ export const VALIDATOR_IDS = {
   PASTEBOARD: "V18_PASTEBOARD",
   LAYERS_BLOQUEADAS: "V19_LAYERS_BLOQUEADAS",
   OVERTEXT: "V21_OVERTEXT",
+  ESTILOS_PASTAS: "V23_ESTILOS_PASTAS",
+  CINZA_OVERPRINT: "V24_CINZA_OVERPRINT",
+  IMAGENS_FORMATO: "V25_IMAGENS_FORMATO",
 } as const;
+
+/** Texturas e gráficos: TIFF, JPG/JPEG, PSD e EPS. JPG e JPEG são o mesmo formato. */
+export const ALLOWED_GRAPHIC_EXTENSIONS = ["tif", "tiff", "jpg", "jpeg", "psd", "eps"] as const;

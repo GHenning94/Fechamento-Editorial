@@ -187,6 +187,11 @@ export function isValidParagraphStyleName(styleName: string): boolean {
   return findParagraphStyleTrunk(styleName) !== null;
 }
 
+/** Estilo da paleta padrão — alinhamento livre; demais atributos devem seguir o original. */
+export function isStandardParagraphStyle(styleName: string): boolean {
+  return isValidParagraphStyleName(styleName);
+}
+
 /**
  * Sugere a nomenclatura correta quando o tronco (número_palavra) não está na paleta.
  */

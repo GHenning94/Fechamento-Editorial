@@ -22,9 +22,13 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.ESTILOS_IDIOMA]:
     "Os estilos de parágrafo estão com o idioma Português: Brasileiro.",
   [VALIDATOR_IDS.HIFENIZACAO]:
-    "Estilos com hifenização estão justificados à esquerda. Sem hifenização, o alinhamento está aceito.",
+    "Estilos da paleta aceitam qualquer alinhamento. Fora da paleta, hifenização exige justificado à esquerda.",
   [VALIDATOR_IDS.ESTILOS_NOMENCLATURA]:
     "Os estilos de parágrafo seguem o tronco número_palavra da paleta (ex.: 02_texto, 05_legenda).",
+  [VALIDATOR_IDS.ESTILOS_PASTAS]:
+    "Não há pastas nos estilos de parágrafo nem nos de caractere.",
+  [VALIDATOR_IDS.CINZA_OVERPRINT]:
+    "Textos em cinza sobre fundo colorido estão com overprint.",
   [VALIDATOR_IDS.FONTES]:
     "Todas as fontes em uso estão instaladas e sem substituição.",
   [VALIDATOR_IDS.FONTES_DUPLICADAS]:
@@ -35,6 +39,8 @@ const SUCCESS_TEXT: Record<string, string> = {
     "As imagens estão no espaço de cor esperado (CMYK ou os casos permitidos).",
   [VALIDATOR_IDS.RESOLUCAO]:
     "As imagens atendem a resolução mínima de 300 dpi.",
+  [VALIDATOR_IDS.IMAGENS_FORMATO]:
+    "Texturas e elementos gráficos estão em TIFF, JPG, JPEG, PSD ou EPS.",
   [VALIDATOR_IDS.FIOS]:
     "Todos os fios estão com espessura mínima de 0,3 pt.",
   [VALIDATOR_IDS.PASTEBOARD]:

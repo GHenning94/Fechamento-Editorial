@@ -26,6 +26,16 @@ export function isRendimentoLayerName(name: string): boolean {
   return normalizeLayerName(name) === "rendimento";
 }
 
+export function isGuiasLayerName(name: string): boolean {
+  const key = normalizeLayerName(name);
+  return key === "guias" || key === "guias deletar";
+}
+
+/** Layers de memorial, rendimento e guias — ignoradas em validações de conteúdo de arte. */
+export function isPluginUtilityLayerName(name: string): boolean {
+  return isEditorialLayerName(name) || isRendimentoLayerName(name) || isGuiasLayerName(name);
+}
+
 /** Localiza a layer de estilos/memorial sem depender de visibilidade ou caixa. */
 export function findEditorialLayer(doc: Document): Layer | null {
   let exact: Layer | null = null;

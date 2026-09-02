@@ -2,8 +2,10 @@ import type { Document, ParagraphStyle } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
+import { isCreditoStyleName } from "../utils/estilos-padrao-credito";
 import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import { forEachCollectionItem } from "../utils/collection-helpers";
+import { isStandardParagraphStyle } from "../utils/paleta-estilos";
 import {
   isLeftJustifiedAlignment,
   readParagraphJustification,
@@ -20,6 +22,7 @@ export class HifenizacaoValidator extends BaseValidator {
       forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
         if (!style || !style.isValid) return;
         if (shouldSkipParagraphStyleValidation(style.name)) return;
+        if (isStandardParagraphStyle(style.name) || isCreditoStyleName(style.name)) return;
 
         try {
           if (!style.hyphenation) return;
