@@ -36,5 +36,7 @@ export function githubLatestCcxUrl(): string {
 }
 
 export function githubApiUrl(pathname: string): string {
-  return `https://api.github.com/repos/${GITHUB_REPO}${pathname}`;
+  const hasQuery = pathname.includes("?");
+  const stamp = `_=${Date.now()}`;
+  return `https://api.github.com/repos/${GITHUB_REPO}${pathname}${hasQuery ? "&" : "?"}${stamp}`;
 }

@@ -122,6 +122,25 @@ function notesFromCommitMessage(message: string, fallbackVersion: string): Versi
   return { title: title || `Versão ${fallbackVersion}`, notes };
 }
 
+async function fetchGithubRaw(branch: string, filePath: string): Promise<string | null> {
+  try {
+    const response = await fetch(githubApiUrl(`/contents/${filePath}?ref=${encodeURIComponent(branch)}`), {
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github.raw",
+        "User-Agent": "editorial-autoclose",
+        "Cache-Control": "no-cache",
+      },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.text()).trim();
+  } catch {
+    return null;
+  }
+}
+
 export async function getVersionNotes(version: string = PLUGIN_VERSION): Promise<VersionNotes> {
   const key = cleanVersion(version);
   const bundled: VersionNotes = {
@@ -129,38 +148,39 @@ export async function getVersionNotes(version: string = PLUGIN_VERSION): Promise
     notes: PLUGIN_RELEASE_NOTES || "",
   };
 
-  const distChangelog = await fetchJson<Record<string, unknown>>(
-    githubRawUrl(GITHUB_DIST_BRANCH, "changelog.json")
-  );
-  const fromDist = notesFromUnknown(distChangelog?.[key] || distChangelog?.[version], key);
-  if (fromDist) {
-    return fromDist;
-  }
-
-  const release = await fetchJson<{ name?: string; body?: string; tag_name?: string }>(
-    githubApiUrl(`/releases/tags/v${key}`)
-  );
-  const fromRelease = notesFromUnknown(release, key);
-  if (fromRelease) {
-    return fromRelease;
-  }
-
-  const latest = await fetchJson<{ name?: string; body?: string; tag_name?: string }>(
-    githubApiUrl("/releases/latest")
-  );
-  if (latest && cleanVersion(latest.tag_name || "") === key) {
-    const fromLatest = notesFromUnknown(latest, key);
-    if (fromLatest) {
-      return fromLatest;
-    }
-  }
-
   const commit = await fetchJson<{ commit?: { message?: string } }>(
     githubApiUrl(`/commits/${GITHUB_SOURCE_BRANCH}`)
   );
   const fromCommit = notesFromCommitMessage(commit?.commit?.message || "", key);
   if (fromCommit) {
     return fromCommit;
+  }
+
+  const latest = await fetchJson<{ name?: string; body?: string; tag_name?: string }>(
+    githubApiUrl("/releases/latest")
+  );
+  const fromLatest = notesFromUnknown(latest, key);
+  if (fromLatest) {
+    return fromLatest;
+  }
+
+  const release = await fetchJson<{ name?: string; body?: string }>(githubApiUrl(`/releases/tags/v${key}`));
+  const fromRelease = notesFromUnknown(release, key);
+  if (fromRelease) {
+    return fromRelease;
+  }
+
+  const distRaw = await fetchGithubRaw(GITHUB_DIST_BRANCH, "changelog.json");
+  if (distRaw) {
+    try {
+      const changelog = JSON.parse(distRaw) as Record<string, unknown>;
+      const fromDist = notesFromUnknown(changelog[key] || changelog[version], key);
+      if (fromDist) {
+        return fromDist;
+      }
+    } catch {
+      // ignore
+    }
   }
 
   if (bundled.title || bundled.notes) {
@@ -176,6 +196,7 @@ export async function getVersionNotes(version: string = PLUGIN_VERSION): Promise
 export async function checkForPluginUpdate(): Promise<PluginUpdateInfo | null> {
   try {
     const remoteVersion =
+      (await fetchGithubRaw(GITHUB_SOURCE_BRANCH, "VERSION")) ||
       (await fetchText(githubRawUrl(GITHUB_SOURCE_BRANCH, "VERSION"))) ||
       (await fetchJsonVersion(githubRawUrl(GITHUB_SOURCE_BRANCH, "update.json")));
 
