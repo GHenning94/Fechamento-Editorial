@@ -351,9 +351,9 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
   if (isGrayNameKey(key)) return true;
 
   if (isBlackKey(key)) {
-    return t < 99.5;
+    return t < 90;
   }
-  if ((key.includes("black") || key.includes("preto")) && t < 99.5) {
+  if ((key.includes("black") || key.includes("preto")) && t < 90) {
     return true;
   }
   if ((key.includes("black") || key.includes("preto")) && /\d/.test(key) && !/(^|[^0-9])100([^0-9]|$)/.test(key)) {
@@ -381,14 +381,44 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     const chroma = Math.max(rgbScale[0], rgbScale[1], rgbScale[2]) - Math.min(rgbScale[0], rgbScale[1], rgbScale[2]);
     if (chroma > 12) return false;
     const tone = (rgbScale[0] + rgbScale[1] + rgbScale[2]) / 3;
-    return tone > 2 && tone < 250;
+    return tone > 18 && tone < 230;
   }
 
   if (space === "Gray" && channels.length >= 1) {
     const gray = channels[0];
-    return gray > 0.5 && gray < 99.5;
+    return gray > 8 && gray < 90;
   }
 
+  return false;
+}
+
+/** Preto de impressão (K alto, [Preto], RGB quase 0). Não entra como cinza de arte. */
+export function isSolidPrintBlack(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
+  if (fill == null) return false;
+  const key = fillNameKey(fill);
+  if (isNoneKey(key) || isPaperKey(key)) return false;
+  const t = tint < 0 ? 100 : tint;
+  if (t < 90) return false;
+  if (isBlackKey(key)) return true;
+  if ((key.includes("black") || key.includes("preto")) && !/\d/.test(key)) return true;
+
+  const channels = resolveCmykChannels(fill, t);
+  if (channels && channels.length >= 4) {
+    const chroma = cmykChroma(channels[0], channels[1], channels[2]);
+    if (chroma <= 4 && channels[3] >= 90) return true;
+  }
+
+  const space = typeof fill === "string" ? "" : readSpaceLabel(fill);
+  if (space === "RGB") {
+    const values = typeof fill === "string" ? [] : readColorValues(fill);
+    if (values.length >= 3) {
+      const rgb = toRgb255(values, t);
+      return rgb[0] <= 18 && rgb[1] <= 18 && rgb[2] <= 18;
+    }
+  }
+  if (space === "Gray" && channels && channels.length >= 1) {
+    return channels[0] <= 8;
+  }
   return false;
 }
 
@@ -408,8 +438,8 @@ function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
   const chroma = Math.max(c, m, y) - Math.min(c, m, y);
   if (chroma > 4) return false;
   const cmy = (c + m + y) / 3;
-  if (cmy <= 4) return k > 0.5 && k < 99.5;
-  return k < 99.5;
+  if (cmy <= 4) return k > 0.5 && k < 90;
+  return k < 90;
 }
 
 function cmykChroma(c: number, m: number, y: number): number {

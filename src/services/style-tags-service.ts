@@ -9,8 +9,8 @@ import {
 } from "../utils/editorial-layer";
 import { ensurePluginInk, ensureProcessTagColor, findDocumentBlack, findSwatchByName } from "../utils/editorial-color";
 import { pickTagOverlayColors } from "../utils/tag-overlay-colors";
-import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
-import { findNoneCharacterStyle, findNoParagraphStyle, withNeutralTextStyleContext } from "../utils/text-style-context";
+import { getActiveDocument, getInDesignApp, getInDesignModule, clearInDesignSelection } from "../utils/indesign-runtime";
+import { findNoneCharacterStyle, findNoParagraphStyle } from "../utils/text-style-context";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
 
@@ -445,8 +445,7 @@ function ensureTagParagraphStyle(doc: Document): ParagraphStyle | null {
   }
 
   try {
-    const base = findNoParagraphStyle(doc);
-    return doc.paragraphStyles.add(base ? { name: "EAC_TagLabel", basedOn: base } : { name: "EAC_TagLabel" });
+    return doc.paragraphStyles.add({ name: "EAC_TagLabel" });
   } catch {
     return null;
   }
@@ -474,13 +473,11 @@ function removeStyleCollection(collection: unknown): void {
 }
 
 function detachTagParagraphStyle(doc: Document, style: ParagraphStyle): void {
-  for (const name of ["[No Paragraph Style]", "[Sem estilo de parágrafo]"]) {
+  const base = findNoParagraphStyle(doc);
+  if (base) {
     try {
-      const base = doc.paragraphStyles.itemByName(name);
-      if (base?.isValid) {
-        style.basedOn = base;
-        return;
-      }
+      style.basedOn = base;
+      return;
     } catch {
       // ignore
     }
@@ -516,10 +513,46 @@ function styleTagParagraph(
     nestedGrepStyles?: unknown;
     nestedStyles?: unknown;
     nestedLineStyles?: unknown;
+    underline?: boolean;
+    strikeThru?: boolean;
+    ruleAboveLineWeight?: number;
+    ruleBelowLineWeight?: number;
+    paragraphShadingOn?: boolean;
+    paragraphBorderOn?: boolean;
   };
   removeStyleCollection(nested.nestedGrepStyles);
   removeStyleCollection(nested.nestedStyles);
   removeStyleCollection(nested.nestedLineStyles);
+  try {
+    nested.underline = false;
+  } catch {
+    // ignore
+  }
+  try {
+    nested.strikeThru = false;
+  } catch {
+    // ignore
+  }
+  try {
+    nested.ruleAboveLineWeight = 0;
+  } catch {
+    // ignore
+  }
+  try {
+    nested.ruleBelowLineWeight = 0;
+  } catch {
+    // ignore
+  }
+  try {
+    nested.paragraphShadingOn = false;
+  } catch {
+    // ignore
+  }
+  try {
+    nested.paragraphBorderOn = false;
+  } catch {
+    // ignore
+  }
   applyCalibriRegular(style);
   try {
     (style as ParagraphStyle & { pointSize?: number }).pointSize = 12;
@@ -1091,8 +1124,8 @@ export async function createMemorialStyleTags(
 ): Promise<StyleTagsResult> {
   const doc = getActiveDocument();
 
-  return withPointUnitsAsync(doc, () =>
-    withNeutralTextStyleContext(doc, async () => {
+  return withPointUnitsAsync(doc, async () => {
+    clearInDesignSelection();
     throwIfAborted(signal);
     onProgress?.(10, "Localizando estilos…");
     await yieldToHost(20);
@@ -1173,6 +1206,5 @@ export async function createMemorialStyleTags(
       character,
       total: paragraph + character,
     };
-    })
-  );
+  });
 }
