@@ -184,22 +184,21 @@ button::-moz-focus-inner {
 }
 
 .panel-update-btn {
-  position: relative;
-  box-sizing: border-box;
-  flex: 0 0 22px;
-  flex-shrink: 0;
+  display: block;
+  flex: none;
+  align-self: center;
   width: 22px;
-  min-width: 22px;
-  max-width: 22px;
   height: 22px;
+  min-width: 22px;
   min-height: 22px;
+  max-width: 22px;
   max-height: 22px;
-  margin: 0 0 0 2px;
-  padding: 5px;
-  overflow: hidden;
-  border: none;
-  border-radius: 11px;
-  background-color: var(--success);
+  margin: 0 0 0 8px;
+  padding: 0 !important;
+  overflow: visible;
+  border: none !important;
+  border-radius: 0;
+  background: transparent;
   line-height: 0;
   font-size: 0;
   cursor: pointer;
@@ -215,41 +214,16 @@ button::-moz-focus-inner {
   opacity: 0.7;
 }
 
-.panel-update-icon {
-  position: relative;
+.panel-update-img {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 22px;
+  height: 22px;
+  max-width: 22px;
+  max-height: 22px;
   margin: 0;
-}
-
-.panel-update-shaft {
-  position: absolute;
-  left: 5px;
-  top: 1px;
-  width: 2px;
-  height: 6px;
-  background-color: #12301f;
-}
-
-.panel-update-head {
-  position: absolute;
-  left: 3px;
-  top: 5px;
-  width: 0;
-  height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 4px solid #12301f;
-}
-
-.panel-update-tray {
-  position: absolute;
-  left: 1px;
-  bottom: 0;
-  width: 10px;
-  height: 2px;
-  background-color: #12301f;
+  padding: 0;
+  border: none;
+  pointer-events: none;
 }
 
 .version-notes-card {
