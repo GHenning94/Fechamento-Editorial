@@ -59,14 +59,32 @@ npm run build            # compila o plugin
 
 ## Atualizações
 
-Altere só o arquivo `VERSION` (ex.: `1.0.1`) e faça commit/push pela app do
-GitHub. O GitHub Actions gera a build e publica na branch `plugin-dist`.
+Altere o arquivo `VERSION` (ex.: `1.0.1`). No GitHub Desktop, escreva o
+**título** e a **descrição** do commit e faça push. O GitHub Actions:
 
-Quem já tem o plugin vê um aviso verde e clica em **Atualizar**. Os arquivos
-são trocados na pasta do plugin e a **licença permanece**.
+1. Gera a build
+2. Publica os arquivos na branch `plugin-dist`
+3. Cria a release `v1.0.1` com o `.ccx` e as notas do commit
+
+Quem já instalou o plugin (pelo `.ccx` no Creative Cloud ou pelo UDT) vê o
+círculo verde de download e clica. Os arquivos são trocados na pasta do
+plugin e a **licença permanece**. Se a pasta instalada estiver bloqueada, o
+plugin baixa o `.ccx` e abre o instalador do Creative Cloud.
 
 O repositório precisa estar **público** (ou a branch `plugin-dist` acessível)
 para o aviso e o download funcionarem. Ative Actions no GitHub.
+
+Para gerar o `.ccx` na sua máquina:
+
+```bash
+npm run package:ccx
+```
+
+O arquivo sai em `release/EditorialAutoClose.ccx`. Envie esse arquivo para
+as outras pessoas instalarem pelo Creative Cloud (clique duplo).
+
+Antes de distribuir, deixe `UPDATE_DEV_FORCE_BANNER = false` em
+`src/update/update-config.ts` e rode `npm run package:ccx` de novo.
 
 Não rode `license:secret` de novo.
 

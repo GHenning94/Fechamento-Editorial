@@ -6,6 +6,8 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 const VERSION_PATH = path.join(ROOT, "VERSION");
+const CHANGELOG_PATH = path.join(ROOT, "changelog.json");
+const UPDATE_JSON_PATH = path.join(ROOT, "update.json");
 
 function readVersion() {
   if (!fs.existsSync(VERSION_PATH)) {
@@ -20,40 +22,66 @@ function readVersion() {
   return version;
 }
 
-function writeJson(filePath, updater) {
-  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  updater(data);
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readJsonOptional(filePath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n");
+}
+
+function notesFor(version) {
+  const changelog = readJsonOptional(CHANGELOG_PATH, {});
+  const entry = changelog[version] || {};
+  const previous = readJsonOptional(UPDATE_JSON_PATH, {});
+  return {
+    title: String(entry.title || previous.title || "").trim(),
+    notes: String(entry.notes || previous.notes || "").trim(),
+  };
+}
+
+function writeTsConstant(filePath, contents) {
+  fs.writeFileSync(filePath, contents);
 }
 
 function main() {
   const version = readVersion();
+  const { title, notes } = notesFor(version);
 
-  writeJson(path.join(ROOT, "package.json"), (pkg) => {
-    pkg.version = version;
-  });
+  const pkg = readJson(path.join(ROOT, "package.json"));
+  pkg.version = version;
+  writeJson(path.join(ROOT, "package.json"), pkg);
 
-  writeJson(path.join(ROOT, "manifest.json"), (manifest) => {
-    manifest.version = version;
-  });
+  const manifest = readJson(path.join(ROOT, "manifest.json"));
+  manifest.version = version;
+  writeJson(path.join(ROOT, "manifest.json"), manifest);
 
-  fs.writeFileSync(
+  writeTsConstant(
     path.join(ROOT, "src", "update", "plugin-version.ts"),
     `/** Versão instalada neste build. Gerada a partir do arquivo VERSION. */\nexport const PLUGIN_VERSION = "${version}";\n`
   );
 
-  fs.writeFileSync(
-    path.join(ROOT, "update.json"),
-    JSON.stringify(
-      {
-        version,
-        downloadUrl: "https://github.com/GHenning94/Fechamento-Editorial",
-        notes: "",
-      },
-      null,
-      2
-    ) + "\n"
+  writeTsConstant(
+    path.join(ROOT, "src", "update", "plugin-notes.ts"),
+    `/** Notas da versão instalada neste build. Gerada a partir de changelog.json. */\nexport const PLUGIN_RELEASE_TITLE = ${JSON.stringify(
+      title || `Versão ${version}`
+    )};\nexport const PLUGIN_RELEASE_NOTES = ${JSON.stringify(notes)};\n`
   );
+
+  writeJson(UPDATE_JSON_PATH, {
+    version,
+    downloadUrl: "https://github.com/GHenning94/Fechamento-Editorial",
+    title,
+    notes,
+  });
 
   console.log("Versão sincronizada:", version);
 }

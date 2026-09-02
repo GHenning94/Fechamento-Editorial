@@ -1,5 +1,7 @@
 node_modules/
 dist/
+release/
+*.ccx
 .DS_Store
 *.log
 report/

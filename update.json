@@ -1,5 +1,6 @@
 {
   "version": "1.0.0",
   "downloadUrl": "https://github.com/GHenning94/Fechamento-Editorial",
-  "notes": ""
+  "title": "Primeira versão para testes",
+  "notes": "Fechamento editorial com checklist, package, PDFs e relatório.\n\nNo próximo lançamento, este texto será o título e a descrição que você escrever no GitHub Desktop."
 }

@@ -49,7 +49,11 @@
     "launchProcess": {
       "schemes": [
         "https",
-        "http"
+        "http",
+        "file"
+      ],
+      "extensions": [
+        ".ccx"
       ]
     }
   }

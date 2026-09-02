@@ -15,6 +15,7 @@ declare module "uxp" {
 
   export const shell: {
     openExternal(target: string | { url: string }): Promise<void> | void;
+    openPath?(target: string): Promise<void> | void;
   };
 
   export const storage: {

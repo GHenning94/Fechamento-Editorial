@@ -7,6 +7,7 @@
     "build": "node tools/sync-version.js && webpack --mode production",
     "watch": "node tools/sync-version.js && webpack --watch --mode development",
     "dev": "node tools/sync-version.js && webpack --mode development",
+    "package:ccx": "npm run build && node tools/package-ccx.js",
     "license:secret": "node tools/generate-license-secret.js",
     "license:serial": "node tools/generate-serial.js",
     "license:server": "node tools/activation-server/server.js"

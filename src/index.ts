@@ -106,7 +106,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
   activeController = controller;
   markPanelInitialized();
   bindDevLicenseReset(container, root);
-  bindUpdateBanner(root);
+  bindUpdateBanner(root, (message, type) => controller.setStatus(message, type));
 
   controller.bindHandlers({
     onChecklist: async () => {

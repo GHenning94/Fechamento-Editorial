@@ -17,8 +17,12 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Registrar versão e notas do commit
+        run: node tools/write-changelog.js
+
       - run: npm ci
       - run: npm run build
+      - run: node tools/package-ccx.js
 
       - name: Publicar arquivos do plugin
         uses: JamesIves/github-pages-deploy-action@v4
@@ -28,3 +32,12 @@ jobs:
           force: true
           git-config-name: github-actions
           git-config-email: github-actions[bot]@users.noreply.github.com
+
+      - name: Publicar release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.PLUGIN_VERSION }}
+          name: ${{ env.PLUGIN_TITLE }}
+          body: ${{ env.PLUGIN_NOTES }}
+          files: release/EditorialAutoClose.ccx
+          make_latest: true

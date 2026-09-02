@@ -7,23 +7,29 @@ const PANEL_HTML = `
         <div class="panel-subtitle">Fechamento editorial automatizado</div>
       </div>
       <div class="panel-header-aside">
-        <span class="panel-beta-tag">Beta</span>
+        <div class="panel-version-cluster">
+          <div class="panel-version-wrap">
+            <span id="plugin-version-tag" class="panel-version-tag">v.1.0.0</span>
+            <div id="btn-version-info" class="panel-version-info" role="button" tabindex="0" title="O que há nesta versão">i</div>
+          </div>
+          <div id="btn-plugin-update" class="panel-update-btn hidden" role="button" tabindex="0" title="Atualizar plugin">
+            <span class="panel-update-icon" aria-hidden="true">
+              <span class="panel-update-shaft"></span>
+              <span class="panel-update-head"></span>
+              <span class="panel-update-tray"></span>
+            </span>
+          </div>
+        </div>
         <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">
           Resetar licença
         </div>
       </div>
     </div>
-  </header>
-
-  <section id="update-banner" class="update-banner hidden">
-    <div class="update-banner-row">
-      <p class="update-banner-text">
-        Atualização <span id="update-banner-version"></span> disponível
-      </p>
-      <div id="btn-update-open" class="update-banner-btn" role="button" tabindex="0">Atualizar</div>
+    <div id="version-notes-card" class="version-notes-card hidden">
+      <div id="version-notes-title" class="version-notes-title"></div>
+      <div id="version-notes-body" class="version-notes-body"></div>
     </div>
-    <p id="update-banner-status" class="update-banner-status hidden"></p>
-  </section>
+  </header>
 
   <section class="actions">
     <div class="actions-row">
