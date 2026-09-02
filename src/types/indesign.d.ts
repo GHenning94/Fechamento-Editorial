@@ -87,6 +87,7 @@ declare module "indesign" {
 
   export interface ScriptPreferences {
     userInteractionLevel: number;
+    enableRedraw?: boolean;
   }
 
   export const UserInteractionLevels: {

@@ -171,6 +171,36 @@ function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text)
   }
 }
 
+function rangeLooksLikeHeading(range: TextStyleRange | Text): boolean {
+  try {
+    const name = ((range as Text).appliedParagraphStyle?.name || "").trim();
+    if (!name) return false;
+    if (/^\d+_titulo/i.test(name)) return true;
+    if (/secao_titulo|boxe_titulo|iniciais_titulo|finais_titulo/i.test(name)) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function frameStartsWithTitle(frame: PageItem): boolean {
+  try {
+    const paragraphs = (frame as PageItem & { paragraphs?: { item?: (index: number) => Text } }).paragraphs;
+    const first = paragraphs?.item?.(0);
+    if (!first) return false;
+    return rangeLooksLikeHeading(first);
+  } catch {
+    return false;
+  }
+}
+
+function isLikelySidebar(bounds: number[]): boolean {
+  if (!bounds || bounds.length < 4) return false;
+  const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
+  const height = Math.abs(Number(bounds[2]) - Number(bounds[0]));
+  return width > 0 && height > width * 3 && width < 72;
+}
+
 function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   try {
     const contents = (range as { contents?: string }).contents;
@@ -212,6 +242,7 @@ function sampleLocalFills(range: TextStyleRange | Text): Array<{ fill: ReturnTyp
 
 function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
   if (rangeLooksEmpty(range)) return false;
+  if (rangeLooksLikeHeading(range)) return false;
 
   try {
     const samples = sampleLocalFills(range);
@@ -346,11 +377,13 @@ function grayTextSitsOnColoredBackground(
   const frameMatchesText = samples.some((sample) => sample.fill && fillsLookSame(frameFill, sample.fill));
   const leakedFill = textFrameFillLeaksFromContents(frame);
   const mixedChromatic = frameHasChromaticText(frame);
+  const startsWithTitle = frameStartsWithTitle(frame);
   if (
     isColoredBackgroundFill(frameFill, frameTint) &&
     !frameMatchesText &&
     !leakedFill &&
-    !mixedChromatic
+    !mixedChromatic &&
+    !startsWithTitle
   ) {
     return true;
   }
@@ -364,7 +397,9 @@ function grayTextSitsOnColoredBackground(
     if (!other.coloredFill && !other.hasGraphic) continue;
     if (isTextFrameItem(other.item) && !other.hasGraphic) continue;
     if (isLikelyIcon(other.bounds)) continue;
+    if (isLikelySidebar(other.bounds) && !other.hasGraphic) continue;
     if (!pageName || !other.pageName || other.pageName !== pageName) continue;
+    if (startsWithTitle && other.coloredFill && !other.hasGraphic) continue;
     if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 

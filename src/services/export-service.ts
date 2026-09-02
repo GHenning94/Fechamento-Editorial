@@ -1,6 +1,8 @@
 import type { Document } from "indesign";
 import { ExportArtifacts, ExportPaths } from "../models/closure-report";
 import { exportPdfArte, exportPdfEstilos } from "./pdf-export-service";
+import { getInDesignApp } from "../utils/indesign-runtime";
+import { UserInteractionLevels } from "indesign";
 import {
   ensureFolder,
   joinPath,
@@ -19,22 +21,50 @@ export class PackageService {
   }
 
   runPackageForPrint(doc: Document, paths: ExportPaths): void {
-    doc.packageForPrint(
-      paths.packageRoot,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      false,
-      true,
-      false,
-      "",
-      true,
-      "EDITORIAL AUTOCLOSE",
-      true
-    );
+    const app = getInDesignApp();
+    const prefs = app.scriptPreferences as { userInteractionLevel: unknown; enableRedraw?: boolean };
+    const savedUi = prefs.userInteractionLevel;
+    let savedRedraw: boolean | undefined;
+    try {
+      savedRedraw = prefs.enableRedraw;
+    } catch {
+      savedRedraw = undefined;
+    }
+    try {
+      try {
+        prefs.enableRedraw = false;
+      } catch {
+        // ignore
+      }
+      prefs.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;
+      doc.packageForPrint(
+        paths.packageRoot,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        false,
+        "",
+        true,
+        "EDITORIAL AUTOCLOSE",
+        true
+      );
+    } finally {
+      try {
+        if (savedRedraw !== undefined) prefs.enableRedraw = savedRedraw;
+      } catch {
+        // ignore
+      }
+      try {
+        prefs.userInteractionLevel = savedUi;
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 

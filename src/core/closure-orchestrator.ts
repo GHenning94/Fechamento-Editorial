@@ -20,8 +20,8 @@ import {
 } from "./checklist-cache";
 import { ChecklistRunner, ProgressCallback } from "./checklist-runner";
 
-const HEAVY_STEP_PAUSE_MS = 1000;
-const FINAL_PAUSE_MS = 800;
+const HEAVY_STEP_PAUSE_MS = 280;
+const FINAL_PAUSE_MS = 350;
 
 export class ClosureOrchestrator {
   private checklistRunner = new ChecklistRunner();
@@ -125,8 +125,8 @@ export class ClosureOrchestrator {
     clearInDesignSelection();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
-    onProgress?.(3, totalSteps, "Exportando PDF páginas simples (sem memorial)...");
-    await yieldForUi();
+    onProgress?.(3, totalSteps, "Exportando PDF páginas simples (sem memorial e rendimento)...");
+    await yieldToHost(120);
     const pdfArteResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Arte", () =>
       this.exportService.runPdfArte(getActiveDocument(), paths)
     );
@@ -142,8 +142,8 @@ export class ClosureOrchestrator {
     };
 
     if (!skipEstilosPdf) {
-      onProgress?.(4, totalSteps, "Exportando PDF spreads (com memorial)...");
-      await yieldForUi();
+      onProgress?.(4, totalSteps, "Exportando PDF spreads (com memorial e rendimento)...");
+      await yieldToHost(120);
       pdfEstilosResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Estilos", () =>
         this.exportService.runPdfEstilos(getActiveDocument(), paths)
       );

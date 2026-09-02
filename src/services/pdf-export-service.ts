@@ -3,7 +3,7 @@ import { ExportFormat, UserInteractionLevels } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
 import { joinPath } from "../utils/file-system";
 import { getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
-import { findEditorialLayer } from "../utils/editorial-layer";
+import { findEditorialLayer, findRendimentoLayer } from "../utils/editorial-layer";
 import { toPdfExportTarget } from "../utils/pdf-export-path";
 import { withPresetSpreadSettings, PdfSpreadSettings } from "../utils/pdf-preset-session";
 
@@ -17,8 +17,112 @@ export interface PdfExportOutcome {
   warnings: string[];
 }
 
-function findMemorialLayer(doc: Document): Layer | null {
-  return findEditorialLayer(doc);
+interface LayerSnapshot {
+  layer: Layer;
+  visible: boolean;
+  locked: boolean;
+}
+
+function snapshotLayer(layer: Layer | null): LayerSnapshot | null {
+  if (!layer?.isValid) return null;
+  try {
+    return {
+      layer,
+      visible: Boolean(layer.visible),
+      locked: Boolean(layer.locked),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function setLayerVisible(snapshot: LayerSnapshot | null, visible: boolean): void {
+  if (!snapshot?.layer?.isValid) return;
+  try {
+    snapshot.layer.locked = false;
+  } catch {
+    // ignore
+  }
+  try {
+    if (snapshot.layer.visible !== visible) {
+      snapshot.layer.visible = visible;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function restoreLayer(snapshot: LayerSnapshot | null): void {
+  if (!snapshot?.layer?.isValid) return;
+  try {
+    snapshot.layer.visible = snapshot.visible;
+  } catch {
+    // ignore
+  }
+  try {
+    snapshot.layer.locked = snapshot.locked;
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * PDF é pesado: sem redraw, sem diálogos, preflight desligado.
+ * O InDesign continua ocupado no exportFile — isso é o motor, não o painel.
+ */
+function withQuietExport<T>(doc: Document, fn: () => T): T {
+  const app = getInDesignApp();
+  const prefs = app.scriptPreferences as {
+    userInteractionLevel: unknown;
+    enableRedraw?: boolean;
+  };
+  const savedUi = prefs.userInteractionLevel;
+  let savedRedraw: boolean | undefined;
+  let savedPreflight: boolean | undefined;
+
+  try {
+    savedRedraw = prefs.enableRedraw;
+  } catch {
+    savedRedraw = undefined;
+  }
+  try {
+    savedPreflight = doc.preflightOptions?.preflightOff;
+  } catch {
+    savedPreflight = undefined;
+  }
+
+  try {
+    try {
+      prefs.enableRedraw = false;
+    } catch {
+      // host sem enableRedraw
+    }
+    prefs.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;
+    try {
+      if (doc.preflightOptions) doc.preflightOptions.preflightOff = true;
+    } catch {
+      // ignore
+    }
+    return fn();
+  } finally {
+    try {
+      if (savedRedraw !== undefined) prefs.enableRedraw = savedRedraw;
+    } catch {
+      // ignore
+    }
+    try {
+      prefs.userInteractionLevel = savedUi;
+    } catch {
+      // ignore
+    }
+    try {
+      if (savedPreflight !== undefined && doc.preflightOptions) {
+        doc.preflightOptions.preflightOff = savedPreflight;
+      }
+    } catch {
+      // ignore
+    }
+  }
 }
 
 export function findPdfPreset(): PDFExportPreset | null {
@@ -36,18 +140,6 @@ export function findPdfPreset(): PDFExportPreset | null {
   }
 
   return null;
-}
-
-function withSuppressedUi<T>(fn: () => T): T {
-  const app = getInDesignApp();
-  const saved = app.scriptPreferences.userInteractionLevel;
-
-  try {
-    app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;
-    return fn();
-  } finally {
-    app.scriptPreferences.userInteractionLevel = saved;
-  }
 }
 
 function forceAllPagesRange(doc: Document): void {
@@ -86,8 +178,8 @@ function forceAllPagesRange(doc: Document): void {
 
 /**
  * Dois PDFs por fechamento:
- * - arte: um arquivo, páginas simples, layer de memorial oculta
- * - _ESTILOS: um arquivo, spreads, layer de memorial visível
+ * - arte: páginas simples, memorial e rendimento ocultos
+ * - _ESTILOS: spreads, memorial e rendimento visíveis
  */
 function exportPdf(
   doc: Document,
@@ -97,18 +189,12 @@ function exportPdf(
 ): void {
   const target = toPdfExportTarget(outputPath);
 
-  withPresetSpreadSettings(preset, settings, () => {
-    withSuppressedUi(() => {
+  withQuietExport(doc, () => {
+    withPresetSpreadSettings(preset, settings, () => {
       forceAllPagesRange(doc);
       doc.exportFile(ExportFormat.PDF_TYPE, target, false, preset);
     });
   });
-}
-
-function setMemorialVisibility(memorial: Layer | null, visible: boolean): void {
-  if (memorial?.isValid) {
-    memorial.visible = visible;
-  }
 }
 
 export function exportPdfArte(
@@ -126,12 +212,13 @@ export function exportPdfArte(
     };
   }
 
-  const memorial = findMemorialLayer(doc);
-  const memorialWasVisible = memorial?.visible ?? null;
+  const memorial = snapshotLayer(findEditorialLayer(doc));
+  const rendimento = snapshotLayer(findRendimentoLayer(doc));
   const artePath = joinPath(packageRoot, `${docBaseName}.pdf`);
 
   try {
-    setMemorialVisibility(memorial, false);
+    setLayerVisible(memorial, false);
+    setLayerVisible(rendimento, false);
     exportPdf(doc, preset, artePath, { exportReaderSpreads: false });
     return {
       presetMissing: false,
@@ -148,9 +235,8 @@ export function exportPdfArte(
       warnings,
     };
   } finally {
-    if (memorial && memorialWasVisible !== null) {
-      memorial.visible = memorialWasVisible;
-    }
+    restoreLayer(memorial);
+    restoreLayer(rendimento);
   }
 }
 
@@ -169,12 +255,13 @@ export function exportPdfEstilos(
     };
   }
 
-  const memorial = findMemorialLayer(doc);
-  const memorialWasVisible = memorial?.visible ?? null;
+  const memorial = snapshotLayer(findEditorialLayer(doc));
+  const rendimento = snapshotLayer(findRendimentoLayer(doc));
   const estilosPath = joinPath(packageRoot, `${docBaseName}_ESTILOS.pdf`);
 
   try {
-    setMemorialVisibility(memorial, true);
+    setLayerVisible(memorial, true);
+    setLayerVisible(rendimento, true);
     exportPdf(doc, preset, estilosPath, { exportReaderSpreads: true });
     if (!memorial) {
       warnings.push(
@@ -196,9 +283,8 @@ export function exportPdfEstilos(
       warnings,
     };
   } finally {
-    if (memorial && memorialWasVisible !== null) {
-      memorial.visible = memorialWasVisible;
-    }
+    restoreLayer(memorial);
+    restoreLayer(rendimento);
   }
 }
 

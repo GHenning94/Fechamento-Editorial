@@ -239,6 +239,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       return orchestrator.closeMaterial(userName, destinationFolder, (step, total, label) => {
         const percent = Math.round((step / total) * 100);
         controller.setProgress(percent, label);
+        controller.setStatus(label, "info");
       });
     },
     hasMemorialLayer: () => orchestrator.hasMemorialLayer(),
