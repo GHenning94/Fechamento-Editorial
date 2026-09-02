@@ -887,7 +887,7 @@ export async function createMemorialStyleTags(
       if ((i + 1) % TAG_BATCH === 0) {
         const percent = 40 + Math.round(((i + 1) / hits.length) * 55);
         onProgress?.(percent, `Criando tags… ${i + 1}/${hits.length}`);
-        await yieldToHost(16);
+        await yieldToHost(40);
         throwIfAborted(signal);
       }
     }

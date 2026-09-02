@@ -911,7 +911,7 @@ export async function createRendimentoTags(
       if ((i + 1) % 4 === 0 || i === pageCount - 1) {
         const percent = 40 + Math.round(((i + 1) / Math.max(1, pageCount)) * 55);
         onProgress?.(percent, `Criando tags… ${i + 1}/${pageCount}`);
-        await yieldToHost(12);
+        await yieldToHost(40);
         throwIfAborted(signal);
       }
     }

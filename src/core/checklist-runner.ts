@@ -102,8 +102,8 @@ export function isChecklistCancelled(error: unknown): boolean {
   );
 }
 
-const BETWEEN_VALIDATOR_MS = 80;
-const AFTER_HEAVY_VALIDATOR_MS = 160;
+const BETWEEN_VALIDATOR_MS = 100;
+const AFTER_HEAVY_VALIDATOR_MS = 180;
 
 const GRAPHICS_VALIDATOR_IDS = new Set<string>([
   VALIDATOR_IDS.IMAGENS_COLORSPACE,
