@@ -33,7 +33,11 @@ export class PanelController {
   private progressBar: HTMLProgressElement | null;
   private progressLabel: HTMLElement | null;
   private btnCancelChecklist: HTMLElement | null;
-  private checklistAbort: AbortController | null = null;
+  private actionAbort: AbortController | null = null;
+  private cancelling = false;
+  private spinnerFrame: number | null = null;
+  private spinnerAngle = 0;
+  private workSpinner: HTMLElement | null;
   private countErrors: HTMLElement | null;
   private countWarnings: HTMLElement | null;
   private countApproved: HTMLElement | null;
@@ -65,6 +69,7 @@ export class PanelController {
     this.listErrors = root.querySelector("#list-errors");
     this.statusMessage = root.querySelector("#status-message");
     this.statusText = root.querySelector("#status-message-text");
+    this.workSpinner = root.querySelector(".work-spinner");
     this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
     this.bindResultExpanders();
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
@@ -74,7 +79,7 @@ export class PanelController {
       onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
     }
     if (this.btnCancelChecklist) {
-      onActionActivate(this.btnCancelChecklist, () => this.cancelRunningChecklist());
+      onActionActivate(this.btnCancelChecklist, () => this.cancelRunningAction());
     }
   }
 
@@ -282,19 +287,24 @@ export class PanelController {
     } catch (error) {
       if (isChecklistCancelled(error)) {
         this.resetProgress();
-        this.setStatus("Checklist cancelado.", "info");
+        this.setStatus(this.cancelling ? "Operação cancelada." : "Checklist cancelado.", "info");
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
       this.setStatus(message, "error");
     } finally {
-      this.finishChecklistRun();
+      this.finishCancellableAction();
       this.setBusy(false);
     }
   }
 
   setBusy(busy: boolean): void {
     this.root.classList.toggle("is-working", busy);
+    if (busy) {
+      this.startSpinnerAnimation();
+    } else {
+      this.stopSpinnerAnimation();
+    }
     setActionDisabled(this.btnChecklist, busy);
     setActionDisabled(this.btnCreateStyles, busy);
     setActionDisabled(this.btnCreateRendimento, busy);
@@ -302,26 +312,70 @@ export class PanelController {
     setActionDisabled(this.btnDownloadReport, busy || !this.reportDownloadAllowed);
   }
 
+  startCancellableAction(): AbortSignal {
+    this.actionAbort = new AbortController();
+    this.cancelling = false;
+    this.setCancelVisible(true);
+    return this.actionAbort.signal;
+  }
+
+  /** @deprecated Use startCancellableAction */
   startChecklistSignal(): AbortSignal {
-    this.checklistAbort = new AbortController();
-    this.setChecklistCancelVisible(true);
-    return this.checklistAbort.signal;
+    return this.startCancellableAction();
   }
 
+  finishCancellableAction(): void {
+    this.actionAbort = null;
+    this.cancelling = false;
+    this.setCancelVisible(false);
+  }
+
+  /** @deprecated Use finishCancellableAction */
   finishChecklistRun(): void {
-    this.checklistAbort = null;
-    this.setChecklistCancelVisible(false);
+    this.finishCancellableAction();
   }
 
-  private cancelRunningChecklist(): void {
-    if (!this.checklistAbort) return;
-    this.checklistAbort.abort();
-    this.setProgress(this.progressBar?.value || 0, "Cancelando…");
-    this.setStatus("Cancelando checklist…", "info");
+  isCancelling(): boolean {
+    return this.cancelling;
   }
 
-  private setChecklistCancelVisible(visible: boolean): void {
+  private cancelRunningAction(): void {
+    if (!this.actionAbort || this.cancelling) return;
+    this.cancelling = true;
+    this.actionAbort.abort();
+    setActionDisabled(this.btnCancelChecklist, true);
+    this.setProgress(this.progressBar?.value || 0, "Cancelando...");
+    this.setStatus("Cancelando...", "info");
+  }
+
+  private setCancelVisible(visible: boolean): void {
     this.btnCancelChecklist?.classList.toggle("hidden", !visible);
+    if (visible) {
+      setActionDisabled(this.btnCancelChecklist, false);
+    }
+  }
+
+  private startSpinnerAnimation(): void {
+    if (!this.workSpinner || this.spinnerFrame != null) return;
+    const step = (): void => {
+      this.spinnerAngle = (this.spinnerAngle + 8) % 360;
+      if (this.workSpinner) {
+        this.workSpinner.style.transform = `rotate(${this.spinnerAngle}deg)`;
+      }
+      this.spinnerFrame = requestAnimationFrame(step);
+    };
+    this.spinnerFrame = requestAnimationFrame(step);
+  }
+
+  private stopSpinnerAnimation(): void {
+    if (this.spinnerFrame != null) {
+      cancelAnimationFrame(this.spinnerFrame);
+      this.spinnerFrame = null;
+    }
+    if (this.workSpinner) {
+      this.workSpinner.style.transform = "";
+    }
+    this.spinnerAngle = 0;
   }
 
   setReportDownloadEnabled(enabled: boolean): void {
@@ -343,7 +397,12 @@ export class PanelController {
 
   setProgress(percent: number, label: string): void {
     if (this.progressBar) this.progressBar.value = percent;
-    if (this.progressLabel) this.progressLabel.textContent = label;
+    if (!this.progressLabel) return;
+    if (this.cancelling) {
+      this.progressLabel.textContent = "Cancelando...";
+      return;
+    }
+    this.progressLabel.textContent = label;
   }
 
   resetProgress(): void {

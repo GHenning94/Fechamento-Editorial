@@ -4,6 +4,7 @@ import { forEachCollectionItem, getCollectionItem, getCollectionLength } from ".
 import { findEditorialLayer, isEditorialLayerName, isRendimentoLayerName } from "../utils/editorial-layer";
 import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
+import { throwIfAborted } from "../core/checklist-runner";
 
 const TAG_LABEL = "eac-style-tag";
 const COLOR_PARA = "EAC_TAG_PARAGRAFO";
@@ -815,13 +816,16 @@ function placeTag(
 }
 
 export async function createMemorialStyleTags(
-  onProgress?: (percent: number, label: string) => void
+  onProgress?: (percent: number, label: string) => void,
+  signal?: AbortSignal
 ): Promise<StyleTagsResult> {
   const doc = getActiveDocument();
 
   return withPointUnitsAsync(doc, async () => {
+    throwIfAborted(signal);
     onProgress?.(10, "Localizando estilos…");
     await yieldToHost(20);
+    throwIfAborted(signal);
 
     const hits = scanStories(doc);
     if (!hits.length) {
@@ -830,6 +834,7 @@ export async function createMemorialStyleTags(
 
     onProgress?.(25, "Removendo tags anteriores…");
     await yieldToHost(20);
+    throwIfAborted(signal);
     const layerName = ensureMemorialLayer(doc);
     deletePreviousTags(doc);
     ensureProcessColor(doc, "EAC_TAG_INK", [0, 0, 0, 100]);
@@ -843,12 +848,14 @@ export async function createMemorialStyleTags(
 
     onProgress?.(40, "Criando tags…");
     await yieldToHost(20);
+    throwIfAborted(signal);
 
     const placed: Array<{ pageKey: string; bounds: number[] }> = [];
     let paragraph = 0;
     let character = 0;
 
     for (let i = 0; i < hits.length; i++) {
+      throwIfAborted(signal);
       const hit = hits[i];
       const page = resolvePage(doc, hit);
       if (!page?.isValid) continue;
@@ -881,6 +888,7 @@ export async function createMemorialStyleTags(
         const percent = 40 + Math.round(((i + 1) / hits.length) * 55);
         onProgress?.(percent, `Criando tags… ${i + 1}/${hits.length}`);
         await yieldToHost(16);
+        throwIfAborted(signal);
       }
     }
 

@@ -113,10 +113,11 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       controller.resetProgress();
       controller.setStatus("Executando checklist editorial...", "info");
       await yieldToHost(40);
-      const signal = controller.startChecklistSignal();
+      const signal = controller.startCancellableAction();
 
       try {
         const summary = await orchestrator.runChecklist((current, total, label) => {
+          if (controller.isCancelling()) return;
           const percent = Math.round((current / total) * 100);
           controller.setProgress(percent, `Checklist: ${label}`);
         }, signal);
@@ -132,15 +133,13 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       } catch (error) {
         if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
           controller.resetProgress();
-          controller.setStatus("Checklist cancelado.", "info");
+          controller.setStatus(controller.isCancelling() ? "Operação cancelada." : "Checklist cancelado.", "info");
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
         controller.setProgress(100, "Checklist interrompido");
         controller.setStatus(message, "error");
         throw error;
-      } finally {
-        controller.finishChecklistRun();
       }
     },
 
@@ -148,28 +147,50 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       controller.resetProgress();
       controller.setStatus("Criando tags de estilos…", "info");
       await yieldToHost(40);
-      const result = await createMemorialStyleTags((percent, label) => {
-        controller.setProgress(percent, label);
-      });
-      controller.setProgress(100, "Estilos criados");
-      controller.setStatus(
-        `Layer "${result.layerName}": ${result.total} tags (${result.paragraph} parágrafo, ${result.character} caractere).`,
-        "success"
-      );
+      const signal = controller.startCancellableAction();
+      try {
+        const result = await createMemorialStyleTags((percent, label) => {
+          if (controller.isCancelling()) return;
+          controller.setProgress(percent, label);
+        }, signal);
+        controller.setProgress(100, "Estilos criados");
+        controller.setStatus(
+          `Layer "${result.layerName}": ${result.total} tags (${result.paragraph} parágrafo, ${result.character} caractere).`,
+          "success"
+        );
+      } catch (error) {
+        if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
+          controller.setStatus("Operação cancelada.", "info");
+          return;
+        }
+        throw error;
+      }
     },
 
     onCreateRendimento: async () => {
       controller.resetProgress();
       controller.setStatus("Criando tags de rendimento…", "info");
       await yieldToHost(40);
-      const result = await createRendimentoTags((percent, label) => {
-        controller.setProgress(percent, label);
-      });
-      controller.setProgress(100, "Rendimento criado");
-      controller.setStatus(
-        `Layer "${result.layerName}": ${result.pages} tag(s) de caracteres por página.`,
-        "success"
-      );
+      const signal = controller.startCancellableAction();
+      try {
+        const result = await createRendimentoTags((percent, label) => {
+          if (controller.isCancelling()) return;
+          controller.setProgress(percent, label);
+        }, signal);
+        controller.setProgress(100, "Rendimento criado");
+        controller.setStatus(
+          `Layer "${result.layerName}": ${result.pages} tag(s) de caracteres por página.`,
+          "success"
+        );
+      } catch (error) {
+        if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
+          controller.setStatus("Operação cancelada.", "info");
+          return;
+        }
+        throw error;
+      }
     },
 
     onDownloadReport: async () => {

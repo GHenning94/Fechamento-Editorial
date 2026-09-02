@@ -8,6 +8,7 @@ import {
 } from "../utils/editorial-layer";
 import { getActiveDocument, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
+import { throwIfAborted } from "../core/checklist-runner";
 
 const TAG_LABEL = "eac-rendimento-tag";
 const STYLE_NAME = "EAC_RendimentoLabel";
@@ -870,13 +871,16 @@ function placeTag(
 }
 
 export async function createRendimentoTags(
-  onProgress?: (percent: number, label: string) => void
+  onProgress?: (percent: number, label: string) => void,
+  signal?: AbortSignal
 ): Promise<RendimentoTagsResult> {
   const doc = getActiveDocument();
 
   return withPointUnitsAsync(doc, async () => {
+    throwIfAborted(signal);
     onProgress?.(15, "Preparando layer RENDIMENTO…");
     await yieldToHost(20);
+    throwIfAborted(signal);
 
     const layerName = ensureRendimentoLayer(doc);
     const layer = layerByExactName(doc, layerName) || findRendimentoLayer(doc);
@@ -890,11 +894,13 @@ export async function createRendimentoTags(
 
     onProgress?.(40, "Contando caracteres…");
     await yieldToHost(20);
+    throwIfAborted(signal);
 
     const pageCount = getCollectionLength(doc.pages);
     let created = 0;
 
     for (let i = 0; i < pageCount; i++) {
+      throwIfAborted(signal);
       const page = getCollectionItem<Page>(doc.pages, i);
       if (!page?.isValid) continue;
       const count = countPageCharacters(page);
@@ -906,6 +912,7 @@ export async function createRendimentoTags(
         const percent = 40 + Math.round(((i + 1) / Math.max(1, pageCount)) * 55);
         onProgress?.(percent, `Criando tags… ${i + 1}/${pageCount}`);
         await yieldToHost(12);
+        throwIfAborted(signal);
       }
     }
 
