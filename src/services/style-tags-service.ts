@@ -2,7 +2,12 @@ import type { CharacterStyle, Color, Document, Layer, Page, PageItem, ParagraphS
 import { ACCEPTED_LANGUAGES, LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { findEditorialLayer, isEditorialLayerName, isRendimentoLayerName } from "../utils/editorial-layer";
-import { ensurePluginInk, findPluginInk, findSwatchByName } from "../utils/editorial-color";
+import {
+  ensurePluginInk,
+  ensureProcessTagColor,
+  findDocumentBlack,
+  findSwatchByName,
+} from "../utils/editorial-color";
 import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
@@ -10,8 +15,13 @@ import { throwIfAborted } from "../core/checklist-runner";
 const TAG_LABEL = "eac-style-tag";
 const COLOR_PARA = "EAC_TAG_PARAGRAFO";
 const COLOR_CHAR = "EAC_TAG_CARACTERE";
-const PARA_CMYK = [0, 28, 52, 0];
-const CHAR_CMYK = [52, 18, 0, 0];
+const COLOR_TEXT = "EAC_TAG_TEXTO";
+/** Lima/chartreuse — overlay interno, distinto do magenta da CorProf. */
+const PARA_CMYK = [42, 0, 100, 0];
+/** Azul-marinho sólido — contraste com ciano/ilustração. */
+const CHAR_CMYK = [85, 70, 0, 45];
+/** Preto processo só para texto sobre tag clara — sem overprint do [Preto]. */
+const TEXT_CMYK = [0, 0, 0, 100];
 const TAG_HEIGHT = 18;
 const TAG_PADDING_X = 8;
 const TAG_PAGE_INSET = 2;
@@ -361,39 +371,90 @@ async function withPointUnitsAsync<T>(doc: Document, fn: () => Promise<T>): Prom
   }
 }
 
-function ensureProcessColor(doc: Document, name: string, cmyk: number[]): void {
-  const { ColorModel, ColorSpace } = getInDesignModule() as {
-    ColorModel?: { PROCESS?: number };
-    ColorSpace?: { CMYK?: number };
-  };
-  if (ColorModel?.PROCESS == null || ColorSpace?.CMYK == null) return;
-
-  let exists = false;
-  try {
-    exists = Boolean(doc.colors.itemByName(name)?.isValid);
-  } catch {
-    exists = false;
-  }
-  if (exists) return;
-
-  try {
-    doc.colors.add({
-      name,
-      model: ColorModel.PROCESS,
-      space: ColorSpace.CMYK,
-      colorValue: cmyk,
-    });
-  } catch {
-    // ignore
-  }
-}
-
 function colorByName(doc: Document, name: string): Color | null {
   try {
     const color = doc.colors.itemByName(name);
     return color?.isValid ? color : null;
   } catch {
     return null;
+  }
+}
+
+function cmykLuminance(cmyk: number[]): number {
+  const c = (Number(cmyk[0]) || 0) / 100;
+  const m = (Number(cmyk[1]) || 0) / 100;
+  const y = (Number(cmyk[2]) || 0) / 100;
+  const k = (Number(cmyk[3]) || 0) / 100;
+  const r = 1 - Math.min(1, c * (1 - k) + k);
+  const g = 1 - Math.min(1, m * (1 - k) + k);
+  const b = 1 - Math.min(1, y * (1 - k) + k);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function findPaperSwatch(doc: Document): Swatch | Color | null {
+  return findSwatchByName(doc, ["Paper", "Papel", "[Paper]", "[Papel]", "$ID/Paper", "$ID/Papel"]);
+}
+
+function textColorForCmyk(doc: Document, cmyk: number[]): Swatch | Color | null {
+  if (cmykLuminance(cmyk) > 0.55) {
+    return colorByName(doc, COLOR_TEXT) || findDocumentBlack(doc);
+  }
+  return findPaperSwatch(doc) || colorByName(doc, COLOR_TEXT) || findDocumentBlack(doc);
+}
+
+function applyNoneObjectStyle(doc: Document, item: PageItem): void {
+  const styles = (
+    doc as Document & {
+      objectStyles?: { itemByName?: (name: string) => { isValid?: boolean } };
+    }
+  ).objectStyles;
+  if (typeof styles?.itemByName !== "function") return;
+
+  for (const name of ["[None]", "[Nenhum]", "[Normal]", "None"]) {
+    try {
+      const style = styles.itemByName(name);
+      if (style && style.isValid !== false) {
+        (item as PageItem & { appliedObjectStyle?: unknown }).appliedObjectStyle = style;
+        return;
+      }
+    } catch {
+      // tenta o próximo
+    }
+  }
+}
+
+function forceOpaqueNormal(item: PageItem): void {
+  try {
+    const blending = (
+      item as {
+        transparencySettings?: { blendingSettings?: { blendMode?: number; opacity?: number } };
+      }
+    ).transparencySettings?.blendingSettings;
+    if (!blending) return;
+    const { BlendMode } = getInDesignModule() as { BlendMode?: { NORMAL?: number } };
+    if (BlendMode?.NORMAL != null) blending.blendMode = BlendMode.NORMAL;
+    blending.opacity = 100;
+  } catch {
+    // ignore
+  }
+}
+
+function applySolidFill(item: PageItem, fill: Color | Swatch | null): void {
+  if (!fill) return;
+  try {
+    item.fillColor = fill;
+  } catch {
+    // ignore
+  }
+  try {
+    item.fillTint = 100;
+  } catch {
+    // ignore
+  }
+  try {
+    item.fillOverprint = false;
+  } catch {
+    // ignore
   }
 }
 
@@ -425,17 +486,27 @@ function applyCalibriRegular(target: { appliedFont?: unknown; fontStyle?: string
   }
 }
 
-function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
-  const ink = findPluginInk(doc);
-  const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
+function styleTagParagraph(style: ParagraphStyle, textColor: Swatch | Color | null, none: Swatch | Color | null): void {
   applyCalibriRegular(style);
   try {
     (style as ParagraphStyle & { pointSize?: number }).pointSize = 12;
   } catch {
     // ignore
   }
+  if (textColor) {
+    try {
+      (style as ParagraphStyle & { fillColor?: Swatch | Color }).fillColor = textColor;
+    } catch {
+      // ignore
+    }
+  }
   try {
-    if (ink) (style as ParagraphStyle & { fillColor?: Swatch | Color }).fillColor = ink;
+    (style as ParagraphStyle & { fillTint?: number }).fillTint = 100;
+  } catch {
+    // ignore
+  }
+  try {
+    (style as ParagraphStyle & { fillOverprint?: boolean }).fillOverprint = false;
   } catch {
     // ignore
   }
@@ -450,6 +521,11 @@ function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
     } catch {
       // ignore
     }
+  }
+  try {
+    (style as ParagraphStyle & { strokeOverprint?: boolean }).strokeOverprint = false;
+  } catch {
+    // ignore
   }
   try {
     style.hyphenation = false;
@@ -717,9 +793,25 @@ function applyNoStroke(item: PageItem, none: Swatch | Color | null): void {
   } catch {
     // ignore
   }
-  if (!none) return;
   try {
-    item.strokeColor = none;
+    (item as PageItem & { strokeTint?: number }).strokeTint = 0;
+  } catch {
+    // ignore
+  }
+  if (none) {
+    try {
+      item.strokeColor = none;
+    } catch {
+      // ignore
+    }
+    try {
+      (item as PageItem & { gapColor?: Swatch | Color }).gapColor = none;
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    item.strokeOverprint = false;
   } catch {
     // ignore
   }
@@ -743,7 +835,13 @@ function applyRoundedCorners(item: PageItem): void {
   }
 }
 
-function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Document): void {
+function lockTagText(
+  frame: PageItem,
+  paraStyle: ParagraphStyle | null,
+  doc: Document,
+  textColor: Swatch | Color | null,
+  none: Swatch | Color | null
+): void {
   const text = getCollectionItem<Text>(frame.texts, 0);
   if (!text) return;
 
@@ -795,13 +893,67 @@ function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Doc
   } catch {
     // ignore
   }
-  const ink = findPluginInk(doc);
-  if (ink) {
+  if (textColor) {
     try {
-      text.fillColor = ink;
+      text.fillColor = textColor;
     } catch {
       // ignore
     }
+  }
+  try {
+    (text as Text & { fillTint?: number }).fillTint = 100;
+  } catch {
+    // ignore
+  }
+  try {
+    text.fillOverprint = false;
+  } catch {
+    // ignore
+  }
+  try {
+    (text as Text & { strokeWeight?: number }).strokeWeight = 0;
+  } catch {
+    // ignore
+  }
+  if (none) {
+    try {
+      (text as Text & { strokeColor?: Swatch | Color }).strokeColor = none;
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    (text as Text & { strokeOverprint?: boolean }).strokeOverprint = false;
+  } catch {
+    // ignore
+  }
+
+  try {
+    const chars = text.characters;
+    const length = Math.min(getCollectionLength(chars), 80);
+    for (let i = 0; i < length; i++) {
+      const character = chars?.item?.(i);
+      if (!character) continue;
+      if (textColor) {
+        try {
+          character.fillColor = textColor;
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        (character as Text & { fillTint?: number }).fillTint = 100;
+      } catch {
+        // ignore
+      }
+      try {
+        character.fillOverprint = false;
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -894,6 +1046,7 @@ function placeTag(
   hit: StyleHit,
   rect: number[],
   fill: Color | null,
+  textColor: Swatch | Color | null,
   none: Swatch | Color | null,
   paraStyle: ParagraphStyle | null,
   pageBounds: number[] | null
@@ -904,14 +1057,10 @@ function placeTag(
   frame.geometricBounds = rect;
   frame.label = TAG_LABEL;
   frame.name = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
-  if (fill) {
-    try {
-      frame.fillColor = fill;
-    } catch {
-      // ignore
-    }
-  }
+  applyNoneObjectStyle(doc, frame);
+  applySolidFill(frame, fill);
   applyNoStroke(frame, none);
+  forceOpaqueNormal(frame);
   applyRoundedCorners(frame);
   try {
     if (frame.textFramePreferences) {
@@ -921,8 +1070,10 @@ function placeTag(
     // ignore
   }
   frame.contents = hit.name;
-  lockTagText(frame, paraStyle, doc);
+  lockTagText(frame, paraStyle, doc, textColor, none);
   fitTagFrame(frame, pageBounds);
+  applySolidFill(frame, fill);
+  applyNoStroke(frame, none);
 }
 
 export async function createMemorialStyleTags(
@@ -947,14 +1098,17 @@ export async function createMemorialStyleTags(
     throwIfAborted(signal);
     const layerName = ensureMemorialLayer(doc);
     deletePreviousTags(doc);
-    ensureProcessColor(doc, COLOR_PARA, PARA_CMYK);
-    ensureProcessColor(doc, COLOR_CHAR, CHAR_CMYK);
-    const paraStyle = ensureTagParagraphStyle(doc);
-    if (paraStyle) styleTagParagraph(paraStyle, doc);
-    ensurePluginInk(doc);
-    const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
+    ensureProcessTagColor(doc, COLOR_PARA, PARA_CMYK);
+    ensureProcessTagColor(doc, COLOR_CHAR, CHAR_CMYK);
+    ensureProcessTagColor(doc, COLOR_TEXT, TEXT_CMYK);
+    const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma", "[None]", "[Nenhum]", "$ID/None"]);
     const paraFill = colorByName(doc, COLOR_PARA);
     const charFill = colorByName(doc, COLOR_CHAR);
+    const paraText = textColorForCmyk(doc, PARA_CMYK);
+    const charText = textColorForCmyk(doc, CHAR_CMYK);
+    const paraStyle = ensureTagParagraphStyle(doc);
+    if (paraStyle) styleTagParagraph(paraStyle, paraText, none);
+    ensurePluginInk(doc);
 
     onProgress?.(40, "Criando tags…");
     await yieldToHost(20);
@@ -980,6 +1134,7 @@ export async function createMemorialStyleTags(
         hit,
         rect,
         hit.kind === "character" ? charFill : paraFill,
+        hit.kind === "character" ? charText : paraText,
         none,
         paraStyle,
         pageBounds

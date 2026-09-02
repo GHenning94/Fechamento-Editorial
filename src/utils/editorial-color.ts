@@ -1,8 +1,9 @@
 import type { Color, Document, Swatch } from "indesign";
 import { COLOR_CORPROF, COLOR_GUIAS_DELETAR } from "./constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "./collection-helpers";
+import { getInDesignModule } from "./indesign-runtime";
 
-const PLUGIN_BLACK_ALIASES = ["EAC_INK", "EAC_TAG_INK", "EAC_RENDIMENTO_FILL"] as const;
+const PLUGIN_BLACK_ALIASES = ["EAC_INK", "EAC_TAG_INK", "EAC_RENDIMENTO_FILL", "EAC_TAG_RENDIMENTO"] as const;
 
 export interface EditorialColorMatch {
   color: Color;
@@ -162,4 +163,69 @@ export function ensurePluginInk(doc: Document): Swatch | Color | null {
 
 export function findPluginInk(doc: Document): Swatch | Color | null {
   return findDocumentBlack(doc);
+}
+
+/** Tags de memorial/rendimento são internas: nunca herdam overprint de impressão. */
+export function setColorOverprint(color: Color | Swatch | null, enabled: boolean): void {
+  if (!color) return;
+  try {
+    (color as Color).overprintFill = enabled;
+  } catch {
+    // Color.overprintFill pode não existir no DOM clássico
+  }
+  try {
+    (color as Color).overprintStroke = enabled;
+  } catch {
+    // ignore
+  }
+}
+
+export function ensureProcessTagColor(doc: Document, name: string, cmyk: number[]): Color | null {
+  const { ColorModel, ColorSpace } = getInDesignModule() as {
+    ColorModel?: { PROCESS?: number };
+    ColorSpace?: { CMYK?: number };
+  };
+  if (ColorModel?.PROCESS == null || ColorSpace?.CMYK == null) return null;
+
+  let color: Color | null = null;
+  try {
+    const existing = doc.colors.itemByName(name);
+    if (existing?.isValid) color = existing;
+  } catch {
+    color = null;
+  }
+
+  if (color) {
+    try {
+      color.model = ColorModel.PROCESS;
+    } catch {
+      // ignore
+    }
+    try {
+      color.space = ColorSpace.CMYK;
+    } catch {
+      // ignore
+    }
+    try {
+      color.colorValue = cmyk;
+    } catch {
+      // ignore
+    }
+    setColorOverprint(color, false);
+    return color;
+  }
+
+  try {
+    color = doc.colors.add({
+      name,
+      model: ColorModel.PROCESS,
+      space: ColorSpace.CMYK,
+      colorValue: cmyk,
+    });
+  } catch {
+    return null;
+  }
+
+  setColorOverprint(color, false);
+  return color?.isValid ? color : null;
 }
