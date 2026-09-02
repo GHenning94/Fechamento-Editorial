@@ -11,6 +11,9 @@
   --accent: #d4923a;
   --accent-hover: #e4a54f;
   --accent-deep: #b87a2c;
+  --brand: #d82b68;
+  --brand-hover: #e6457c;
+  --brand-deep: #b51f54;
   --success: #5ecf8e;
   --warning: #e6c35c;
   --error: #e87474;
@@ -148,6 +151,30 @@ button::-moz-focus-inner {
   box-sizing: border-box;
 }
 
+.status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.work-spinner {
+  display: none;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 11px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.panel.is-working .work-spinner {
+  display: block;
+  animation: work-spin 0.75s linear infinite;
+}
+
 .panel-title {
   display: block;
   width: 100%;
@@ -281,15 +308,15 @@ button::-moz-focus-inner {
 }
 
 .btn-download-report {
-  background-color: #24382c !important;
-  color: #c8f0d6 !important;
-  border-color: #4caf7a !important;
+  background-color: var(--brand) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-deep) !important;
   font-weight: 700;
 }
 
 .btn-download-report:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #2d4a36 !important;
-  border-color: #6ed89a !important;
+  background-color: var(--brand-hover) !important;
+  border-color: #f05a8c !important;
 }
 
 .btn-secondary {
@@ -447,6 +474,45 @@ progress {
   background-color: var(--surface-alt);
   appearance: none;
   -webkit-appearance: none;
+}
+
+.progress-wrap {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  margin: 10px 0 0 0;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.progress-wrap progress {
+  margin: 0;
+}
+
+.progress-indeterminate {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.panel.is-working .progress-indeterminate {
+  display: block;
+  animation: work-slide 1.15s linear infinite;
+}
+
+@keyframes work-slide {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(380%); }
+}
+
+@keyframes work-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 progress::-webkit-progress-bar {
@@ -806,7 +872,8 @@ progress::-webkit-progress-value {
 
 .status-message {
   display: block;
-  width: 100%;
+  flex: 1;
+  width: auto;
   max-width: 100%;
   min-width: 0;
   padding: 9px 12px;
