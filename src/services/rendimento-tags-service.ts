@@ -3,6 +3,7 @@ import { LAYER_RENDIMENTO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { ensurePluginInk, findDocumentBlack, findSwatchByName } from "../utils/editorial-color";
 import {
+  bringPluginTagLayersToFront,
   findRendimentoLayer,
   isEditorialLayerName,
   isRendimentoLayerName,
@@ -634,7 +635,18 @@ function applyCalibriBold(target: { appliedFont?: unknown; fontStyle?: string })
   }
 }
 
-function styleTagParagraph(style: ParagraphStyle, paper: Swatch | Color | null): void {
+function styleTagParagraph(doc: Document, style: ParagraphStyle, paper: Swatch | Color | null): void {
+  for (const name of ["[No Paragraph Style]", "[Sem estilo de parágrafo]"]) {
+    try {
+      const base = doc.paragraphStyles.itemByName(name);
+      if (base?.isValid) {
+        style.basedOn = base;
+        break;
+      }
+    } catch {
+      // ignore
+    }
+  }
   applyCalibriBold(style);
   try {
     style.pointSize = TAG_POINT_SIZE;
@@ -705,6 +717,11 @@ function assignItemLayer(item: PageItem, layer: Layer | null): void {
   if (!layer?.isValid) return;
   try {
     item.itemLayer = layer;
+  } catch {
+    // ignore
+  }
+  try {
+    item.bringToFront?.();
   } catch {
     // ignore
   }
@@ -830,12 +847,13 @@ export async function createRendimentoTags(
 
     const layerName = ensureRendimentoLayer(doc);
     const layer = layerByExactName(doc, layerName) || findRendimentoLayer(doc);
+    bringPluginTagLayersToFront(doc);
     deletePreviousTags(doc);
     const fill = findDocumentBlack(doc);
     const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
     const paper = findSwatchByName(doc, ["Paper", "Papel"]);
     const paraStyle = ensureTagParagraphStyle(doc);
-    if (paraStyle) styleTagParagraph(paraStyle, paper);
+    if (paraStyle) styleTagParagraph(doc, paraStyle, paper);
     ensurePluginInk(doc);
 
     onProgress?.(40, "Contando caracteres…");
@@ -862,6 +880,7 @@ export async function createRendimentoTags(
       }
     }
 
+    bringPluginTagLayersToFront(doc);
     return { layerName, pages: created };
   });
 }

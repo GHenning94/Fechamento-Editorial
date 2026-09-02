@@ -478,7 +478,8 @@ export function fillsLookSame(
 export function isColoredBackgroundFill(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
   if (isNoneOrPaperFill(fill)) return false;
   if (isWhiteFill(fill, tint)) return false;
-  return true;
+  if (isGrayFill(fill, tint)) return false;
+  return isChromaticFill(fill, tint);
 }
 
 export function itemHasPlacedGraphic(item: PageItem, depth = 0): boolean {

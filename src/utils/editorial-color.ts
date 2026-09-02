@@ -3,7 +3,7 @@ import { COLOR_CORPROF, COLOR_GUIAS_DELETAR } from "./constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "./collection-helpers";
 import { getInDesignModule } from "./indesign-runtime";
 
-const PLUGIN_BLACK_ALIASES = ["EAC_INK", "EAC_TAG_INK", "EAC_RENDIMENTO_FILL", "EAC_TAG_RENDIMENTO"] as const;
+const PLUGIN_BLACK_ALIASES = ["EAC_INK", "EAC_TAG_INK", "EAC_RENDIMENTO_FILL", "EAC_TAG_RENDIMENTO", "EAC_TAG_TEXTO"] as const;
 
 export interface EditorialColorMatch {
   color: Color;

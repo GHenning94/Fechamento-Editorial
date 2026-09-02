@@ -26,6 +26,8 @@ declare module "indesign" {
   export const LocationOptions: {
     AT_BEGINNING: number;
     AT_END: number;
+    BEFORE: number;
+    AFTER: number;
     UNKNOWN: number;
   };
 
@@ -243,6 +245,7 @@ declare module "indesign" {
     locked: boolean;
     pageItems: PageItems;
     isValid: boolean;
+    move?(to: number, reference?: Layer): void;
   }
 
   export interface PageItems {
@@ -280,6 +283,7 @@ declare module "indesign" {
     pdfs?: Graphics;
     remove?(): void;
     texts?: Texts;
+    bringToFront?: () => void;
     textFramePreferences?: TextFramePreferences;
     topLeftCornerOption?: number;
     topRightCornerOption?: number;

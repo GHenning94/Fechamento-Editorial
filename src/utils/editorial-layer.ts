@@ -1,6 +1,7 @@
 import type { Document, Layer, PageItem } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO, LAYER_RENDIMENTO } from "./constants";
-import { forEachCollectionItem } from "./collection-helpers";
+import { forEachCollectionItem, getCollectionItem } from "./collection-helpers";
+import { getInDesignModule } from "./indesign-runtime";
 
 const EDITORIAL_LAYER_NAMES = new Set([
   "estilos",
@@ -113,6 +114,48 @@ export function findRendimentoLayer(doc: Document): Layer | null {
   });
 
   return exact || alias;
+}
+
+function unlockLayerForStack(layer: Layer): void {
+  try {
+    layer.visible = true;
+    layer.locked = false;
+  } catch {
+    // ignore
+  }
+}
+
+function moveLayerToTop(doc: Document, layer: Layer | null): void {
+  if (!layer?.isValid) return;
+  unlockLayerForStack(layer);
+
+  const { LocationOptions } = getInDesignModule() as {
+    LocationOptions?: { AT_BEGINNING?: number; BEFORE?: number };
+  };
+
+  try {
+    if (LocationOptions?.AT_BEGINNING != null) {
+      layer.move?.(LocationOptions.AT_BEGINNING);
+      return;
+    }
+  } catch {
+    // tenta BEFORE
+  }
+
+  try {
+    const top = getCollectionItem<Layer>(doc.layers, 0);
+    if (top?.isValid && top !== layer && LocationOptions?.BEFORE != null) {
+      layer.move?.(LocationOptions.BEFORE, top);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/** Memorial e rendimento acima da arte. Rendimento fica no topo da pilha. */
+export function bringPluginTagLayersToFront(doc: Document): void {
+  moveLayerToTop(doc, findEditorialLayer(doc));
+  moveLayerToTop(doc, findRendimentoLayer(doc));
 }
 
 /** Conteúdo da layer, independente de visibilidade ou cadeado. */

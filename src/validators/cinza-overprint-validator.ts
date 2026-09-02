@@ -1,24 +1,23 @@
-import type { Document, PageItem, Story, Text, TextStyleRange } from "indesign";
+import type { Cell, Document, PageItem, Story, Text, TextStyleRange } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
-  fillsLookSame,
   geometricBoundsOverlap,
-  isChromaticFill,
   isColoredBackgroundFill,
   isGrayFill,
   isTextFrameItem,
   itemHasPlacedGraphic,
+  readEffectiveFillColor,
   readFillTint,
   readItemFill,
   readLocalFillColor,
   textFillHasOverprint,
   textFrameFillLeaksFromContents,
 } from "../utils/fill-color";
-import { collectGraphics, getPageItemDisplayName, walkDirectPageItems } from "../utils/indesign-helpers";
+import { collectGraphics, walkDirectPageItems } from "../utils/indesign-helpers";
 
 const FIX_DETAILS =
   "Aplique overprint no preenchimento do texto cinza. Preferência: preto 100%.";
@@ -52,10 +51,6 @@ function readBounds(item: PageItem): number[] {
   return [];
 }
 
-function isUtilityItem(item: PageItem): boolean {
-  return isPluginGeneratedItem(item);
-}
-
 function readNumber(getter: () => unknown): number | null {
   try {
     const value = getter();
@@ -66,50 +61,67 @@ function readNumber(getter: () => unknown): number | null {
   return null;
 }
 
-function readTextInkBounds(range: TextStyleRange | Text): number[] {
-  const text = range as Text;
-  const pointSize = readNumber(() => text.pointSize) || 12;
-  const ascent = readNumber(() => text.ascent) ?? pointSize * 0.8;
-  const descent = readNumber(() => text.descent) ?? pointSize * 0.25;
+function unionBounds(a: number[], b: number[]): number[] {
+  if (!a.length) return b.slice();
+  if (!b.length) return a.slice();
+  return [
+    Math.min(Number(a[0]), Number(b[0])),
+    Math.min(Number(a[1]), Number(b[1])),
+    Math.max(Number(a[2]), Number(b[2])),
+    Math.max(Number(a[3]), Number(b[3])),
+  ];
+}
 
-  const probe = (target: Text | TextStyleRange | null | undefined): number[] => {
-    if (!target) return [];
-    const left = readNumber(() => (target as Text).horizontalOffset);
-    const baseline = readNumber(() => (target as Text).baseline);
-    const size = readNumber(() => (target as Text).pointSize) || pointSize;
-    if (left == null || baseline == null) return [];
-    const rawRight = readNumber(() => (target as Text).endHorizontalOffset);
-    const maxWidth = size * 12;
-    const right =
-      rawRight != null && rawRight > left
-        ? Math.min(rawRight, left + maxWidth)
-        : left + Math.min(maxWidth, size * 4);
-    const top = baseline - (readNumber(() => (target as Text).ascent) ?? ascent);
-    const bottom = baseline + (readNumber(() => (target as Text).descent) ?? descent);
-    if (bottom <= top) return [];
-    return [top, Math.min(left, right), bottom, Math.max(left, right)];
-  };
+function probeGlyph(target: Text | null | undefined): number[] {
+  if (!target) return [];
+  const left = readNumber(() => target.horizontalOffset);
+  const baseline = readNumber(() => target.baseline);
+  if (left == null || baseline == null) return [];
+  const size = readNumber(() => target.pointSize) || 12;
+  const rawRight = readNumber(() => target.endHorizontalOffset);
+  const right = rawRight != null && rawRight > left ? rawRight : left + size * 0.55;
+  const top = baseline - (readNumber(() => target.ascent) ?? size * 0.8);
+  const bottom = baseline + (readNumber(() => target.descent) ?? size * 0.25);
+  if (bottom <= top) return [];
+  return [top, Math.min(left, right), bottom, Math.max(left, right)];
+}
 
+function characterLooksEmpty(character: Text | null | undefined): boolean {
+  if (!character) return true;
+  try {
+    const contents = (character as { contents?: string }).contents;
+    if (typeof contents === "string") return contents.trim() === "";
+  } catch {
+    // UXP às vezes não expõe contents
+  }
+  return false;
+}
+
+function readSpanInkBounds(span: Text | TextStyleRange): number[] {
+  const text = span as Text;
+  let union: number[] = [];
   try {
     const chars = text.characters;
     const length = getCollectionLength(chars);
-    for (let i = 0; i < Math.min(length, 24); i++) {
-      const character = chars?.item?.(i) as Text | null;
-      if (!character) continue;
-      try {
-        const contents = (character as { contents?: string }).contents;
-        if (typeof contents === "string" && contents.trim() === "") continue;
-      } catch {
-        // usa o caractere mesmo assim
+    if (length > 0) {
+      const indexes =
+        length <= 24
+          ? Array.from({ length }, (_, index) => index)
+          : [0, 1, Math.floor(length / 4), Math.floor(length / 2), length - 2, length - 1];
+      const seen = new Set<number>();
+      for (const index of indexes) {
+        if (index < 0 || index >= length || seen.has(index)) continue;
+        seen.add(index);
+        const character = chars?.item?.(index) as Text | null;
+        if (characterLooksEmpty(character)) continue;
+        union = unionBounds(union, probeGlyph(character));
       }
-      const bounds = probe(character);
-      if (bounds.length >= 4) return bounds;
+      if (union.length >= 4) return union;
     }
   } catch {
-    // fallback no início do trecho
+    // fallback no próprio trecho
   }
-
-  return probe(text);
+  return probeGlyph(text);
 }
 
 function overlapArea(a: number[], b: number[]): number {
@@ -129,17 +141,17 @@ function boundsContainPoint(bounds: number[], y: number, x: number): boolean {
 
 function inkSitsOnColor(ink: number[], background: number[]): boolean {
   const area = overlapArea(ink, background);
-  if (area <= 0.5) return false;
+  if (area <= 0.35) return false;
   const inkW = Math.abs(Number(ink[3]) - Number(ink[1]));
   const inkH = Math.abs(Number(ink[2]) - Number(ink[0]));
-  const inkArea = Math.max(0.5, inkW * inkH);
-  if (area / inkArea < 0.5) return false;
+  const inkArea = Math.max(0.35, inkW * inkH);
+  if (area / inkArea < 0.45) return false;
   const cy = (Number(ink[0]) + Number(ink[2])) / 2;
   const cx = (Number(ink[1]) + Number(ink[3])) / 2;
   return boundsContainPoint(background, cy, cx);
 }
 
-function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
+function forEachCollectionRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
   const length = getCollectionLength(collection);
   if (length > 0) {
     forEachCollectionItem<TextStyleRange | Text>(collection, (run) => {
@@ -171,92 +183,39 @@ function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text)
   }
 }
 
-function rangeLooksLikeHeading(range: TextStyleRange | Text): boolean {
-  try {
-    const name = ((range as Text).appliedParagraphStyle?.name || "").trim();
-    if (!name) return false;
-    if (/^\d+_titulo/i.test(name)) return true;
-    if (/secao_titulo|boxe_titulo|iniciais_titulo|finais_titulo/i.test(name)) return true;
-  } catch {
-    // ignore
-  }
-  return false;
-}
-
-function frameStartsWithTitle(frame: PageItem): boolean {
-  try {
-    const paragraphs = (frame as PageItem & { paragraphs?: { item?: (index: number) => Text } }).paragraphs;
-    const first = paragraphs?.item?.(0);
-    if (!first) return false;
-    return rangeLooksLikeHeading(first);
-  } catch {
-    return false;
-  }
-}
-
-function isLikelySidebar(bounds: number[]): boolean {
-  if (!bounds || bounds.length < 4) return false;
-  const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
-  const height = Math.abs(Number(bounds[2]) - Number(bounds[0]));
-  return width > 0 && height > width * 3 && width < 72;
-}
-
 function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   try {
     const contents = (range as { contents?: string }).contents;
-    if (typeof contents === "string") {
-      return contents.trim() === "";
-    }
+    if (typeof contents === "string") return contents.trim() === "";
   } catch {
     // UXP muitas vezes não expõe contents
   }
   return false;
 }
 
-function sampleLocalFills(range: TextStyleRange | Text): Array<{ fill: ReturnType<typeof readLocalFillColor>; tint: number }> {
-  const samples: Array<{ fill: ReturnType<typeof readLocalFillColor>; tint: number }> = [];
-  const seen = new Set<string>();
-  const push = (fill: ReturnType<typeof readLocalFillColor>, tint: number): void => {
-    if (!fill) return;
-    const key = `${String((fill as { name?: string }).name || fill)}::${tint}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    samples.push({ fill, tint });
-  };
-
+function snippetOf(range: TextStyleRange | Text): string {
   try {
-    const chars = (range as Text).characters;
-    const length = Math.min(getCollectionLength(chars), 16);
-    for (let i = 0; i < length; i++) {
-      const character = chars?.item?.(i);
-      if (!character) continue;
-      push(readLocalFillColor(character), readFillTint(character));
-    }
+    const contents = String((range as { contents?: string }).contents || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (contents) return contents.slice(0, 52);
   } catch {
     // ignore
   }
-
-  push(readLocalFillColor(range), readFillTint(range));
-  return samples;
+  return "";
 }
 
-function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
-  if (rangeLooksEmpty(range)) return false;
-  if (rangeLooksLikeHeading(range)) return false;
+function fillOf(target: TextStyleRange | Text): ReturnType<typeof readLocalFillColor> {
+  return readLocalFillColor(target) || readEffectiveFillColor(target);
+}
 
-  try {
-    const samples = sampleLocalFills(range);
-    if (!samples.length) return false;
-    if (samples.some((sample) => sample.fill && isChromaticFill(sample.fill, sample.tint))) {
-      return false;
-    }
-    if (!samples.some((sample) => sample.fill && isGrayFill(sample.fill, sample.tint))) {
-      return false;
-    }
-    return !textFillHasOverprint(range);
-  } catch {
-    return false;
-  }
+function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
+  if (rangeLooksEmpty(target)) return false;
+  const fill = fillOf(target);
+  if (!fill) return false;
+  const tint = readFillTint(target);
+  if (!isGrayFill(fill, tint)) return false;
+  return !textFillHasOverprint(target);
 }
 
 function collectParentFrames(range: TextStyleRange | Text): PageItem[] {
@@ -275,7 +234,7 @@ function collectParentFrames(range: TextStyleRange | Text): PageItem[] {
   };
 
   try {
-    forEachTextRun((range as Text).parentTextFrames, (item) => push(item as PageItem));
+    forEachCollectionRun((range as Text).parentTextFrames, (item) => push(item as PageItem));
   } catch {
     // ignore
   }
@@ -333,73 +292,108 @@ function isFilledShape(item: PageItem): boolean {
   }
 }
 
-function frameHasChromaticText(frame: PageItem): boolean {
-  if (!isTextFrameItem(frame)) return false;
+function findParentCell(range: TextStyleRange | Text): Cell | null {
+  let current: unknown = range;
+  for (let depth = 0; depth < 12; depth++) {
+    if (!current || typeof current !== "object") return null;
+    try {
+      const typeName = (current as { constructor?: { name?: string } }).constructor?.name || "";
+      if (/^cell$/i.test(typeName)) return current as Cell;
+    } catch {
+      return null;
+    }
+    try {
+      current = (current as { parent?: unknown }).parent;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function cellIsChromaticBackground(cell: Cell | null): boolean {
+  if (!cell) return false;
   try {
-    const chars = (frame as PageItem & { characters?: unknown }).characters;
-    const length = Math.min(getCollectionLength(chars), 40);
-    for (let i = 0; i < length; i++) {
-      const character = (chars as { item?: (index: number) => Text })?.item?.(i);
-      if (!character) continue;
-      try {
-        const contents = (character as { contents?: string }).contents;
-        if (typeof contents === "string" && contents.trim() === "") continue;
-      } catch {
-        // segue
-      }
-      const fill = readLocalFillColor(character);
-      if (fill && isChromaticFill(fill, readFillTint(character))) return true;
+    return isColoredBackgroundFill(cell.fillColor, readFillTint(cell));
+  } catch {
+    return false;
+  }
+}
+
+function frameIsChromaticBox(frame: PageItem): boolean {
+  if (!isTextFrameItem(frame)) return false;
+  if (isPluginGeneratedItem(frame)) return false;
+  if (textFrameFillLeaksFromContents(frame)) return false;
+  const fill = readItemFill(frame);
+  return isColoredBackgroundFill(fill, readFillTint(frame));
+}
+
+function forEachLineInk(
+  range: TextStyleRange | Text,
+  onLine: (ink: number[], sample: Text) => void
+): void {
+  try {
+    const lines = (range as Text & { lines?: unknown }).lines;
+    const count = getCollectionLength(lines);
+    if (count > 0) {
+      let used = false;
+      forEachCollectionItem<Text>(lines, (line) => {
+        if (!line || rangeLooksEmpty(line)) return;
+        const ink = readSpanInkBounds(line);
+        if (ink.length < 4) return;
+        used = true;
+        onLine(ink, line);
+      });
+      if (used) return;
     }
   } catch {
-    // ignore
+    // agrupa por baseline
   }
-  return false;
+
+  try {
+    const chars = (range as Text).characters;
+    const length = getCollectionLength(chars);
+    let group: Text[] = [];
+    let baselineKey: number | null = null;
+
+    const flush = (): void => {
+      if (!group.length) return;
+      let ink: number[] = [];
+      for (const glyph of group) ink = unionBounds(ink, probeGlyph(glyph));
+      if (ink.length >= 4) onLine(ink, group[0]);
+      group = [];
+    };
+
+    for (let i = 0; i < length; i++) {
+      const character = chars?.item?.(i) as Text | null;
+      if (!character || characterLooksEmpty(character)) continue;
+      const baseline = readNumber(() => character.baseline);
+      if (baseline == null) continue;
+      const key = Math.round(baseline);
+      if (baselineKey != null && Math.abs(key - baselineKey) > 2) flush();
+      baselineKey = key;
+      group.push(character);
+    }
+    flush();
+  } catch {
+    // sem geometria de glifo — não denuncia o bloco inteiro
+  }
 }
 
-function isLikelyIcon(bounds: number[]): boolean {
-  if (!bounds || bounds.length < 4) return false;
-  const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
-  const height = Math.abs(Number(bounds[2]) - Number(bounds[0]));
-  return width < 36 && height < 36;
-}
-
-function grayTextSitsOnColoredBackground(
-  range: TextStyleRange | Text,
-  frame: PageItem,
+function grayInkSitsOnColoredElement(
+  ink: number[],
+  frames: PageItem[],
   snaps: ItemSnap[],
   pageName: string
 ): boolean {
-  if (isUtilityItem(frame)) return false;
-
-  const samples = sampleLocalFills(range);
-  const frameFill = readItemFill(frame);
-  const frameTint = readFillTint(frame);
-  const frameMatchesText = samples.some((sample) => sample.fill && fillsLookSame(frameFill, sample.fill));
-  const leakedFill = textFrameFillLeaksFromContents(frame);
-  const mixedChromatic = frameHasChromaticText(frame);
-  const startsWithTitle = frameStartsWithTitle(frame);
-  if (
-    isColoredBackgroundFill(frameFill, frameTint) &&
-    !frameMatchesText &&
-    !leakedFill &&
-    !mixedChromatic &&
-    !startsWithTitle
-  ) {
-    return true;
-  }
-
-  const ink = readTextInkBounds(range);
   if (ink.length < 4) return false;
 
   for (const other of snaps) {
-    if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
     if (isTextFrameItem(other.item) && !other.hasGraphic) continue;
-    if (isLikelyIcon(other.bounds)) continue;
-    if (isLikelySidebar(other.bounds) && !other.hasGraphic) continue;
-    if (!pageName || !other.pageName || other.pageName !== pageName) continue;
-    if (startsWithTitle && other.coloredFill && !other.hasGraphic) continue;
+    if (frames.some((frame) => other.item === frame)) continue;
+    if (pageName && other.pageName && other.pageName !== pageName) continue;
     if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 
@@ -424,7 +418,7 @@ export class CinzaOverprintValidator extends BaseValidator {
           item,
           pageName,
           bounds: readBounds(item),
-          utility: isUtilityItem(item),
+          utility: isPluginGeneratedItem(item),
           coloredFill: (shape || (!isTextFrameItem(item) && !leaked)) && isColoredBackgroundFill(fill, readFillTint(item)),
           hasGraphic: itemHasPlacedGraphic(item),
         });
@@ -440,7 +434,7 @@ export class CinzaOverprintValidator extends BaseValidator {
             item: pageItem,
             pageName: graphic.pageName,
             bounds,
-            utility: isUtilityItem(pageItem),
+            utility: isPluginGeneratedItem(pageItem),
             coloredFill: false,
             hasGraphic: true,
           });
@@ -451,18 +445,16 @@ export class CinzaOverprintValidator extends BaseValidator {
 
       const seen = new Set<string>();
 
-      const reportFrame = (frame: PageItem): void => {
-        if (isUtilityItem(frame)) return;
-        const pageName = resolveFramePageName(frame, snaps);
-        const objectName = getPageItemDisplayName(frame);
-        const bounds = readBounds(frame);
-        const key = `${pageName}::${objectName}::${bounds.join(",")}`;
+      const reportSpan = (span: Text, pageName: string): void => {
+        const preview = snippetOf(span);
+        const ink = readSpanInkBounds(span);
+        const key = `${pageName}::${preview}::${ink.map((value) => value.toFixed(1)).join(",")}`;
         if (seen.has(key)) return;
         seen.add(key);
         issues.push({
           message: "Cinza sobre fundo colorido sem overprint",
           page: pageName,
-          object: objectName,
+          object: preview ? `Texto (“${preview}”)` : "Texto cinza",
           details: FIX_DETAILS,
         });
       };
@@ -475,23 +467,32 @@ export class CinzaOverprintValidator extends BaseValidator {
           // ignore
         }
 
-        const consider = (run: TextStyleRange | Text): void => {
-          if (!rangeIsGrayWithoutOverprint(run)) return;
-          const frames = collectParentFrames(run);
-          if (frames.length === 0) return;
-          for (const frame of frames) {
-            const pageName = resolveFramePageName(frame, snaps);
-            if (grayTextSitsOnColoredBackground(run, frame, snaps, pageName)) {
-              reportFrame(frame);
-            }
-          }
-        };
+        forEachCollectionRun(story.textStyleRanges, (run) => {
+          if (!targetIsGrayWithoutOverprint(run)) return;
+          const frames = collectParentFrames(run).filter((frame) => !isPluginGeneratedItem(frame));
+          if (!frames.length && !findParentCell(run)) return;
 
-        try {
-          forEachTextRun(story.textStyleRanges, consider);
-        } catch {
-          // ignore
-        }
+          let pageName = "";
+          for (const frame of frames) {
+            pageName = resolveFramePageName(frame, snaps);
+            if (pageName) break;
+          }
+
+          if (frames.some((frame) => frameIsChromaticBox(frame)) || cellIsChromaticBackground(findParentCell(run))) {
+            reportSpan(run as Text, pageName);
+            return;
+          }
+
+          forEachLineInk(run, (ink, span) => {
+            if (!targetIsGrayWithoutOverprint(span)) return;
+            const spanFrames = collectParentFrames(span);
+            const parents = spanFrames.length ? spanFrames : frames;
+            const spanPage = parents.reduce((found, frame) => found || resolveFramePageName(frame, snaps), pageName);
+            if (grayInkSitsOnColoredElement(ink, parents, snaps, spanPage)) {
+              reportSpan(span, spanPage);
+            }
+          });
+        });
       });
 
       return createResult(this.id, this.name, issues, "error");
