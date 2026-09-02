@@ -5,6 +5,7 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
+  fillsLookSame,
   geometricBoundsOverlap,
   isColoredBackgroundFill,
   isGrayFill,
@@ -165,18 +166,21 @@ function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
   if (rangeLooksEmpty(range)) return false;
 
   try {
-    const targets: Array<TextStyleRange | Text | { fillColor?: unknown; fillTint?: number }> = [range];
+    let fill = readEffectiveFillColor(range);
+    let tint = readEffectiveFillTint(range);
     try {
       const first = (range as Text).characters?.item?.(0);
-      if (first) targets.unshift(first);
+      if (first) {
+        const charFill = readEffectiveFillColor(first);
+        if (charFill) {
+          fill = charFill;
+          tint = readEffectiveFillTint(first);
+        }
+      }
     } catch {
-      // ignore
+      // usa o preenchimento do trecho
     }
-
-    const isGray = targets.some((target) =>
-      isGrayFill(readEffectiveFillColor(target as Text), readEffectiveFillTint(target as Text))
-    );
-    if (!isGray) return false;
+    if (!isGrayFill(fill, tint)) return false;
     return !textFillHasOverprint(range);
   } catch {
     return false;
@@ -248,6 +252,13 @@ function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
   return "";
 }
 
+function isLikelyIcon(bounds: number[]): boolean {
+  if (!bounds || bounds.length < 4) return false;
+  const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
+  const height = Math.abs(Number(bounds[2]) - Number(bounds[0]));
+  return width < 28 && height < 28;
+}
+
 function grayTextSitsOnColoredBackground(
   range: TextStyleRange | Text,
   frame: PageItem,
@@ -255,16 +266,26 @@ function grayTextSitsOnColoredBackground(
 ): boolean {
   if (isUtilityItem(frame)) return false;
 
-  const fill = readItemFill(frame);
-  if (isColoredBackgroundFill(fill, readFillTint(frame))) return true;
+  const textFill = readEffectiveFillColor(range);
+  const frameFill = readItemFill(frame);
+  const frameTint = readFillTint(frame);
+  if (
+    isColoredBackgroundFill(frameFill, frameTint) &&
+    !fillsLookSame(frameFill, textFill)
+  ) {
+    return true;
+  }
 
+  const frameBounds = readBounds(frame);
   const ink = readTextInkBounds(range, frame);
   if (ink.length < 4) return false;
+  if (boundsClose(ink, frameBounds)) return false;
 
   for (const other of snaps) {
     if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
+    if (isLikelyIcon(other.bounds)) continue;
     if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 

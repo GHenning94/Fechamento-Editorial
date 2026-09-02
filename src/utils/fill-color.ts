@@ -285,9 +285,17 @@ function parseUnnamedColor(name: string): { space: string; values: number[] } | 
   return null;
 }
 
+function toUnitScale(values: number[]): { scale: "percent" | "unit"; values: number[] } {
+  const max = Math.max(...values.map((value) => Math.abs(value)));
+  if (max <= 1.0001) {
+    return { scale: "unit", values: values.map((value) => value * 100) };
+  }
+  return { scale: "percent", values };
+}
+
 /**
- * Tom de cinza: tinta Black com tint < 100, K-only abaixo de 100%,
- * RGB acromático, ou amostra cujo nome indica cinza.
+ * Cinza de impressão: Black com tint, K-only, CMY neutro (C≈M≈Y) ou RGB acromático.
+ * C45 M45 Y0 K34 (cor de apoio) não é cinza — o croma entre canais é alto.
  */
 export function isGrayFill(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
   if (fill == null) return false;
@@ -331,35 +339,66 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     if (!values.length) values = parsed.values;
     if (!space) space = parsed.space;
   }
+  if (!values.length) return false;
 
-  if ((space === "CMYK" || (!space && values.length >= 4)) && values.length >= 4) {
-    const c = scaleChannel(values[0], t);
-    const m = scaleChannel(values[1], t);
-    const y = scaleChannel(values[2], t);
-    const k = scaleChannel(values[3], t);
-    const cmyEqual = approx(c, m, 4) && approx(m, y, 4);
-    if (approx(c, 0) && approx(m, 0) && approx(y, 0)) {
-      return k > 0.5 && k < 99.5;
-    }
-    if (cmyEqual && !approx(c, 0)) {
-      return k < 99.5;
-    }
+  const scaled = toUnitScale(values);
+  const channels = scaledChannels(scaled.values, t);
+
+  if ((space === "CMYK" || (!space && channels.length >= 4)) && channels.length >= 4) {
+    return isCmykPrintGray(channels[0], channels[1], channels[2], channels[3]);
   }
 
-  if (space === "RGB" && values.length >= 3) {
-    const r = scaleChannel(values[0], t);
-    const g = scaleChannel(values[1], t);
-    const b = scaleChannel(values[2], t);
-    if (approx(r, g, 8) && approx(g, b, 8)) {
-      return r > 2 && r < 253;
-    }
+  if (space === "RGB" && channels.length >= 3) {
+    const rgbScale = toRgb255(values, t);
+    const chroma = Math.max(rgbScale[0], rgbScale[1], rgbScale[2]) - Math.min(rgbScale[0], rgbScale[1], rgbScale[2]);
+    if (chroma > 12) return false;
+    const tone = (rgbScale[0] + rgbScale[1] + rgbScale[2]) / 3;
+    return tone > 2 && tone < 250;
   }
 
-  if (space === "Gray" && values.length >= 1) {
-    const gray = scaleChannel(values[0], t);
+  if (space === "Gray" && channels.length >= 1) {
+    const gray = channels[0];
     return gray > 0.5 && gray < 99.5;
   }
 
+  return false;
+}
+
+function scaledChannels(values: number[], tint: number): number[] {
+  return values.map((value) => scaleChannel(value, tint));
+}
+
+function toRgb255(values: number[], tint: number): number[] {
+  const max = Math.max(...values.slice(0, 3).map((value) => Math.abs(value)));
+  const raw = values.slice(0, 3).map((value) => scaleChannel(value, tint));
+  if (max <= 1.0001) return raw.map((value) => value * 255);
+  if (max <= 100.5) return raw.map((value) => (value / 100) * 255);
+  return raw;
+}
+
+function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
+  const chroma = Math.max(c, m, y) - Math.min(c, m, y);
+  if (chroma > 4) return false;
+  const cmy = (c + m + y) / 3;
+  if (cmy <= 4) return k > 0.5 && k < 99.5;
+  return k < 99.5;
+}
+
+export function fillsLookSame(
+  a: Swatch | Color | string | null | undefined,
+  b: Swatch | Color | string | null | undefined
+): boolean {
+  if (a == null || b == null) return false;
+  const ka = fillNameKey(a);
+  const kb = fillNameKey(b);
+  if (ka && kb && ka === kb) return true;
+  const va = typeof a === "string" ? [] : readColorValues(a);
+  const vb = typeof b === "string" ? [] : readColorValues(b);
+  if (va.length >= 3 && va.length === vb.length) {
+    const na = toUnitScale(va).values;
+    const nb = toUnitScale(vb).values;
+    return na.every((value, index) => approx(value, nb[index], 1.5));
+  }
   return false;
 }
 

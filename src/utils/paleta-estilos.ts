@@ -198,39 +198,73 @@ export function isStandardParagraphStyle(styleName: string): boolean {
   return isValidParagraphStyleName(styleName);
 }
 
+function splitTrunk(trunk: string): { num: string; word: string } {
+  const index = trunk.indexOf("_");
+  return {
+    num: trunk.slice(0, index),
+    word: normalizeTrunkKey(trunk.slice(index + 1)),
+  };
+}
+
+function wordTypoScore(a: string, b: string): number | null {
+  if (a === b) return 0;
+  const dist = levenshtein(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  const minLen = Math.min(a.length, b.length);
+  if (dist <= 1) return dist;
+  if (maxLen >= 6 && dist <= 2) return dist;
+  if ((a.startsWith(b) || b.startsWith(a)) && maxLen - minLen <= 2) return maxLen - minLen;
+  return null;
+}
+
+export type NomenclatureVerdict =
+  | { kind: "valid" }
+  | { kind: "invalid-format" }
+  | { kind: "typo"; trunk: string; suggestion: string }
+  | { kind: "unknown"; trunk: string };
+
+/**
+ * Distingue nomenclatura errada (perto da paleta) de tronco inexistente (alerta).
+ * 06_box → 06_boxe; 06_secao → 07_secao; 05_selo → alerta.
+ */
+export function classifyParagraphStyleNomenclature(styleName: string): NomenclatureVerdict {
+  const trimmed = styleName.trim();
+  if (!hasParagraphStyleTrunkFormat(trimmed)) return { kind: "invalid-format" };
+  if (isValidParagraphStyleName(trimmed)) return { kind: "valid" };
+
+  const trunk = extractStyleTrunk(trimmed);
+  if (!trunk) return { kind: "invalid-format" };
+
+  const { num, word } = splitTrunk(trunk);
+  const parsed = PALETTE_SHORT_TRUNKS.map((item) => ({ trunk: item, ...splitTrunk(item) }));
+
+  const exactWord = parsed.filter((item) => item.word === word);
+  if (exactWord.length > 0) {
+    exactWord.sort(
+      (a, b) => Math.abs(Number(a.num) - Number(num)) - Math.abs(Number(b.num) - Number(num))
+    );
+    return { kind: "typo", trunk, suggestion: exactWord[0].trunk };
+  }
+
+  let best: { trunk: string; score: number } | null = null;
+  for (const item of parsed) {
+    if (item.num !== num) continue;
+    const score = wordTypoScore(word, item.word);
+    if (score == null) continue;
+    if (!best || score < best.score) best = { trunk: item.trunk, score };
+  }
+  if (best) return { kind: "typo", trunk, suggestion: best.trunk };
+
+  return { kind: "unknown", trunk };
+}
+
 /**
  * Sugere a nomenclatura correta quando o tronco (número_palavra) não está na paleta.
  */
 export function suggestParagraphStyleName(styleName: string): string | null {
-  const trimmed = fixSpacesInStyleName(styleName.trim());
-  if (isValidParagraphStyleName(trimmed)) return trimmed;
-
-  const short = extractStyleTrunk(trimmed);
-  if (!short) return null;
-
-  const prefix = (short.match(/^\d+/) || [""])[0];
-  const word = short.slice(short.indexOf("_") + 1);
-  const rest = trimmed.slice(short.length);
-  const wordKey = normalizeTrunkKey(word);
-  const candidates = PALETTE_SHORT_TRUNKS.filter((item) =>
-    normalizeTrunkKey(item).startsWith(`${prefix}_`)
-  );
-  const pool = candidates.length > 0 ? candidates : PALETTE_SHORT_TRUNKS;
-
-  let best = "";
-  let bestScore = Infinity;
-  for (const candidate of pool) {
-    const candWord = candidate.slice(candidate.indexOf("_") + 1);
-    const score = levenshtein(wordKey, normalizeTrunkKey(candWord));
-    if (score < bestScore) {
-      bestScore = score;
-      best = candidate;
-    }
-  }
-
-  const maxDistance = Math.max(3, Math.ceil(word.length * 0.5));
-  if (!best || bestScore > maxDistance) return null;
-  return best + rest;
+  const verdict = classifyParagraphStyleNomenclature(styleName);
+  if (verdict.kind === "typo") return verdict.suggestion;
+  return null;
 }
 
 export function buildParagraphStyleSuggestion(styleName: string): string | null {
