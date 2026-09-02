@@ -49,7 +49,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
   {
     id: "layer-memorial",
     label: "Criar layer do memorial descritivo (ESTILOS)",
-    validatorIds: [V.LAYERS_OBRIGATORIAS, V.LAYERS_NOMENCLATURA, V.MEMORIAL_DESCRITIVO],
+    validatorIds: [V.LAYERS_OBRIGATORIAS, V.LAYERS_NOMENCLATURA],
     issueFilter: (issue, validatorId) => {
       if (validatorId === V.LAYERS_OBRIGATORIAS || validatorId === V.LAYERS_NOMENCLATURA) {
         return !mentionsGuias(issue) && !mentionsRendimento(issue);
@@ -60,7 +60,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
   {
     id: "layer-guias",
     label: "Criar layer e aplicar marcação de espiral e mancha (GUIAS)",
-    validatorIds: [V.LAYERS_OBRIGATORIAS, V.LAYERS_NOMENCLATURA, V.GUIAS_COLOR, V.OVERPRINT, V.LAYERS_BLOQUEADAS],
+    validatorIds: [V.LAYERS_OBRIGATORIAS, V.LAYERS_NOMENCLATURA, V.GUIAS_COLOR, V.OVERPRINT],
     issueFilter: (issue, validatorId) => {
       if (validatorId === V.LAYERS_OBRIGATORIAS || validatorId === V.LAYERS_NOMENCLATURA) {
         return mentionsGuias(issue);

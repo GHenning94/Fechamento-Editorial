@@ -9,7 +9,7 @@ import {
   VALIDATOR_IDS,
 } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import { findEditorialLayer, findRendimentoLayer, normalizeLayerName } from "../utils/editorial-layer";
+import { findEditorialLayer, findRendimentoLayer, layerHasContent, normalizeLayerName } from "../utils/editorial-layer";
 import { layerExists } from "../utils/indesign-helpers";
 
 function findLayerByNormalizedKeys(doc: Document, keys: string[]): Layer | null {
@@ -38,10 +38,16 @@ export class LayersObrigatoriasValidator extends BaseValidator {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
 
-      if (!findEditorialLayer(doc)) {
+      const editorial = findEditorialLayer(doc);
+      if (!editorial) {
         issues.push({
           message: `Layer "${LAYER_MEMORIAL_DESCRITIVO}" inexistente`,
           details: `Crie a layer "${LAYER_MEMORIAL_DESCRITIVO}" no documento.`,
+        });
+      } else if (!layerHasContent(editorial)) {
+        issues.push({
+          message: `Layer "${LAYER_MEMORIAL_DESCRITIVO}" sem conteúdo`,
+          details: `${editorial.name} deve conter ao menos um objeto em qualquer página.`,
         });
       }
 
@@ -49,6 +55,7 @@ export class LayersObrigatoriasValidator extends BaseValidator {
         issues.push({
           message: `Layer "${LAYER_RENDIMENTO}" inexistente`,
           details: `Crie a layer "${LAYER_RENDIMENTO}" no documento.`,
+          severity: "warning",
         });
       }
 
@@ -60,7 +67,8 @@ export class LayersObrigatoriasValidator extends BaseValidator {
         });
       }
 
-      return createResult(this.id, this.name, issues, "error");
+      const hasError = issues.some((issue) => (issue.severity || "error") === "error");
+      return createResult(this.id, this.name, issues, hasError ? "error" : "warning");
     });
   }
 }

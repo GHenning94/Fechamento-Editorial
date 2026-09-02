@@ -113,19 +113,26 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       controller.setStatus("Executando checklist editorial...", "info");
       await yieldToHost(40);
 
-      const summary = await orchestrator.runChecklist((current, total, label) => {
-        const percent = Math.round((current / total) * 100);
-        controller.setProgress(percent, `Checklist: ${label}`);
-      });
+      try {
+        const summary = await orchestrator.runChecklist((current, total, label) => {
+          const percent = Math.round((current / total) * 100);
+          controller.setProgress(percent, `Checklist: ${label}`);
+        });
 
-      lastChecklistSummary = summary;
-      controller.setReportDownloadEnabled(true);
-      controller.setProgress(100, "Checklist concluído");
-      controller.setSummaryFilterListener((filtered) => {
-        lastChecklistSummary = filtered;
-        orchestrator.cacheCurrentDocumentChecklist(filtered);
-      });
-      controller.renderSummary(summary, "Checklist");
+        lastChecklistSummary = summary;
+        controller.setReportDownloadEnabled(true);
+        controller.setProgress(100, "Checklist concluído");
+        controller.setSummaryFilterListener((filtered) => {
+          lastChecklistSummary = filtered;
+          orchestrator.cacheCurrentDocumentChecklist(filtered);
+        });
+        controller.renderSummary(summary, "Checklist");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        controller.setProgress(100, "Checklist interrompido");
+        controller.setStatus(message, "error");
+        throw error;
+      }
     },
 
     onCreateStyles: async () => {

@@ -16,6 +16,7 @@ const TAG_HEIGHT = 28;
 const TAG_INSET_X = 10;
 const TAG_POINT_SIZE = 15;
 const TAG_LEADING = 16;
+const TAG_MARGIN = 12;
 
 export interface RendimentoTagsResult {
   layerName: string;
@@ -63,6 +64,90 @@ function isPaginationName(value: string): boolean {
   const key = normalizeKey(value);
   if (!key) return false;
   return /pagin|folio|page\s*num|num(ero)?\s*(da\s*)?pag/.test(key);
+}
+
+function isRodabracoName(value: string): boolean {
+  const key = normalizeKey(value);
+  if (!key) return false;
+  return /rodabrac|roda\s*brac|canhoto|lombada|running\s*(head|title)/.test(key);
+}
+
+function readRotation(item: PageItem): number {
+  const typed = item as PageItem & { absoluteRotationAngle?: number; rotationAngle?: number };
+  let raw = 0;
+  try {
+    raw = Number(typed.absoluteRotationAngle);
+  } catch {
+    raw = 0;
+  }
+  if (!Number.isFinite(raw) || raw === 0) {
+    try {
+      raw = Number(typed.rotationAngle);
+    } catch {
+      raw = 0;
+    }
+  }
+  if (!Number.isFinite(raw)) return 0;
+  let angle = Math.abs(raw) % 180;
+  if (angle > 90) angle = 180 - angle;
+  return angle;
+}
+
+function isVerticallyRotated(item: PageItem): boolean {
+  return Math.abs(readRotation(item) - 90) <= 25;
+}
+
+function isOnSideMargin(item: PageItem, page: Page): boolean {
+  try {
+    const geo = item.geometricBounds;
+    const bounds = page.bounds;
+    if (!geo || geo.length < 4 || !bounds || bounds.length < 4) return false;
+    const pageW = Math.abs(bounds[3] - bounds[1]);
+    const strip = Math.max(36, pageW * 0.14);
+    const centerX = (geo[1] + geo[3]) / 2;
+    return Math.abs(centerX - bounds[1]) < strip || Math.abs(bounds[3] - centerX) < strip;
+  } catch {
+    return false;
+  }
+}
+
+function isNarrowVerticalFrame(item: PageItem): boolean {
+  try {
+    const geo = item.geometricBounds;
+    if (!geo || geo.length < 4) return false;
+    const width = Math.abs(geo[3] - geo[1]);
+    const height = Math.abs(geo[2] - geo[0]);
+    return height > width * 1.4 && width < 56;
+  } catch {
+    return false;
+  }
+}
+
+function isRodabracoFrame(item: PageItem, page: Page): boolean {
+  try {
+    if (isRodabracoName(item.name || "")) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    if (isRodabracoName(item.itemLayer?.name || "")) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const paras = (item as PageItem & { paragraphs?: unknown }).paragraphs;
+    const para = getCollectionItem<{ appliedParagraphStyle?: { name?: string } }>(paras, 0);
+    if (isRodabracoName(para?.appliedParagraphStyle?.name || "")) return true;
+  } catch {
+    // ignore
+  }
+  if (isVerticallyRotated(item) && isOnSideMargin(item, page)) return true;
+  if (isOnSideMargin(item, page) && isNarrowVerticalFrame(item)) return true;
+  return false;
+}
+
+function isIgnoredContentFrame(item: PageItem, page: Page): boolean {
+  return isPaginationFrame(item, page) || isRodabracoFrame(item, page);
 }
 
 function itemId(item: PageItem): string {
@@ -331,6 +416,7 @@ function collectTextFrames(page: Page): PageItem[] {
       if (!item?.isValid) return;
       if (!isTextFrameItem(item)) return;
       if (isOwnTag(item) || isOnSkipLayer(item)) return;
+      if (isIgnoredContentFrame(item, page)) return;
       if (!isVisibleItem(item)) return;
       if (!isOnPageArea(item, pageBounds)) return;
       const keys: string[] = [];
@@ -741,10 +827,9 @@ function placeTag(
 
   const label = String(count);
   const width = estimateTagWidth(label);
-  const centerY = (bounds[0] + bounds[2]) / 2;
   const centerX = (bounds[1] + bounds[3]) / 2;
-  const top = centerY - TAG_HEIGHT / 2;
-  const bottom = centerY + TAG_HEIGHT / 2;
+  const top = bounds[0] + TAG_MARGIN;
+  const bottom = top + TAG_HEIGHT;
   const left = centerX - width / 2;
   const right = centerX + width / 2;
 
@@ -813,6 +898,7 @@ export async function createRendimentoTags(
       const page = getCollectionItem<Page>(doc.pages, i);
       if (!page?.isValid) continue;
       const count = countPageCharacters(page);
+      if (count <= 0) continue;
       placeTag(page, count, fill, none, paper, paraStyle, layer);
       created += 1;
 

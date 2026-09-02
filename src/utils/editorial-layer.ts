@@ -1,4 +1,4 @@
-import type { Document, Layer } from "indesign";
+import type { Document, Layer, PageItem } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO, LAYER_RENDIMENTO } from "./constants";
 import { forEachCollectionItem } from "./collection-helpers";
 
@@ -62,4 +62,24 @@ export function findRendimentoLayer(doc: Document): Layer | null {
   });
 
   return exact || alias;
+}
+
+/** Conteúdo da layer, independente de visibilidade ou cadeado. */
+export function layerHasContent(layer: Layer | null): boolean {
+  if (!layer?.isValid) return false;
+  try {
+    if (layer.pageItems && layer.pageItems.length > 0) return true;
+  } catch {
+    // fallback abaixo
+  }
+  let found = false;
+  try {
+    forEachCollectionItem<PageItem>(layer.pageItems, (item) => {
+      if (found || !item?.isValid) return;
+      found = true;
+    });
+  } catch {
+    return false;
+  }
+  return found;
 }

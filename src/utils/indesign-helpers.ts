@@ -101,15 +101,21 @@ export function forEachPageItem(
   container: unknown,
   page: Page | null,
   pageName: string,
-  callback: PageItemCallback
+  callback: PageItemCallback,
+  depth = 0
 ): void {
+  if (depth > 8) return;
   forEachCollectionItem<PageItem>(container, (item) => {
     if (!item || !item.isValid) return;
 
     callback(item, page, pageName);
 
-    if (item.pageItems && item.pageItems.length > 0) {
-      forEachPageItem(item.pageItems, page, pageName, callback);
+    try {
+      if (item.pageItems && item.pageItems.length > 0) {
+        forEachPageItem(item.pageItems, page, pageName, callback, depth + 1);
+      }
+    } catch {
+      // ignora grupo inválido
     }
   });
 }

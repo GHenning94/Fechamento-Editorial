@@ -11,10 +11,6 @@ function isTextFrame(item: { constructor?: { name?: string } }): boolean {
   return (item.constructor?.name || "") === "TextFrame";
 }
 
-/**
- * Valida overset em caixas de texto reais (como o Preflight do InDesign),
- * e não em Stories genéricas — evita falsos positivos e IDs inúteis.
- */
 export class OvertextValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.OVERTEXT;
   readonly name = "Overset Text";
@@ -26,8 +22,15 @@ export class OvertextValidator extends BaseValidator {
 
       walkDirectPageItems(doc, (item, _page, pageName) => {
         try {
+          if (!item?.isValid) return;
           if (!isTextFrame(item)) return;
-          if (item.overflows !== true) return;
+          let overflows = false;
+          try {
+            overflows = (item as { overflows?: boolean }).overflows === true;
+          } catch {
+            return;
+          }
+          if (!overflows) return;
 
           const objectName = getPageItemDisplayName(item);
           const key = `${pageName}::${objectName}::${(item.geometricBounds || []).join(",")}`;

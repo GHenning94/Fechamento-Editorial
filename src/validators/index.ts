@@ -1,6 +1,5 @@
 import { IValidator } from "../models/validator";
 import { LayersObrigatoriasValidator, LayersNomenclaturaValidator } from "./layers-validator";
-import { MemorialDescritivoValidator } from "./memorial-descritivo-validator";
 import { CoresValidator } from "./cores-validator";
 import { CorProfValidator } from "./corprof-validator";
 import { GuiasColorValidator } from "./guias-color-validator";
@@ -18,14 +17,12 @@ import { ImagensColorspaceValidator } from "./imagens-colorspace-validator";
 import { ResolucaoValidator } from "./resolucao-validator";
 import { FiosValidator } from "./fios-validator";
 import { PasteboardValidator } from "./pasteboard-validator";
-import { LayersBloqueadasValidator } from "./layers-bloqueadas-validator";
 import { OvertextValidator } from "./overtext-validator";
 
 export function createAllValidators(): IValidator[] {
   return [
     new LayersObrigatoriasValidator(),
     new LayersNomenclaturaValidator(),
-    new MemorialDescritivoValidator(),
     new CoresValidator(),
     new CorProfValidator(),
     new GuiasColorValidator(),
@@ -43,7 +40,6 @@ export function createAllValidators(): IValidator[] {
     new ResolucaoValidator(),
     new FiosValidator(),
     new PasteboardValidator(),
-    new LayersBloqueadasValidator(),
     new OvertextValidator(),
   ];
 }
@@ -51,7 +47,6 @@ export function createAllValidators(): IValidator[] {
 export {
   LayersObrigatoriasValidator,
   LayersNomenclaturaValidator,
-  MemorialDescritivoValidator,
   CoresValidator,
   CorProfValidator,
   GuiasColorValidator,
@@ -69,6 +64,5 @@ export {
   ResolucaoValidator,
   FiosValidator,
   PasteboardValidator,
-  LayersBloqueadasValidator,
   OvertextValidator,
 };

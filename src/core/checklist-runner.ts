@@ -6,16 +6,23 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import {
   clearInDesignSelection,
   getActiveDocument,
+  runInDesignHeavyMutation,
   runInDesignReadOnly,
 } from "../utils/indesign-runtime";
 import { yieldForUi, yieldToHost } from "../utils/yield-to-host";
 import { withValidationSession } from "./validation-session";
+import {
+  restoreLayerLocks,
+  snapshotLayerLocks,
+  unlockAllLayers,
+  withLayersUnlockedForValidation,
+  type LayerLockSnapshot,
+} from "../utils/layer-lock";
 
 export type ProgressCallback = (current: number, total: number, label: string) => void;
 
-/** Pausas maiores entre etapas — evita travar o InDesign em máquinas mais lentas. */
-const BETWEEN_VALIDATOR_MS = 120;
-const AFTER_HEAVY_VALIDATOR_MS = 220;
+const BETWEEN_VALIDATOR_MS = 80;
+const AFTER_HEAVY_VALIDATOR_MS = 160;
 
 const GRAPHICS_VALIDATOR_IDS = new Set<string>([
   VALIDATOR_IDS.IMAGENS_COLORSPACE,
@@ -30,33 +37,76 @@ const HEAVY_VALIDATOR_IDS = new Set<string>([
   VALIDATOR_IDS.FIOS,
   VALIDATOR_IDS.PASTEBOARD,
   VALIDATOR_IDS.OVERTEXT,
-  VALIDATOR_IDS.MEMORIAL_DESCRITIVO,
+]);
+
+const DIRECT_VALIDATOR_IDS = new Set<string>([
+  VALIDATOR_IDS.OVERTEXT,
+  VALIDATOR_IDS.PASTEBOARD,
 ]);
 
 function shouldBatchValidators(current: IValidator, next?: IValidator): boolean {
-  if (!next) {
-    return false;
-  }
+  if (!next) return false;
   return GRAPHICS_VALIDATOR_IDS.has(current.id) && GRAPHICS_VALIDATOR_IDS.has(next.id);
+}
+
+function failedResult(validator: IValidator, error: unknown): ValidationResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    validatorId: validator.id,
+    validatorName: validator.name,
+    severity: "error",
+    issues: [{ message: `Falha na validação: ${message}` }],
+  };
+}
+
+function runValidatorsOnDoc(doc: Document, batch: IValidator[]): ValidationResult[] {
+  return withValidationSession(doc, () =>
+    batch.map((item) => {
+      try {
+        return item.validate(doc);
+      } catch (error) {
+        return failedResult(item, error);
+      }
+    })
+  );
+}
+
+function prepareLayerAccess(): LayerLockSnapshot[] {
+  const doc = getActiveDocument();
+  const snapshot = snapshotLayerLocks(doc);
+  unlockAllLayers(doc);
+  return snapshot;
+}
+
+function restoreLayerAccess(snapshot: LayerLockSnapshot[]): void {
+  try {
+    restoreLayerLocks(getActiveDocument(), snapshot);
+  } catch {
+    // ignore
+  }
 }
 
 export class ChecklistRunner {
   run(doc: Document, onProgress?: ProgressCallback): ValidationSummary {
-    return withValidationSession(doc, () => {
-      const validators = createAllValidators();
-      const results: ValidationResult[] = [];
-      const total = validators.length;
+    return withLayersUnlockedForValidation(doc, () =>
+      withValidationSession(doc, () => {
+        const validators = createAllValidators();
+        const results: ValidationResult[] = [];
+        const total = validators.length;
 
-      for (let i = 0; i < validators.length; i++) {
-        const validator = validators[i];
-        if (onProgress) {
-          onProgress(i + 1, total, validator.name);
+        for (let i = 0; i < validators.length; i++) {
+          const validator = validators[i];
+          onProgress?.(i + 1, total, validator.name);
+          try {
+            results.push(validator.validate(doc));
+          } catch (error) {
+            results.push(failedResult(validator, error));
+          }
         }
-        results.push(validator.validate(doc));
-      }
 
-      return summarizeResults(results);
-    });
+        return summarizeResults(results);
+      })
+    );
   }
 
   async runAsync(onProgress?: ProgressCallback): Promise<ValidationSummary> {
@@ -67,48 +117,78 @@ export class ChecklistRunner {
     clearInDesignSelection();
     await yieldForUi();
 
-    for (let index = 0; index < validators.length; index++) {
-      const validator = validators[index];
-      const nextValidator = validators[index + 1];
-      const batch = shouldBatchValidators(validator, nextValidator)
-        ? [validator, nextValidator]
-        : [validator];
-
-      if (batch.length === 2) {
-        index += 1;
-      }
-
-      const label = batch.map((item) => item.name).join(" + ");
-      onProgress?.(index + 1, total, label);
-
-      // Atualiza a UI antes do doScript (que bloqueia o host)
-      await yieldForUi();
-
-      const batchResults = runInDesignReadOnly(`EDITORIAL AUTOCLOSE — ${batch[0].id}`, () => {
-        const doc = getActiveDocument();
-        return withValidationSession(doc, () => batch.map((item) => item.validate(doc)));
-      });
-
-      results.push(...batchResults);
-
-      const isHeavy = batch.some((item) => HEAVY_VALIDATOR_IDS.has(item.id));
-      await yieldToHost(isHeavy ? AFTER_HEAVY_VALIDATOR_MS : BETWEEN_VALIDATOR_MS);
+    let lockSnapshot: LayerLockSnapshot[] = [];
+    try {
+      lockSnapshot = runInDesignReadOnly("EDITORIAL AUTOCLOSE - Liberar layers", () =>
+        prepareLayerAccess()
+      );
+    } catch {
+      lockSnapshot = [];
     }
 
-    clearInDesignSelection();
-    await yieldForUi();
+    try {
+      for (let index = 0; index < validators.length; index++) {
+        const validator = validators[index];
+        const nextValidator = validators[index + 1];
+        const batch = shouldBatchValidators(validator, nextValidator)
+          ? [validator, nextValidator]
+          : [validator];
 
+        if (batch.length === 2) {
+          index += 1;
+        }
+
+        const label = batch.map((item) => item.name).join(" + ");
+        onProgress?.(index + 1, total, label);
+        await yieldForUi();
+
+        const useDirect = batch.some((item) => DIRECT_VALIDATOR_IDS.has(item.id));
+        try {
+          const batchResults = useDirect
+            ? runInDesignHeavyMutation(`EDITORIAL AUTOCLOSE - ${batch[0].id}`, () => {
+                const doc = getActiveDocument();
+                return runValidatorsOnDoc(doc, batch);
+              })
+            : runInDesignReadOnly(`EDITORIAL AUTOCLOSE - ${batch[0].id}`, () => {
+                const doc = getActiveDocument();
+                return runValidatorsOnDoc(doc, batch);
+              });
+          results.push(...batchResults);
+        } catch (error) {
+          for (const item of batch) {
+            results.push(failedResult(item, error));
+          }
+        }
+
+        const isHeavy = batch.some((item) => HEAVY_VALIDATOR_IDS.has(item.id));
+        await yieldToHost(isHeavy ? AFTER_HEAVY_VALIDATOR_MS : BETWEEN_VALIDATOR_MS);
+      }
+    } finally {
+      try {
+        runInDesignReadOnly("EDITORIAL AUTOCLOSE - Restaurar layers", () => {
+          restoreLayerAccess(lockSnapshot);
+          return true;
+        });
+      } catch {
+        try {
+          restoreLayerAccess(lockSnapshot);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    onProgress?.(total, total, "Finalizando");
+    await yieldForUi();
     return summarizeResults(results);
   }
 
-  /** Um único doScript no fechamento — reduz instabilidade do InDesign. */
   runForClosure(onProgress?: ProgressCallback): ValidationSummary {
     onProgress?.(1, 1, "Checklist editorial");
     clearInDesignSelection();
-    const summary = runInDesignReadOnly("EDITORIAL AUTOCLOSE — Checklist Fechamento", () =>
+    const summary = runInDesignReadOnly("EDITORIAL AUTOCLOSE - Checklist Fechamento", () =>
       this.run(getActiveDocument())
     );
-    clearInDesignSelection();
     return summary;
   }
 }

@@ -2,11 +2,9 @@ import { VALIDATOR_IDS } from "./constants";
 
 const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.LAYERS_OBRIGATORIAS]:
-    "As layers obrigatórias (MEMORIAL_DESCRITIVO, RENDIMENTO e GUIAS_DELETAR) estão presentes no documento.",
+    "As layers MEMORIAL_DESCRITIVO e GUIAS_DELETAR estão presentes. O memorial tem conteúdo.",
   [VALIDATOR_IDS.LAYERS_NOMENCLATURA]:
     "As layers de memorial, rendimento e guias estão com a nomenclatura correta.",
-  [VALIDATOR_IDS.MEMORIAL_DESCRITIVO]:
-    "A layer MEMORIAL_DESCRITIVO existe e contém conteúdo.",
   [VALIDATOR_IDS.CORES]:
     "As amostras de cor estão em CMYK, com nomenclatura padrão. Spot apenas nas exceções permitidas.",
   [VALIDATOR_IDS.ESTILOS_PADRAO_PROFESSOR]:
@@ -41,8 +39,6 @@ const SUCCESS_TEXT: Record<string, string> = {
     "Todos os fios estão com espessura mínima de 0,3 pt.",
   [VALIDATOR_IDS.PASTEBOARD]:
     "Não há objetos no pasteboard fora das páginas.",
-  [VALIDATOR_IDS.LAYERS_BLOQUEADAS]:
-    "Nenhuma layer está bloqueada.",
   [VALIDATOR_IDS.OVERTEXT]:
     "Não há texto em overflow nas caixas de texto.",
 };

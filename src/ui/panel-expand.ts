@@ -33,38 +33,4 @@ export function tryExpandPanelToHostHeight(): void {
   };
 
   applyMinHeight(targetHeight);
-
-  // Best-effort: alguns hosts respeitam resizeTo em janela flutuante
-  try {
-    const width = Math.max(
-      280,
-      Math.min(
-        420,
-        typeof window.outerWidth === "number" && window.outerWidth > 0
-          ? window.outerWidth
-          : typeof window.innerWidth === "number"
-            ? window.innerWidth
-            : 300
-      )
-    );
-    if (typeof window.resizeTo === "function") {
-      window.resizeTo(width, targetHeight);
-    }
-    if (typeof window.resizeBy === "function") {
-      const current =
-        (typeof window.outerHeight === "number" && window.outerHeight > 0
-          ? window.outerHeight
-          : window.innerHeight) || targetHeight;
-      const delta = targetHeight - current;
-      if (Math.abs(delta) > 40) {
-        window.resizeBy(0, delta);
-      }
-    }
-  } catch {
-    // ignora — min-height do documento já foi aplicado
-  }
-
-  // Reaplica após o host estabilizar o layout
-  window.setTimeout(() => applyMinHeight(targetHeight), 50);
-  window.setTimeout(() => applyMinHeight(targetHeight), 200);
 }

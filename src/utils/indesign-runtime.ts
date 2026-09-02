@@ -133,10 +133,13 @@ export function getActiveDocument(): Document {
 /** Limpa seleção para evitar artefatos visuais / handles residuais após scripts. */
 export function clearInDesignSelection(): void {
   try {
-    const app = getInDesignApp();
-    app.selection = [];
+    const app = getInDesignApp() as Application & { select?: (value: unknown) => void };
+    const { NothingEnum } = getInDesignModule() as { NothingEnum?: { NOTHING?: unknown } };
+    if (NothingEnum && "NOTHING" in NothingEnum && typeof app.select === "function") {
+      app.select(NothingEnum.NOTHING);
+    }
   } catch {
-    // ignore — seleção pode estar indisponível em alguns estados
+    // ignore
   }
 }
 
