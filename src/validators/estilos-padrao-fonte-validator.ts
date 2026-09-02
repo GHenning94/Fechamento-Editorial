@@ -7,6 +7,7 @@ import {
   compareFonteStyle,
   FONTE_STANDARD_STYLE_NAMES,
 } from "../utils/estilos-padrao-fonte";
+import { reportStandardStyleIssues } from "../utils/estilos-padrao-report";
 import {
   detectMaterialFromFileName,
   readDocumentFileName,
@@ -61,17 +62,15 @@ export class EstilosPadraoFonteValidator extends BaseValidator {
         if (!style || !style.isValid) return;
         if (!FONTE_STYLE_SET.has(style.name)) return;
 
-        for (const issue of compareFonteStyle(style, {
-          segment: material.segment,
-          validateSize: material.segment !== null,
-        })) {
-          issues.push({
-            message: "Configuração divergente",
-            object: style.name,
-            details: `${issue.property}: esperado ${issue.expected}, encontrado ${issue.actual}.`,
-            severity: "error",
-          });
-        }
+        issues.push(
+          ...reportStandardStyleIssues(
+            style.name,
+            compareFonteStyle(style, {
+              segment: material.segment,
+              validateSize: material.segment !== null,
+            })
+          )
+        );
       });
 
       const severity = issues.some((issue) => (issue.severity || "error") === "error")

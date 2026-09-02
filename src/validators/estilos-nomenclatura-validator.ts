@@ -5,6 +5,8 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import { shouldSkipParagraphStyleValidation } from "../utils/indesign-helpers";
 import {
+  extractStyleTrunk,
+  hasParagraphStyleTrunkFormat,
   isParagraphStyleNomenclatureSkipped,
   isValidParagraphStyleName,
 } from "../utils/paleta-estilos";
@@ -25,15 +27,33 @@ export class EstilosNomenclaturaValidator extends BaseValidator {
           return;
         }
 
+        if (!hasParagraphStyleTrunkFormat(name)) {
+          issues.push({
+            message: "O tronco deve ser número_palavra da paleta (ex.: 02_texto, 05_legenda).",
+            object: name,
+            severity: "error",
+          });
+          return;
+        }
+
         if (isValidParagraphStyleName(name)) return;
 
+        const trunk = extractStyleTrunk(name) || name;
         issues.push({
-          message: "O tronco deve ser número_palavra da paleta (ex.: 02_texto, 05_legenda).",
+          message: "Estilo não está presente na paleta",
           object: name,
+          details: `O tronco "${trunk}" não está na paleta. Valide manualmente.`,
+          severity: "warning",
         });
       });
 
-      return createResult(this.id, this.name, issues, "error");
+      const severity = issues.some((issue) => (issue.severity || "error") === "error")
+        ? "error"
+        : issues.length > 0
+          ? "warning"
+          : "success";
+
+      return createResult(this.id, this.name, issues, severity);
     });
   }
 }

@@ -8,6 +8,7 @@ import {
   CREDITO_STYLE_NAME,
   isCreditoStyleName,
 } from "../utils/estilos-padrao-credito";
+import { reportStandardStyleIssues } from "../utils/estilos-padrao-report";
 
 function collectParagraphStyleNames(doc: Document): Set<string> {
   const names = new Set<string>();
@@ -44,14 +45,7 @@ export class EstilosPadraoCreditoValidator extends BaseValidator {
         if (!style || !style.isValid) return;
         if (!isCreditoStyleName(style.name)) return;
 
-        for (const issue of compareCreditoStyle(style)) {
-          issues.push({
-            message: "Configuração divergente",
-            object: style.name || CREDITO_STYLE_NAME,
-            details: `${issue.property}: esperado ${issue.expected}, encontrado ${issue.actual}.`,
-            severity: "error",
-          });
-        }
+        issues.push(...reportStandardStyleIssues(style.name || CREDITO_STYLE_NAME, compareCreditoStyle(style)));
       });
 
       const severity = issues.some((issue) => (issue.severity || "error") === "error")

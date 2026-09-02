@@ -24,7 +24,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.HIFENIZACAO]:
     "Estilos da paleta aceitam qualquer alinhamento. Fora da paleta, hifenização exige justificado à esquerda.",
   [VALIDATOR_IDS.ESTILOS_NOMENCLATURA]:
-    "Os estilos de parágrafo seguem o tronco número_palavra da paleta (ex.: 02_texto, 05_legenda).",
+    "Os estilos de parágrafo usam o tronco número_primeira palavra. Itens fora da paleta ficam como alerta.",
   [VALIDATOR_IDS.ESTILOS_PASTAS]:
     "Não há pastas nos estilos de parágrafo nem nos de caractere.",
   [VALIDATOR_IDS.CINZA_OVERPRINT]:

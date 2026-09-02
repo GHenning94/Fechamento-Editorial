@@ -29,6 +29,8 @@ export const ACCEPTED_PROFESSOR_LANGUAGES = [
 
 export const MIN_IMAGE_DPI = 300;
 export const MIN_STROKE_WEIGHT = 0.3;
+/** Tolerância para 0,3 pt gravado como 0,298… no UXP. */
+export const STROKE_WEIGHT_TOLERANCE_PT = 0.02;
 export const BLEED_MM = 20;
 export const PDF_PRESET_NAME = "CTP_Arte";
 export const PDF_PRESET_FALLBACK_NAMES = ["CTP_Arte", "CTP Arte"] as const;

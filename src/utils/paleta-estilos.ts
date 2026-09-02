@@ -1,7 +1,7 @@
 /**
  * Paleta padrão (modelo_padrao-estilos.pdf).
- * O tronco é número + _ + primeira palavra (ex.: 02_texto, 07_secao).
- * Sufixos depois disso são derivados válidos (ex.: 02_texto_geral_recuo).
+ * O tronco é número + _ + primeira palavra (ex.: 02_texto, 07_secao, 05_grafico).
+ * Tudo depois da primeira palavra é ignorado (ex.: 05_grafico/mapa_fonte → 05_grafico).
  * Estilos 00_ existem na paleta, mas são ignorados na validação de nomenclatura.
  */
 
@@ -97,10 +97,16 @@ export const PARAGRAPH_STYLE_TRUNKS = [
   "10_finais_texto_geral",
 ] as const;
 
-/** Tronco = número + _ + primeira palavra (ex.: 02_texto, 07_secao). */
+/** Tronco = número + _ + primeira palavra. Para em /, _, espaço e demais sinais. */
 export function extractStyleTrunk(name: string): string | null {
-  const match = name.trim().match(/^(\d+_[^_\s]+)/);
+  const match = name.trim().match(/^(\d+_[A-Za-zÀ-ÿ]+)/);
   return match ? match[1] : null;
+}
+
+export function hasParagraphStyleTrunkFormat(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || containsInvalidSpaces(trimmed)) return false;
+  return extractStyleTrunk(trimmed) !== null;
 }
 
 function normalizeTrunkKey(value: string): string {

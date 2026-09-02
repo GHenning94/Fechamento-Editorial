@@ -150,8 +150,9 @@ declare module "indesign" {
   }
 
   export interface ViewPreferences {
-    horizontalMeasurementUnits: number;
-    verticalMeasurementUnits: number;
+    horizontalMeasurementUnits: number | unknown;
+    verticalMeasurementUnits: number | unknown;
+    strokeMeasurementUnits?: number | unknown;
   }
 
   export interface Swatches {

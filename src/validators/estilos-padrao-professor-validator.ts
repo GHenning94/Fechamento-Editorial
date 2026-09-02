@@ -5,9 +5,9 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import {
   compareProfessorStyle,
-  getEfAiSizeHint,
   PROFESSOR_STANDARD_STYLE_NAMES,
 } from "../utils/estilos-padrao-professor";
+import { reportStandardStyleIssues } from "../utils/estilos-padrao-report";
 import {
   detectMaterialFromFileName,
   readDocumentFileName,
@@ -67,18 +67,9 @@ export class EstilosPadraoProfessorValidator extends BaseValidator {
           validateSize: material.segment !== null,
         });
 
-        for (const issue of propertyIssues) {
-          const isFontSizeIssue = issue.property === "Tamanho";
-          const ef1Hint =
-            isFontSizeIssue && material.segment === "EF1" ? getEfAiSizeHint(style.name) : "";
-
-          issues.push({
-            message: "Configuração divergente",
-            object: style.name,
-            details: `${issue.property}: esperado ${issue.expected}, encontrado ${issue.actual}.${ef1Hint}`,
-            severity: "error",
-          });
-        }
+        issues.push(
+          ...reportStandardStyleIssues(style.name, propertyIssues, { sizeAsWarning: true })
+        );
       });
 
       const severity = issues.some((issue) => (issue.severity || "error") === "error")

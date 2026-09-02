@@ -11,6 +11,7 @@ import {
   normalizeColorName,
 } from "./editorial-color";
 import { coerceFilePath, resolveGraphicColorSpace } from "./file-color-space";
+import { isPluginGeneratedItem } from "./editorial-layer";
 
 export { getActiveDocument } from "./indesign-runtime";
 export { getImageColorSpaceLabel } from "./color-model";
@@ -737,15 +738,21 @@ export function collectStrokedItems(doc: Document): StrokeInfo[] {
 
   walkDirectPageItems(doc, (item, _page, pageName) => {
     try {
+      if (isPluginGeneratedItem(item)) return;
       const weight = item.strokeWeight;
-      if (weight > 0) {
-          strokes.push({
-            pageName,
-            objectName: getPageItemDisplayName(item),
-            weight,
-            pageItem: item,
-          });
+      if (typeof weight !== "number" || !(weight > 0)) return;
+      try {
+        const strokeName = (item.strokeColor?.name || "").replace(/^\[|\]$/g, "").trim().toLowerCase();
+        if (!strokeName || strokeName === "none" || strokeName === "nenhum" || strokeName === "nenhuma") return;
+      } catch {
+        // sem nome de traço, segue
       }
+      strokes.push({
+        pageName,
+        objectName: getPageItemDisplayName(item),
+        weight,
+        pageItem: item,
+      });
     } catch {
       // ignore
     }
