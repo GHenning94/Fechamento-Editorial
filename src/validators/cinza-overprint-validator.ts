@@ -1,4 +1,4 @@
-import type { Cell, Document, Page, PageItem, Story, Text, TextStyleRange } from "indesign";
+import type { Cell, Document, PageItem, Story, Text, TextStyleRange } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
@@ -13,6 +13,7 @@ import {
   isSolidPrintBlack,
   isTextFrameItem,
   itemHasPlacedGraphic,
+  readEffectiveFillTint,
   readFillTint,
   readItemFill,
   readLocalFillColor,
@@ -28,6 +29,7 @@ interface ColoredSnap {
   bounds: number[];
   pageName: string;
   graphic: boolean;
+  itemId: number | null;
 }
 
 function readBounds(item: PageItem): number[] {
@@ -157,13 +159,13 @@ function sampleInkFill(target: TextStyleRange | Text): {
       for (const character of [first, last]) {
         if (!character) continue;
         const fill = readLocalFillColor(character);
-        if (fill) return { fill, tint: readFillTint(character) };
+        if (fill) return { fill, tint: readEffectiveFillTint(character) };
       }
     }
   } catch {
     // cai no preenchimento do range
   }
-  return { fill: readLocalFillColor(target), tint: readFillTint(target) };
+  return { fill: readLocalFillColor(target), tint: readEffectiveFillTint(target) };
 }
 
 function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
@@ -244,14 +246,8 @@ function frameFillLeaksFromStyle(frame: PageItem): boolean {
   try {
     const text = getCollectionItem<Text>(frame.texts, 0);
     if (!text) return false;
-    const para = (
-      text as Text & { appliedParagraphStyle?: { fillColor?: unknown; name?: string } }
-    ).appliedParagraphStyle;
-    if (para?.fillColor && fillsLookSame(frameFill, para.fillColor as never)) return true;
-    const character = (
-      text as Text & { appliedCharacterStyle?: { fillColor?: unknown; name?: string } }
-    ).appliedCharacterStyle;
-    if (character?.fillColor && fillsLookSame(frameFill, character.fillColor as never)) return true;
+    const textFill = readLocalFillColor(text);
+    if (textFill && fillsLookSame(frameFill, textFill)) return true;
   } catch {
     // ignore
   }
@@ -263,7 +259,6 @@ function frameIsChromaticBox(frame: PageItem | null): boolean {
   if (textFrameFillLeaksFromContents(frame) || frameFillLeaksFromStyle(frame)) return false;
   const fill = readItemFill(frame);
   if (isNoneOrPaperFill(fill)) return false;
-  if (isPagePlate(readBounds(frame), parentPageOf(frame))) return false;
   try {
     const tint = readFillTint(frame);
     if (tint <= 0.5) return false;
@@ -302,53 +297,35 @@ function probeRangeEnds(range: TextStyleRange | Text): number[][] {
   return probes;
 }
 
-function readPageBounds(page: Page | null): number[] {
-  if (!page) return [];
+function itemIdOf(item: PageItem | null): number | null {
+  if (!item) return null;
   try {
-    const bounds = page.bounds;
-    if (Array.isArray(bounds) && bounds.length >= 4) {
-      return bounds.map((value) => Number(value));
-    }
+    const id = item.id;
+    return typeof id === "number" ? id : null;
   } catch {
-    // ignore
+    return null;
   }
-  return [];
 }
 
-function boundsArea(bounds: number[]): number {
-  if (bounds.length < 4) return 0;
-  return Math.abs(Number(bounds[2]) - Number(bounds[0])) * Math.abs(Number(bounds[3]) - Number(bounds[1]));
-}
-
-function isPagePlate(bounds: number[], page: Page | null): boolean {
-  const pageArea = boundsArea(readPageBounds(page));
-  const itemArea = boundsArea(bounds);
-  return pageArea > 0 && itemArea / pageArea >= 0.55;
-}
-
-function parentPageOf(frame: PageItem | null): Page | null {
-  if (!frame) return null;
-  try {
-    const parentPage = frame.parentPage;
-    if (parentPage && typeof parentPage === "object") return parentPage as Page;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string, page: Page | null): void {
-  if (!item?.isValid || isPluginGeneratedItem(item) || isTextFrameItem(item)) return;
+function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string): void {
+  if (!item?.isValid || isPluginGeneratedItem(item)) return;
   const bounds = readBounds(item);
   if (bounds.length < 4) return;
-  const graphic = isPlacedGraphic(item) || itemHasPlacedGraphic(item);
-  if (graphic) {
-    bucket.push({ bounds, pageName, graphic: true });
+
+  if (isTextFrameItem(item)) {
+    if (frameIsChromaticBox(item)) {
+      bucket.push({ bounds, pageName, graphic: false, itemId: itemIdOf(item) });
+    }
     return;
   }
-  if (isPagePlate(bounds, page)) return;
+
+  const graphic = isPlacedGraphic(item) || itemHasPlacedGraphic(item);
+  if (graphic) {
+    bucket.push({ bounds, pageName, graphic: true, itemId: itemIdOf(item) });
+    return;
+  }
   if (isFilledShape(item) && isColoredBackgroundFill(readItemFill(item), readFillTint(item))) {
-    bucket.push({ bounds, pageName, graphic: false });
+    bucket.push({ bounds, pageName, graphic: false, itemId: itemIdOf(item) });
   }
 }
 
@@ -360,14 +337,14 @@ function probeBelongsToFrame(probe: number[], frameBounds: number[]): boolean {
 function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
   const byPage = new Map<string, ColoredSnap[]>();
 
-  walkDirectPageItems(doc, (item, page, pageName) => {
+  walkDirectPageItems(doc, (item, _page, pageName) => {
     if (!pageName) return;
     let list = byPage.get(pageName);
     if (!list) {
       list = [];
       byPage.set(pageName, list);
     }
-    pushColored(list, item, pageName, page);
+    pushColored(list, item, pageName);
   });
 
   return byPage;
@@ -441,7 +418,9 @@ export class CinzaOverprintValidator extends BaseValidator {
           const snaps = coloredByPage.get(pageName);
           if (!snaps?.length) continue;
           if (frameBounds.length < 4) continue;
-          const nearby = snaps.filter((snap) => geometricBoundsOverlap(frameBounds, snap.bounds));
+          const nearby = snaps.filter(
+            (snap) => snap.itemId !== itemIdOf(frame) && geometricBoundsOverlap(frameBounds, snap.bounds)
+          );
           if (!nearby.length) continue;
 
           const probes = probeRangeEnds(run).filter((ink) => probeBelongsToFrame(ink, frameBounds));

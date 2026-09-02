@@ -3,6 +3,8 @@ import { getCollectionItem, getCollectionLength, forEachCollectionItem } from ".
 import { getImageColorSpaceLabel, swatchNameOf } from "./color-model";
 
 const VALUE_EPS = 1.25;
+/** Preto sólido de impressão. 80% preto é cinza e precisa de overprint sobre cor. */
+export const SOLID_PRINT_BLACK_TINT = 90;
 
 function approx(a: number, b: number, eps = VALUE_EPS): boolean {
   return Math.abs(a - b) <= eps;
@@ -351,9 +353,9 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
   if (isChromaticFill(fill, t)) return false;
 
   if (isBlackKey(key)) {
-    return t < 80;
+    return t < SOLID_PRINT_BLACK_TINT;
   }
-  if ((key.includes("black") || key.includes("preto")) && t < 80) {
+  if ((key.includes("black") || key.includes("preto")) && t < SOLID_PRINT_BLACK_TINT) {
     return true;
   }
   if ((key.includes("black") || key.includes("preto")) && /\d/.test(key) && !/(^|[^0-9])100([^0-9]|$)/.test(key)) {
@@ -398,14 +400,14 @@ export function isSolidPrintBlack(fill: Swatch | Color | string | null | undefin
   const key = fillNameKey(fill);
   if (isNoneKey(key) || isPaperKey(key)) return false;
   const t = tint < 0 ? 100 : tint;
-  if (t < 80) return false;
+  if (t < SOLID_PRINT_BLACK_TINT) return false;
   if (isBlackKey(key)) return true;
   if ((key.includes("black") || key.includes("preto")) && !/\d/.test(key)) return true;
 
   const channels = resolveCmykChannels(fill, t);
   if (channels && channels.length >= 4) {
     const chroma = cmykChroma(channels[0], channels[1], channels[2]);
-    if (chroma <= 4 && channels[3] >= 90) return true;
+    if (chroma <= 4 && channels[3] >= SOLID_PRINT_BLACK_TINT) return true;
   }
 
   const space = typeof fill === "string" ? "" : readSpaceLabel(fill);
@@ -438,8 +440,8 @@ function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
   const chroma = Math.max(c, m, y) - Math.min(c, m, y);
   if (chroma > 4) return false;
   const cmy = (c + m + y) / 3;
-  if (cmy <= 4) return k > 0.5 && k < 80;
-  return k < 80;
+  if (cmy <= 4) return k > 0.5 && k < SOLID_PRINT_BLACK_TINT;
+  return k < SOLID_PRINT_BLACK_TINT;
 }
 
 function cmykChroma(c: number, m: number, y: number): number {
