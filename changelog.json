@@ -1,6 +1,6 @@
 {
   "1.0.0": {
-    "title": "Correção atualização + tags",
-    "notes": "Corrigido erro em que as tags do memorial eram aplicadas fora da página + erro de atualização em que era buscado e aplicado versão antiga."
+    "title": "Correção notas",
+    "notes": "Correção em que o plugin buscava as notas de versões antigas."
   }
 }
