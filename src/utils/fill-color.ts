@@ -46,31 +46,54 @@ function isGrayNameKey(key: string): boolean {
   return key.includes("cinza") || key.includes("gray") || key.includes("grey");
 }
 
-function normalizeTintPercent(value: number): number {
-  if (!Number.isFinite(value) || value < 0) return 100;
+function unwrapNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object") {
+    const inner = (value as { value?: unknown }).value;
+    if (typeof inner === "number" && Number.isFinite(inner)) return inner;
+  }
+  return null;
+}
+
+function unwrapBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (value && typeof value === "object") {
+    const inner = (value as { value?: unknown }).value;
+    if (typeof inner === "boolean") return inner;
+  }
+  return null;
+}
+
+function normalizeTintPercent(value: number): number | null {
+  if (!Number.isFinite(value) || value < 0) return null;
   if (value > 0 && value < 1) return value * 100;
+  if (value > 100.5) return null;
   return value;
 }
 
 function readRawFillTint(target: { fillTint?: number; properties?: { fillTint?: number } } | null | undefined): number | null {
   if (!target) return null;
+  const candidates: unknown[] = [];
   try {
-    const tint = target.fillTint;
-    if (typeof tint === "number" && tint >= 0) return normalizeTintPercent(tint);
+    candidates.push(target.fillTint);
   } catch {
     // ignore
   }
   try {
-    const tint = target.properties?.fillTint;
-    if (typeof tint === "number" && tint >= 0) return normalizeTintPercent(tint);
+    candidates.push(target.properties?.fillTint);
   } catch {
     // ignore
   }
   try {
-    const tintValue = (target as { tintValue?: number }).tintValue;
-    if (typeof tintValue === "number" && tintValue >= 0) return normalizeTintPercent(tintValue);
+    candidates.push((target as { tintValue?: number }).tintValue);
   } catch {
     // ignore
+  }
+  for (const candidate of candidates) {
+    const tint = unwrapNumber(candidate);
+    if (tint == null) continue;
+    const normalized = normalizeTintPercent(tint);
+    if (normalized != null) return normalized;
   }
   return null;
 }
@@ -242,6 +265,26 @@ function fillNameKey(fill: Swatch | Color | string | null | undefined): string {
   return normalizeSwatchKey(swatchNameOf(fill));
 }
 
+function parseUnnamedColor(name: string): { space: string; values: number[] } | null {
+  const cmyk = name.match(
+    /C\s*=\s*([\d.,]+)\s*M\s*=\s*([\d.,]+)\s*Y\s*=\s*([\d.,]+)\s*K\s*=\s*([\d.,]+)/i
+  );
+  if (cmyk) {
+    return {
+      space: "CMYK",
+      values: cmyk.slice(1, 5).map((item) => Number(String(item).replace(",", "."))),
+    };
+  }
+  const rgb = name.match(/R\s*=\s*([\d.,]+)\s*G\s*=\s*([\d.,]+)\s*B\s*=\s*([\d.,]+)/i);
+  if (rgb) {
+    return {
+      space: "RGB",
+      values: rgb.slice(1, 4).map((item) => Number(String(item).replace(",", "."))),
+    };
+  }
+  return null;
+}
+
 /**
  * Tom de cinza: tinta Black com tint < 100, K-only abaixo de 100%,
  * RGB acromático, ou amostra cujo nome indica cinza.
@@ -257,9 +300,10 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     try {
       const typeName = (fill as { constructor?: { name?: string } }).constructor?.name || "";
       if (typeName === "Tint") {
-        const swatchTint = (fill as { tintValue?: number }).tintValue;
-        if (typeof swatchTint === "number" && swatchTint >= 0 && swatchTint <= 100) {
-          t = (t * normalizeTintPercent(swatchTint)) / 100;
+        const swatchTint = unwrapNumber((fill as { tintValue?: number }).tintValue);
+        if (swatchTint != null) {
+          const normalized = normalizeTintPercent(swatchTint);
+          if (normalized != null) t = (t * normalized) / 100;
         }
       }
     } catch {
@@ -280,8 +324,13 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     return true;
   }
 
-  const values = typeof fill === "string" ? [] : readColorValues(fill);
-  const space = typeof fill === "string" ? "" : readSpaceLabel(fill);
+  let values = typeof fill === "string" ? [] : readColorValues(fill);
+  let space = typeof fill === "string" ? "" : readSpaceLabel(fill);
+  const parsed = parseUnnamedColor(typeof fill === "string" ? fill : swatchNameOf(fill));
+  if (parsed) {
+    if (!values.length) values = parsed.values;
+    if (!space) space = parsed.space;
+  }
 
   if ((space === "CMYK" || (!space && values.length >= 4)) && values.length >= 4) {
     const c = scaleChannel(values[0], t);
@@ -384,27 +433,29 @@ export function textFillHasOverprint(target: {
 } | null | undefined): boolean {
   if (!target) return false;
 
+  const candidates: unknown[] = [];
   try {
-    if (target.overprintFill === true) return true;
+    candidates.push(target.overprintFill);
   } catch {
     // ignore
   }
   try {
-    if (target.fillOverprint === true) return true;
+    candidates.push(target.fillOverprint);
   } catch {
     // ignore
   }
   try {
-    if (target.properties?.overprintFill === true) return true;
+    candidates.push(target.properties?.overprintFill);
   } catch {
     // ignore
   }
   try {
-    if (target.properties?.fillOverprint === true) return true;
+    candidates.push(target.properties?.fillOverprint);
   } catch {
     // ignore
   }
-  return false;
+
+  return candidates.some((value) => unwrapBoolean(value) === true);
 }
 
 export function readItemFill(item: PageItem): Swatch | Color | null {

@@ -335,7 +335,7 @@ declare module "indesign" {
 
   export interface Graphic {
     itemLink: Link | null;
-    space: number;
+    space: unknown;
     effectiveResolution: number;
     effectivePpi?: number[];
     actualPpi: number[];
@@ -345,7 +345,7 @@ declare module "indesign" {
 
   export interface Image {
     itemLink: Link | null;
-    space: number;
+    space: unknown;
     effectiveResolution: number;
     effectivePpi?: number[];
     actualPpi: number[];
@@ -363,7 +363,7 @@ declare module "indesign" {
   export interface Color {
     name: string;
     model: number;
-    space: number;
+    space: unknown;
     overprintFill: boolean;
     overprintStroke: boolean;
     parentColorGroup?: ColorGroup | null;
@@ -542,6 +542,7 @@ declare module "indesign" {
     fillTint?: number;
     overprintFill?: boolean;
     fillOverprint?: boolean;
+    parentTextFrames?: PageItems | PageItem[];
     contents?: string;
     length: number;
     isValid: boolean;

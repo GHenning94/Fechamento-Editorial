@@ -121,7 +121,7 @@ export function walkAllPageItems(doc: Document, callback: PageItemCallback): voi
   });
 }
 
-/** Percorre objetos das páginas, da página-mestra aplicada e dos master spreads. */
+/** Percorre objetos das páginas, do spread, da página-mestra aplicada e dos master spreads. */
 export function walkDirectPageItems(doc: Document, callback: PageItemCallback): void {
   forEachPage(doc, (page, pageName) => {
     const items = page.pageItems;
@@ -138,6 +138,29 @@ export function walkDirectPageItems(doc: Document, callback: PageItemCallback): 
       // masterPageItems pode não existir em alguns hosts
     }
   });
+
+  try {
+    forEachCollectionItem<Spread>(doc.spreads, (spread) => {
+      if (!spread?.isValid) return;
+      const spreadPages = getSpreadPages(spread);
+      if (!spread.pageItems) return;
+      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
+        if (!item?.isValid) return;
+        const pageName = resolveNearestPageName(item, spreadPages);
+        const page = spreadPages[0] || null;
+        callback(item, page, pageName);
+        try {
+          if (item.pageItems && item.pageItems.length > 0) {
+            forEachPageItem(item.pageItems, page, pageName, callback, 1);
+          }
+        } catch {
+          // ignore
+        }
+      });
+    });
+  } catch {
+    // ignore
+  }
 
   try {
     forEachCollectionItem<Spread>(doc.masterSpreads, (spread) => {
@@ -431,8 +454,9 @@ function readGraphicSpace(graphic: GraphicLike): unknown {
     imageColorSpace?: unknown;
     colorSpace?: unknown;
     profile?: unknown;
-    properties?: { space?: unknown; imageColorSpace?: unknown };
-    parent?: GraphicLike;
+    imageTypeName?: unknown;
+    properties?: { space?: unknown; imageColorSpace?: unknown; colorSpace?: unknown; profile?: unknown };
+    parent?: GraphicLike & { space?: unknown; images?: unknown };
   };
 
   const tryValue = (getter: () => unknown): unknown => {
@@ -450,13 +474,18 @@ function readGraphicSpace(graphic: GraphicLike): unknown {
     tryValue(() => candidate.colorSpace) ||
     tryValue(() => candidate.properties?.space) ||
     tryValue(() => candidate.properties?.imageColorSpace) ||
+    tryValue(() => candidate.properties?.colorSpace) ||
     tryValue(() => candidate.parent?.space) ||
+    tryValue(() => {
+      const images = (candidate.parent as { images?: { item?: (i: number) => GraphicLike } } | undefined)?.images;
+      return images?.item?.(0)?.space;
+    }) ||
     (() => {
       try {
-        const profile = String(candidate.profile || "");
-        if (/cmyk|fogra|gracol|swop/i.test(profile)) return "CMYK";
-        if (/srgb|adobe rgb|display p3/i.test(profile)) return "RGB";
-        if (/gray|grey/i.test(profile)) return "Gray";
+        const profile = String(candidate.profile || candidate.properties?.profile || "");
+        if (/cmyk|fogra|gracol|swop|japan color|coated|uncoated/i.test(profile)) return "CMYK";
+        if (/srgb|adobe rgb|display p3|apple rgb/i.test(profile)) return "RGB";
+        if (/gray|grey|dot gain|black.?white/i.test(profile)) return "Gray";
       } catch {
         // ignore
       }

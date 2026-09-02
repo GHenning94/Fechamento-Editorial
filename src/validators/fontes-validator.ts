@@ -18,25 +18,22 @@ export class FontesValidator extends BaseValidator {
     return this.safeValidate(doc, () => {
       const issues = [];
       const usedFonts = collectUsedFonts(doc);
+      const seen = new Set<string>();
 
       for (const { font } of usedFonts) {
         const status = getFontStatus(font);
-        const name = fontDisplayName(font) || font.fontFamily || "Fonte";
+        const name = fontDisplayName(font) || "Fonte";
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
 
-        if (isFontMissing(status)) {
+        if (isFontMissing(status) || isFontSubstituted(status)) {
+          seen.add(key);
           issues.push({
-            message: "Fonte ausente",
+            message: isFontMissing(status) ? "Fonte ausente" : "Fonte substituída",
             object: name,
-            details: "A fonte não está instalada. Instale-a ou substitua no texto.",
-          });
-          continue;
-        }
-
-        if (isFontSubstituted(status)) {
-          issues.push({
-            message: "Fonte substituída",
-            object: name,
-            details: "O InDesign está usando uma fonte substituta. Instale a fonte original.",
+            details: isFontMissing(status)
+              ? "A fonte não está instalada. Instale-a ou substitua no texto."
+              : "O InDesign está usando uma fonte substituta. Instale a fonte original.",
           });
         }
       }

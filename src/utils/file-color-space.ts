@@ -408,7 +408,7 @@ function detectEps(bytes: Uint8Array): string | null {
     if (process.includes("red") || process.includes("green") || process.includes("blue")) return "RGB";
   }
 
-  const aiModel = text.match(/%ai\d+_colormodel:\s*(\d+)/);
+  const aiModel = text.match(/%?ai\d+_colormodel:\s*(\d+)/);
   if (aiModel) {
     const mode = Number(aiModel[1]);
     if (mode === 1) return "CMYK";
@@ -428,7 +428,8 @@ function detectEps(bytes: Uint8Array): string | null {
     text.includes("/devicecmyk") ||
     text.includes("cmykcustomcolor") ||
     text.includes("setcmykcolor") ||
-    text.includes("setcmyk")
+    text.includes("setcmyk") ||
+    (text.includes("%%documentprocesscolors") && (text.includes("cyan") || text.includes("black")))
   ) {
     return "CMYK";
   }

@@ -14,6 +14,10 @@ function enumValue(source: unknown, keys: string[]): number | undefined {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "number") return value;
+    if (value && typeof value === "object") {
+      const inner = (value as { value?: unknown }).value;
+      if (typeof inner === "number" && Number.isFinite(inner)) return inner;
+    }
   }
   return undefined;
 }
@@ -90,10 +94,21 @@ export function getImageColorSpaceLabel(space: unknown): string {
     const csHsb = enumValue(ColorSpace, ["HSB", "hsb"]);
 
     for (const candidate of candidates) {
-      if (candidate === icsCmyk || candidate === csCmyk || candidate === IMAGE_SPACE_CMYK || candidate === 0x434d594b) {
+      if (
+        candidate === icsCmyk ||
+        candidate === csCmyk ||
+        candidate === IMAGE_SPACE_CMYK ||
+        candidate === 0x434d594b
+      ) {
         return "CMYK";
       }
-      if (candidate === icsRgb || candidate === csRgb || candidate === IMAGE_SPACE_RGB || candidate === 1380401696) {
+      if (
+        candidate === icsRgb ||
+        candidate === csRgb ||
+        candidate === IMAGE_SPACE_RGB ||
+        candidate === 1380401696 ||
+        candidate === 0x52474220
+      ) {
         return "RGB";
       }
       if (candidate === icsLab || candidate === csLab || candidate === IMAGE_SPACE_LAB) return "LAB";
@@ -197,7 +212,7 @@ export function styleHasOverprintFill(style: ParagraphStyle): boolean {
 export function swatchNameOf(value: { name?: string; isValid?: boolean } | string | null | undefined): string {
   if (typeof value === "string") return value;
   try {
-    if (value && value.isValid !== false) return value.name || "";
+    if (value) return value.name || "";
   } catch {
     // ignore
   }

@@ -20,15 +20,14 @@ export class ImagensColorspaceValidator extends BaseValidator {
         if (fileKey && seenFiles.has(fileKey)) continue;
         if (fileKey) seenFiles.add(fileKey);
 
-        if (graphic.colorSpace === "CMYK") continue;
+        if (graphic.colorSpace === "CMYK" || graphic.colorSpace === "Desconhecido") continue;
 
-        const unidentified = graphic.colorSpace === "Desconhecido";
         issues.push({
-          message: unidentified ? "Espaço de cor não identificado" : `${graphic.colorSpace} encontrado`,
+          message: `${graphic.colorSpace} encontrado`,
           page: graphic.pageName,
           object: graphic.imageName,
           value: graphic.colorSpace,
-          severity: unidentified ? "warning" : "error",
+          severity: "error",
         });
       }
 

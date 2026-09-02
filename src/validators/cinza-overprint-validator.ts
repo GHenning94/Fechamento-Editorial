@@ -1,4 +1,4 @@
-import type { Cell, Document, PageItem, Story, Table, Text, TextStyleRange } from "indesign";
+import type { Document, PageItem, Story, Text, TextStyleRange } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
@@ -57,28 +57,46 @@ function isUtilityItem(item: PageItem): boolean {
   }
 }
 
-function itemHasText(item: PageItem): boolean {
+function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
+  const length = getCollectionLength(collection);
+  if (length > 0) {
+    forEachCollectionItem<TextStyleRange | Text>(collection, (run) => {
+      if (run) onRun(run);
+    });
+    return;
+  }
+
   try {
-    if (getCollectionLength(item.texts) > 0) return true;
+    const coll = collection as { item?: (index: number) => TextStyleRange | Text };
+    if (typeof coll.item !== "function") return;
+    for (let i = 0; i < 20000; i++) {
+      let run: TextStyleRange | Text | null = null;
+      try {
+        run = coll.item(i);
+      } catch {
+        break;
+      }
+      if (!run) break;
+      try {
+        if ((run as { isValid?: boolean }).isValid === false) break;
+      } catch {
+        break;
+      }
+      onRun(run);
+    }
   } catch {
     // ignore
   }
-  const typeName = item.constructor?.name || "";
-  return typeName === "TextFrame" || typeName === "TextPath";
 }
 
 function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   try {
-    const length = (range as { length?: number }).length;
-    if (typeof length === "number" && length <= 0) return true;
+    const contents = (range as { contents?: string }).contents;
+    if (typeof contents === "string" && contents.length > 0) {
+      return contents.trim() === "";
+    }
   } catch {
-    // ignore
-  }
-  try {
-    const contents = String((range as { contents?: string }).contents || "");
-    if (contents.length > 0 && contents.trim() === "") return true;
-  } catch {
-    // contents pode falhar no UXP; não descarta o trecho
+    // UXP muitas vezes não expõe contents
   }
   return false;
 }
@@ -87,119 +105,77 @@ function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
   if (rangeLooksEmpty(range)) return false;
 
   try {
-    const fill = readEffectiveFillColor(range);
-    const tint = readEffectiveFillTint(range);
-    if (!isGrayFill(fill, tint)) return false;
+    const targets: Array<TextStyleRange | Text | { fillColor?: unknown; fillTint?: number }> = [range];
+    try {
+      const first = (range as Text).characters?.item?.(0);
+      if (first) targets.unshift(first);
+    } catch {
+      // ignore
+    }
+
+    const isGray = targets.some((target) =>
+      isGrayFill(readEffectiveFillColor(target as Text), readEffectiveFillTint(target as Text))
+    );
+    if (!isGray) return false;
     return !textFillHasOverprint(range);
   } catch {
     return false;
   }
 }
 
-function rangesHaveGrayWithoutOverprint(collection: unknown): boolean {
-  let found = false;
-  forEachCollectionItem<TextStyleRange | Text>(collection, (range) => {
-    if (found || !range) return;
-    if (rangeIsGrayWithoutOverprint(range)) found = true;
-  });
-  return found;
-}
+function collectParentFrames(range: TextStyleRange | Text, story: Story): PageItem[] {
+  const frames: PageItem[] = [];
+  const seen = new Set<PageItem>();
+  const push = (item: PageItem | null | undefined): void => {
+    if (!item) return;
+    try {
+      if (item.isValid === false) return;
+    } catch {
+      return;
+    }
+    if (seen.has(item)) return;
+    seen.add(item);
+    frames.push(item);
+  };
 
-function visitTextRuns(source: unknown, onRun: (run: TextStyleRange | Text) => void): void {
-  if (!source || typeof source !== "object") return;
-
-  const collection = source as { item?: (index: number) => unknown; length?: number };
-  const hasItem = typeof collection.item === "function";
-  const length = getCollectionLength(source);
-  if (length > 0 || hasItem) {
-    forEachCollectionItem<TextStyleRange | Text>(source, (run) => {
-      if (run) onRun(run);
-    });
-    return;
+  try {
+    forEachTextRun((range as Text).parentTextFrames, (item) => push(item as PageItem));
+  } catch {
+    // ignore
   }
 
   try {
-    if ("fillColor" in source || "overprintFill" in source || "appliedParagraphStyle" in source) {
-      onRun(source as Text);
+    const containers = (range as Text & { parentTextFrames?: unknown }).parentTextFrames;
+    if (Array.isArray(containers)) {
+      for (const item of containers) push(item as PageItem);
     }
   } catch {
     // ignore
   }
+
+  if (frames.length === 0) {
+    try {
+      forEachTextRun(story.textContainers, (item) => push(item as PageItem));
+    } catch {
+      // ignore
+    }
+  }
+
+  return frames;
 }
 
-function cellHasColoredFill(cell: Cell): boolean {
-  try {
-    return isColoredBackgroundFill(cell.fillColor, readFillTint(cell));
-  } catch {
-    return false;
-  }
-}
+function frameIsOnColoredBackground(frame: PageItem, snaps: ItemSnap[]): boolean {
+  const fill = readItemFill(frame);
+  if (isColoredBackgroundFill(fill, readFillTint(frame))) return true;
 
-function itemHasGrayWithoutOverprint(item: PageItem, frameOnColoredBg: boolean): boolean {
-  let found = false;
+  const bounds = readBounds(frame);
+  if (bounds.length < 4) return false;
 
-  const consider = (collection: unknown, colored: boolean): void => {
-    if (found || !colored) return;
-    visitTextRuns(collection, (run) => {
-      if (found) return;
-      if (rangeIsGrayWithoutOverprint(run)) found = true;
-    });
-  };
-
-  try {
-    visitTextRuns(item.texts, (text) => {
-      if (found) return;
-      consider((text as Text).textStyleRanges, frameOnColoredBg);
-      if (found) return;
-      consider((text as Text).paragraphs, frameOnColoredBg);
-      if (found) return;
-      consider((text as Text).characters, frameOnColoredBg);
-      if (found) return;
-      if (rangeIsGrayWithoutOverprint(text) && frameOnColoredBg) found = true;
-    });
-  } catch {
-    // ignore
-  }
-
-  try {
-    consider((item as PageItem & { paragraphs?: unknown }).paragraphs, frameOnColoredBg);
-    consider((item as PageItem & { characters?: unknown }).characters, frameOnColoredBg);
-  } catch {
-    // ignore
-  }
-
-  try {
-    const story = item.parentStory as Story | undefined;
-    if (!story?.isValid) return found;
-
-    forEachCollectionItem<Table>(story.tables, (table) => {
-      if (found || !table?.isValid) return;
-      forEachCollectionItem<Cell>(table.cells, (cell) => {
-        if (found || !cell?.isValid) return;
-        const colored = frameOnColoredBg || cellHasColoredFill(cell);
-        consider(cell.textStyleRanges, colored);
-        if (found) return;
-        consider(cell.texts, colored);
-        if (found) return;
-        consider(cell.paragraphs, colored);
-      });
-    });
-  } catch {
-    // ignore
-  }
-
-  return found;
-}
-
-function isOnColoredBackground(snap: ItemSnap, others: ItemSnap[]): boolean {
-  if (snap.coloredFill) return true;
-  if (snap.bounds.length < 4) return false;
-
-  for (const other of others) {
-    if (other.item === snap.item) continue;
+  for (const other of snaps) {
+    if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
-    if (geometricBoundsOverlap(snap.bounds, other.bounds)) return true;
+    if (geometricBoundsOverlap(bounds, other.bounds)) return true;
   }
 
   return false;
@@ -248,25 +224,53 @@ export class CinzaOverprintValidator extends BaseValidator {
 
       const seen = new Set<string>();
 
-      for (const snap of snaps) {
-        if (snap.utility) continue;
-        if (!itemHasText(snap.item)) continue;
-
-        const onColored = isOnColoredBackground(snap, snaps);
-        if (!itemHasGrayWithoutOverprint(snap.item, onColored)) continue;
-
-        const objectName = getPageItemDisplayName(snap.item);
-        const key = `${snap.pageName}::${objectName}::${snap.bounds.join(",")}`;
-        if (seen.has(key)) continue;
+      const reportFrame = (frame: PageItem): void => {
+        if (isUtilityItem(frame)) return;
+        const snap = snaps.find((item) => item.item === frame);
+        const pageName = snap?.pageName || "";
+        const objectName = getPageItemDisplayName(frame);
+        const bounds = snap?.bounds?.length ? snap.bounds : readBounds(frame);
+        const key = `${pageName}::${objectName}::${bounds.join(",")}`;
+        if (seen.has(key)) return;
         seen.add(key);
-
         issues.push({
           message: "Cinza sobre fundo colorido sem overprint",
-          page: snap.pageName,
+          page: pageName,
           object: objectName,
           details: FIX_DETAILS,
         });
-      }
+      };
+
+      forEachCollectionItem<Story>(doc.stories, (story) => {
+        if (!story?.isValid) return;
+        try {
+          if (isPluginUtilityLayerName(story.itemLayer?.name || "")) return;
+        } catch {
+          // ignore
+        }
+
+        const consider = (run: TextStyleRange | Text): void => {
+          if (!rangeIsGrayWithoutOverprint(run)) return;
+          const frames = collectParentFrames(run, story);
+          if (frames.length === 0) return;
+          for (const frame of frames) {
+            if (frameIsOnColoredBackground(frame, snaps)) {
+              reportFrame(frame);
+            }
+          }
+        };
+
+        try {
+          forEachTextRun(story.textStyleRanges, consider);
+        } catch {
+          // ignore
+        }
+        try {
+          forEachTextRun(story.paragraphs, consider);
+        } catch {
+          // ignore
+        }
+      });
 
       return createResult(this.id, this.name, issues, "error");
     });
