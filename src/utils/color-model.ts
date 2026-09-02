@@ -19,9 +19,101 @@ function enumValue(source: unknown, keys: string[]): number | undefined {
 }
 
 function labelOf(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") {
+    return value.toLowerCase().replace(/[^a-z]/g, "");
+  }
+  if (typeof value === "number" && Number.isFinite(value) && value > 255) {
+    const chars = [
+      (value >>> 24) & 255,
+      (value >>> 16) & 255,
+      (value >>> 8) & 255,
+      value & 255,
+    ]
+      .map((code) => (code >= 32 && code < 127 ? String.fromCharCode(code) : ""))
+      .join("");
+    if (chars.trim()) return chars.toLowerCase().replace(/[^a-z]/g, "");
+  }
+  if (typeof value === "object") {
+    const rec = value as { name?: unknown; value?: unknown };
+    if (typeof rec.name === "string" && rec.name.trim()) return labelOf(rec.name);
+    if (rec.value != null && rec.value !== value) return labelOf(rec.value);
+    try {
+      const text = String(value);
+      if (text && text !== "[object Object]") return labelOf(text);
+    } catch {
+      // ignore
+    }
+  }
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z]/g, "");
+}
+
+function unwrapColorSpaceCandidates(space: unknown): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<unknown>();
+  const push = (item: unknown): void => {
+    if (item == null || seen.has(item)) return;
+    seen.add(item);
+    out.push(item);
+  };
+
+  push(space);
+  if (space && typeof space === "object") {
+    const rec = space as Record<string, unknown>;
+    for (const key of ["value", "Value", "name", "Name", "id"]) {
+      push(rec[key]);
+    }
+  }
+  return out;
+}
+
+export function getImageColorSpaceLabel(space: unknown): string {
+  if (space == null || space === 0 || space === "0") return "Desconhecido";
+
+  const candidates = unwrapColorSpaceCandidates(space);
+
+  try {
+    const { ImageColorSpace, ColorSpace } = getInDesignModule() as {
+      ImageColorSpace?: { CMYK?: number; RGB?: number; LAB?: number; GRAY?: number; gray?: number };
+      ColorSpace?: { CMYK?: number; RGB?: number; LAB?: number; HSB?: number };
+    };
+
+    const icsCmyk = enumValue(ImageColorSpace, ["CMYK", "cmyk"]);
+    const icsRgb = enumValue(ImageColorSpace, ["RGB", "rgb"]);
+    const icsLab = enumValue(ImageColorSpace, ["LAB", "lab"]);
+    const icsGray = enumValue(ImageColorSpace, ["GRAY", "gray", "GREY", "grey"]);
+    const csCmyk = enumValue(ColorSpace, ["CMYK", "cmyk"]);
+    const csRgb = enumValue(ColorSpace, ["RGB", "rgb"]);
+    const csLab = enumValue(ColorSpace, ["LAB", "lab"]);
+    const csHsb = enumValue(ColorSpace, ["HSB", "hsb"]);
+
+    for (const candidate of candidates) {
+      if (candidate === icsCmyk || candidate === csCmyk || candidate === IMAGE_SPACE_CMYK || candidate === 0x434d594b) {
+        return "CMYK";
+      }
+      if (candidate === icsRgb || candidate === csRgb || candidate === IMAGE_SPACE_RGB || candidate === 1380401696) {
+        return "RGB";
+      }
+      if (candidate === icsLab || candidate === csLab || candidate === IMAGE_SPACE_LAB) return "LAB";
+      if (candidate === icsGray || candidate === IMAGE_SPACE_GRAY) return "Gray";
+      if (candidate === csHsb) return "HSB";
+    }
+  } catch {
+    // fallback por rótulo
+  }
+
+  for (const candidate of candidates) {
+    const label = labelOf(candidate);
+    if (!label || label === "objectobject" || label === "unknown" || label === "unset") continue;
+    if (label.includes("cmyk")) return "CMYK";
+    if (label.includes("rgb")) return "RGB";
+    if (label.includes("lab")) return "LAB";
+    if (label.includes("gray") || label.includes("grey")) return "Gray";
+    if (label.includes("hsb")) return "HSB";
+  }
+  return "Desconhecido";
 }
 
 export function isSpotColor(color: Color): boolean {
@@ -66,42 +158,6 @@ export function readColorOverprintFill(color: Color): boolean | null {
   return null;
 }
 
-export function getImageColorSpaceLabel(space: unknown): string {
-  if (space == null || space === 0 || space === "0") return "Desconhecido";
-
-  try {
-    const { ImageColorSpace, ColorSpace } = getInDesignModule() as {
-      ImageColorSpace?: { CMYK?: number; RGB?: number; LAB?: number; GRAY?: number };
-      ColorSpace?: { CMYK?: number; RGB?: number; LAB?: number; HSB?: number };
-    };
-
-    const icsCmyk = enumValue(ImageColorSpace, ["CMYK", "cmyk"]);
-    const icsRgb = enumValue(ImageColorSpace, ["RGB", "rgb"]);
-    const icsLab = enumValue(ImageColorSpace, ["LAB", "lab"]);
-    const icsGray = enumValue(ImageColorSpace, ["GRAY", "gray"]);
-    const csCmyk = enumValue(ColorSpace, ["CMYK", "cmyk"]);
-    const csRgb = enumValue(ColorSpace, ["RGB", "rgb"]);
-    const csLab = enumValue(ColorSpace, ["LAB", "lab"]);
-    const csHsb = enumValue(ColorSpace, ["HSB", "hsb"]);
-
-    if (space === icsCmyk || space === csCmyk || space === IMAGE_SPACE_CMYK || space === 0x434d594b) return "CMYK";
-    if (space === icsRgb || space === csRgb || space === IMAGE_SPACE_RGB || space === 1380401696) return "RGB";
-    if (space === icsLab || space === csLab || space === IMAGE_SPACE_LAB) return "LAB";
-    if (space === icsGray || space === IMAGE_SPACE_GRAY) return "Gray";
-    if (space === csHsb) return "HSB";
-  } catch {
-    // fallback por rótulo
-  }
-
-  const label = labelOf(space);
-  if (label.includes("cmyk")) return "CMYK";
-  if (label.includes("rgb")) return "RGB";
-  if (label.includes("lab")) return "LAB";
-  if (label.includes("gray") || label.includes("grey")) return "Gray";
-  if (label.includes("hsb")) return "HSB";
-  return "Desconhecido";
-}
-
 export function itemHasFillOverprint(item: PageItem): boolean {
   try {
     if (item.fillOverprint === true) return true;
@@ -138,7 +194,8 @@ export function styleHasOverprintFill(style: ParagraphStyle): boolean {
   }
 }
 
-export function swatchNameOf(value: { name?: string; isValid?: boolean } | null | undefined): string {
+export function swatchNameOf(value: { name?: string; isValid?: boolean } | string | null | undefined): string {
+  if (typeof value === "string") return value;
   try {
     if (value && value.isValid !== false) return value.name || "";
   } catch {

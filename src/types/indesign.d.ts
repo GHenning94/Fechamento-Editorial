@@ -434,6 +434,8 @@ declare module "indesign" {
     spaceAfter: number;
     leftIndent: number;
     overprintFill: boolean;
+    basedOn?: ParagraphStyle | string;
+    properties?: Record<string, unknown>;
   }
 
   export interface Languages {
@@ -468,6 +470,7 @@ declare module "indesign" {
   export interface CharacterStyle {
     name: string;
     isValid: boolean;
+    appliedFont?: Font | string;
     overprintFill?: boolean;
   }
 
@@ -499,7 +502,7 @@ declare module "indesign" {
     fontFamily: string;
     fontStyleName?: string;
     fullName?: string;
-    status: number;
+    status: unknown;
     isValid: boolean;
   }
 

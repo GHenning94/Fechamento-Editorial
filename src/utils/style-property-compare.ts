@@ -44,34 +44,149 @@ export function formatFoundMeasurement(actual: number, expectedMm: number): stri
   return String(actual);
 }
 
+type StyleWithInheritance = ParagraphStyle & {
+  basedOn?: unknown;
+  properties?: Record<string, unknown>;
+};
+
+const LEADING_AUTO = 1635019116;
+const NOTHING_ENUM = 1851876449;
+
+function tryRead(getter: () => unknown): unknown {
+  try {
+    return getter();
+  } catch {
+    return undefined;
+  }
+}
+
+function isNothingNumeric(value: unknown): boolean {
+  return typeof value === "number" && value === NOTHING_ENUM;
+}
+
+function leadingLabel(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const rec = value as { name?: unknown };
+    if (typeof rec.name === "string") return rec.name;
+    try {
+      const text = String(value);
+      if (text && text !== "[object Object]") return text;
+    } catch {
+      // ignore
+    }
+  }
+  return "";
+}
+
+function looksLikeAutoLeading(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "number") {
+    try {
+      const { Leading } = getInDesignModule();
+      const L = Leading as { AUTO?: number; auto?: number };
+      if (typeof L.AUTO === "number" && value === L.AUTO) return true;
+      if (typeof L.auto === "number" && value === L.auto) return true;
+    } catch {
+      // ignore
+    }
+    return value === LEADING_AUTO;
+  }
+
+  const label = leadingLabel(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/g, "");
+  if (label === "auto" || label === "automatica" || label === "automatic" || label.includes("auto")) {
+    return true;
+  }
+
+  if (value && typeof value === "object") {
+    const rec = value as { value?: unknown };
+    if (rec.value !== value && looksLikeAutoLeading(rec.value)) return true;
+  }
+  return false;
+}
+
+function coerceStyleNumber(raw: unknown, property: keyof ParagraphStyle): number | null {
+  if (raw == null) return null;
+  if (property === "leading" && looksLikeAutoLeading(raw)) return LEADING_AUTO;
+
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw) || isNothingNumeric(raw)) return null;
+    return raw;
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (property === "leading" && looksLikeAutoLeading(trimmed)) return LEADING_AUTO;
+    const parsed = Number(trimmed.replace(",", "."));
+    if (Number.isFinite(parsed)) return parsed;
+    return null;
+  }
+
+  if (typeof raw === "object") {
+    const rec = raw as { value?: unknown; numberValue?: unknown };
+    if (typeof rec.value === "number" && Number.isFinite(rec.value) && !isNothingNumeric(rec.value)) {
+      if (property === "leading" && looksLikeAutoLeading(rec.value)) return LEADING_AUTO;
+      return rec.value;
+    }
+    if (typeof rec.numberValue === "number" && Number.isFinite(rec.numberValue)) {
+      return rec.numberValue;
+    }
+    const coerced = Number(raw);
+    if (Number.isFinite(coerced) && coerced > 1000) return coerced;
+  }
+
+  return null;
+}
+
+function isEmptyStyleRaw(value: unknown): boolean {
+  if (value == null) return true;
+  return isNothingNumeric(value);
+}
+
+function readInheritedRaw(style: ParagraphStyle, property: keyof ParagraphStyle): unknown {
+  const seen = new Set<unknown>();
+  let current: unknown = style;
+
+  for (let depth = 0; depth < 12; depth++) {
+    if (!current || typeof current !== "object" || seen.has(current)) break;
+    seen.add(current);
+    const candidate = current as StyleWithInheritance;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const direct = tryRead(() => candidate[property]);
+      if (!isEmptyStyleRaw(direct)) return direct;
+
+      const fromProps = tryRead(() => candidate.properties?.[property as string]);
+      if (!isEmptyStyleRaw(fromProps)) return fromProps;
+    }
+
+    current = tryRead(() => candidate.basedOn);
+  }
+
+  return undefined;
+}
+
+/**
+ * Lê número do estilo com fallbacks do UXP (enum object, properties, basedOn).
+ * Falha de leitura não vira erro: o valor intermitente do host gerava falso positivo.
+ */
 export function readNumberProperty(
   style: ParagraphStyle,
   property: keyof ParagraphStyle,
-  label: string
+  _label: string
 ): { value: number | null; issue: StylePropertyIssue | null } {
-  try {
-    const raw = style[property];
-    if (typeof raw !== "number" || Number.isNaN(raw)) {
-      return {
-        value: null,
-        issue: {
-          property: label,
-          expected: "Valor numérico",
-          actual: "Não foi possível ler",
-        },
-      };
-    }
-    return { value: raw, issue: null };
-  } catch {
-    return {
-      value: null,
-      issue: {
-        property: label,
-        expected: "Valor numérico",
-        actual: "Não foi possível ler",
-      },
-    };
-  }
+  const raw = readInheritedRaw(style, property);
+  const value = coerceStyleNumber(raw, property);
+  return { value, issue: null };
+}
+
+export function formatLeadingActual(value: number): string {
+  return isAutoLeadingValue(value) ? "Automática" : `${value} pt`;
 }
 
 export function pushIssue(
@@ -167,16 +282,8 @@ export function isOpticalKerning(value: unknown): boolean {
   return value === 1851876449 || value === 1332764527;
 }
 
-export function isAutoLeadingValue(leading: number): boolean {
-  try {
-    const { Leading } = getInDesignModule();
-    const L = Leading as { AUTO?: number; auto?: number };
-    if (typeof L.AUTO === "number" && leading === L.AUTO) return true;
-    if (typeof L.auto === "number" && leading === L.auto) return true;
-  } catch {
-    // ignore
-  }
-  return leading === 1635019116;
+export function isAutoLeadingValue(leading: unknown): boolean {
+  return looksLikeAutoLeading(leading);
 }
 
 export function isCenterAlign(justification: number): boolean {
@@ -218,7 +325,6 @@ export function isRightAlign(justification: number): boolean {
 /** Códigos de 4 chars do InDesign (Justification). */
 const JUSTIFICATION_LEFT_ALIGN = 1818584692; // left
 const JUSTIFICATION_LEFT_JUSTIFIED = 1818915700; // ljst
-const NOTHING_ENUM = 1851876449;
 
 function justificationNumeric(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;

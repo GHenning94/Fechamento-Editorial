@@ -6,6 +6,7 @@ import {
   StylePropertyIssue,
   approxEqual,
   compareSpacingMm,
+  formatLeadingActual,
   formatMm,
   isAcceptedLanguage,
   isAutoLeadingValue,
@@ -194,22 +195,21 @@ export function compareProfessorStyle(
   }
 
   const leading = readNumberProperty(style, "leading", "Entrelinha");
-  pushIssue(issues, leading.issue);
   if (leading.value !== null) {
     if (profile.leadingMode === "fixed") {
       const expectedLeading = profile.leadingPt ?? DEFAULT_PROFESSOR_PROFILE.leadingPt!;
-      if (!approxEqual(leading.value, expectedLeading, SIZE_TOLERANCE_PT)) {
+      if (isAutoLeadingValue(leading.value) || !approxEqual(leading.value, expectedLeading, SIZE_TOLERANCE_PT)) {
         issues.push({
           property: "Entrelinha",
           expected: `${expectedLeading} pt`,
-          actual: `${leading.value} pt`,
+          actual: formatLeadingActual(leading.value),
         });
       }
     } else if (!isAutoLeadingValue(leading.value)) {
       issues.push({
         property: "Entrelinha",
         expected: "Automática",
-        actual: `${leading.value} pt`,
+        actual: formatLeadingActual(leading.value),
       });
     }
   }

@@ -420,58 +420,109 @@ export function getPageItemDedupKey(item: PageItem): string {
   }
 }
 
+function isUsableSpaceValue(value: unknown): boolean {
+  if (value == null || value === 0 || value === "0") return false;
+  if (typeof value === "string" && !value.trim()) return false;
+  return true;
+}
+
 function readGraphicSpace(graphic: GraphicLike): unknown {
   const candidate = graphic as GraphicLike & {
     imageColorSpace?: unknown;
     colorSpace?: unknown;
     profile?: unknown;
-    properties?: { space?: unknown };
+    properties?: { space?: unknown; imageColorSpace?: unknown };
+    parent?: GraphicLike;
   };
+
+  const tryValue = (getter: () => unknown): unknown => {
+    try {
+      const value = getter();
+      return isUsableSpaceValue(value) ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  return (
+    tryValue(() => graphic.space) ||
+    tryValue(() => candidate.imageColorSpace) ||
+    tryValue(() => candidate.colorSpace) ||
+    tryValue(() => candidate.properties?.space) ||
+    tryValue(() => candidate.properties?.imageColorSpace) ||
+    tryValue(() => candidate.parent?.space) ||
+    (() => {
+      try {
+        const profile = String(candidate.profile || "");
+        if (/cmyk|fogra|gracol|swop/i.test(profile)) return "CMYK";
+        if (/srgb|adobe rgb|display p3/i.test(profile)) return "RGB";
+        if (/gray|grey/i.test(profile)) return "Gray";
+      } catch {
+        // ignore
+      }
+      return null;
+    })()
+  );
+}
+
+function basenameFromPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  const base = index >= 0 ? normalized.slice(index + 1) : normalized;
   try {
-    if (graphic.space != null) return graphic.space;
+    return decodeURIComponent(base);
   } catch {
-    // ignore
+    return base;
   }
+}
+
+function readItemLink(source: unknown): import("indesign").Link | null {
+  if (!source || typeof source !== "object") return null;
   try {
-    if (candidate.imageColorSpace != null) return candidate.imageColorSpace;
-  } catch {
-    // ignore
-  }
-  try {
-    if (candidate.colorSpace != null) return candidate.colorSpace;
-  } catch {
-    // ignore
-  }
-  try {
-    if (candidate.properties?.space != null) return candidate.properties.space;
-  } catch {
-    // ignore
-  }
-  try {
-    const profile = String(candidate.profile || "");
-    if (/cmyk|fogra|gracol|swop/i.test(profile)) return "CMYK";
-    if (/srgb|adobe rgb|display p3/i.test(profile)) return "RGB";
-    if (/gray|grey/i.test(profile)) return "Gray";
+    const link = (source as { itemLink?: import("indesign").Link | null }).itemLink;
+    if (link && link.isValid) return link;
   } catch {
     // ignore
   }
   return null;
 }
 
-function readLinkMeta(graphic: GraphicLike): { name: string; filePath: string; linkId: number | null } {
+function readLinkMeta(
+  graphic: GraphicLike,
+  item?: PageItem
+): { name: string; filePath: string; filePaths: string[]; linkId: number | null } {
+  const parents: unknown[] = [graphic, item];
   try {
-    const link = graphic.itemLink;
-    if (link && link.isValid) {
-      return {
-        name: link.name || "",
-        filePath: coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI),
-        linkId: typeof link.id === "number" ? link.id : null,
-      };
-    }
+    parents.push((graphic as GraphicLike & { parent?: unknown }).parent);
   } catch {
     // ignore
   }
-  return { name: "", filePath: "", linkId: null };
+  try {
+    if (item) parents.push((item as PageItem & { parent?: unknown }).parent);
+  } catch {
+    // ignore
+  }
+
+  let link: import("indesign").Link | null = null;
+  for (const source of parents) {
+    link = readItemLink(source);
+    if (link) break;
+  }
+
+  if (!link) {
+    return { name: "", filePath: "", filePaths: [], linkId: null };
+  }
+
+  const filePath = coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI);
+  const uri = coerceFilePath(link.linkResourceURI);
+  const filePaths = [filePath, uri].filter((value, index, all) => value && all.indexOf(value) === index);
+  const name = link.name || basenameFromPath(filePath) || "";
+  return {
+    name,
+    filePath,
+    filePaths,
+    linkId: typeof link.id === "number" ? link.id : null,
+  };
 }
 
 type GraphicLike = {
@@ -504,13 +555,13 @@ export function getGraphicDpi(graphic: GraphicLike): number {
 }
 
 function graphicIdentity(graphic: GraphicLike, item: PageItem): string {
+  const meta = readLinkMeta(graphic, item);
+  if (meta.linkId != null) return `link:${meta.linkId}`;
+  if (meta.name) return `name:${meta.name}`;
   try {
     const link = graphic.itemLink;
     if (link && link.isValid && typeof link.id === "number") {
       return `link:${link.id}`;
-    }
-    if (link && link.isValid && link.name) {
-      return `name:${link.name}`;
     }
   } catch {
     // ignore
@@ -530,7 +581,7 @@ export function collectGraphicsFromItem(
     if (seen.has(key)) return;
     seen.add(key);
 
-    const meta = readLinkMeta(graphic);
+    const meta = readLinkMeta(graphic, item);
     const imageName = meta.name || item.name || "Imagem";
 
     graphics.push({
@@ -541,6 +592,7 @@ export function collectGraphicsFromItem(
         space: readGraphicSpace(graphic),
         fileName: imageName,
         filePath: meta.filePath,
+        filePaths: meta.filePaths,
         linkId: meta.linkId,
       }),
       pageItem: item,
@@ -594,12 +646,13 @@ export function collectGraphicsFromLinks(
       // ignore
     }
 
-    const imageName = link.name || "Imagem";
+    const filePath = coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI);
+    const uri = coerceFilePath(link.linkResourceURI);
+    const imageName = link.name || basenameFromPath(filePath) || "Imagem";
     const key = `link:${link.id}`;
     if (seen.has(key)) return;
     seen.add(key);
 
-    const filePath = coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI);
     graphics.push({
       pageName,
       imageName,
@@ -608,6 +661,7 @@ export function collectGraphicsFromLinks(
         space: readGraphicSpace(graphic),
         fileName: imageName,
         filePath,
+        filePaths: [filePath, uri].filter(Boolean),
         linkId: link.id,
       }),
       pageItem: pageItem || (graphic as unknown as PageItem),

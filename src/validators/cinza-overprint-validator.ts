@@ -2,18 +2,20 @@ import type { Cell, Document, PageItem, Story, Table, Text, TextStyleRange } fro
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
-import { forEachCollectionItem } from "../utils/collection-helpers";
+import { forEachCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
   geometricBoundsOverlap,
   isColoredBackgroundFill,
   isGrayFill,
   itemHasPlacedGraphic,
+  readEffectiveFillColor,
+  readEffectiveFillTint,
   readFillTint,
   readItemFill,
   textFillHasOverprint,
 } from "../utils/fill-color";
-import { getPageItemDisplayName, walkDirectPageItems } from "../utils/indesign-helpers";
+import { collectGraphics, getPageItemDisplayName, walkDirectPageItems } from "../utils/indesign-helpers";
 
 const FIX_DETAILS =
   "Aplique overprint no preenchimento do texto cinza. Preferência: preto 100%.";
@@ -34,6 +36,14 @@ function readBounds(item: PageItem): number[] {
       return bounds.map((value) => Number(value));
     }
   } catch {
+    // tenta visibleBounds
+  }
+  try {
+    const visible = (item as PageItem & { visibleBounds?: number[] }).visibleBounds;
+    if (Array.isArray(visible) && visible.length >= 4) {
+      return visible.map((value) => Number(value));
+    }
+  } catch {
     // ignore
   }
   return [];
@@ -49,8 +59,7 @@ function isUtilityItem(item: PageItem): boolean {
 
 function itemHasText(item: PageItem): boolean {
   try {
-    const texts = item.texts;
-    if (texts && typeof texts.length === "number" && texts.length > 0) return true;
+    if (getCollectionLength(item.texts) > 0) return true;
   } catch {
     // ignore
   }
@@ -58,17 +67,28 @@ function itemHasText(item: PageItem): boolean {
   return typeName === "TextFrame" || typeName === "TextPath";
 }
 
-function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
+function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   try {
-    const contents = String((range as { contents?: string }).contents || "").trim();
-    if (!contents) return false;
+    const length = (range as { length?: number }).length;
+    if (typeof length === "number" && length <= 0) return true;
   } catch {
-    return false;
+    // ignore
   }
+  try {
+    const contents = String((range as { contents?: string }).contents || "");
+    if (contents.length > 0 && contents.trim() === "") return true;
+  } catch {
+    // contents pode falhar no UXP; não descarta o trecho
+  }
+  return false;
+}
+
+function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
+  if (rangeLooksEmpty(range)) return false;
 
   try {
-    const fill = (range as { fillColor?: TextStyleRange["fillColor"] }).fillColor;
-    const tint = readFillTint(range);
+    const fill = readEffectiveFillColor(range);
+    const tint = readEffectiveFillTint(range);
     if (!isGrayFill(fill, tint)) return false;
     return !textFillHasOverprint(range);
   } catch {
@@ -85,6 +105,28 @@ function rangesHaveGrayWithoutOverprint(collection: unknown): boolean {
   return found;
 }
 
+function visitTextRuns(source: unknown, onRun: (run: TextStyleRange | Text) => void): void {
+  if (!source || typeof source !== "object") return;
+
+  const collection = source as { item?: (index: number) => unknown; length?: number };
+  const hasItem = typeof collection.item === "function";
+  const length = getCollectionLength(source);
+  if (length > 0 || hasItem) {
+    forEachCollectionItem<TextStyleRange | Text>(source, (run) => {
+      if (run) onRun(run);
+    });
+    return;
+  }
+
+  try {
+    if ("fillColor" in source || "overprintFill" in source || "appliedParagraphStyle" in source) {
+      onRun(source as Text);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function cellHasColoredFill(cell: Cell): boolean {
   try {
     return isColoredBackgroundFill(cell.fillColor, readFillTint(cell));
@@ -98,16 +140,30 @@ function itemHasGrayWithoutOverprint(item: PageItem, frameOnColoredBg: boolean):
 
   const consider = (collection: unknown, colored: boolean): void => {
     if (found || !colored) return;
-    if (rangesHaveGrayWithoutOverprint(collection)) found = true;
+    visitTextRuns(collection, (run) => {
+      if (found) return;
+      if (rangeIsGrayWithoutOverprint(run)) found = true;
+    });
   };
 
   try {
-    forEachCollectionItem<Text>(item.texts, (text) => {
-      if (found || !text) return;
-      consider(text.textStyleRanges, frameOnColoredBg);
+    visitTextRuns(item.texts, (text) => {
       if (found) return;
-      consider(text.paragraphs, frameOnColoredBg);
+      consider((text as Text).textStyleRanges, frameOnColoredBg);
+      if (found) return;
+      consider((text as Text).paragraphs, frameOnColoredBg);
+      if (found) return;
+      consider((text as Text).characters, frameOnColoredBg);
+      if (found) return;
+      if (rangeIsGrayWithoutOverprint(text) && frameOnColoredBg) found = true;
     });
+  } catch {
+    // ignore
+  }
+
+  try {
+    consider((item as PageItem & { paragraphs?: unknown }).paragraphs, frameOnColoredBg);
+    consider((item as PageItem & { characters?: unknown }).characters, frameOnColoredBg);
   } catch {
     // ignore
   }
@@ -137,10 +193,10 @@ function itemHasGrayWithoutOverprint(item: PageItem, frameOnColoredBg: boolean):
 
 function isOnColoredBackground(snap: ItemSnap, others: ItemSnap[]): boolean {
   if (snap.coloredFill) return true;
+  if (snap.bounds.length < 4) return false;
 
   for (const other of others) {
     if (other.item === snap.item) continue;
-    if (other.pageName !== snap.pageName) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
     if (geometricBoundsOverlap(snap.bounds, other.bounds)) return true;
@@ -170,6 +226,25 @@ export class CinzaOverprintValidator extends BaseValidator {
           hasGraphic: itemHasPlacedGraphic(item),
         });
       });
+
+      try {
+        for (const graphic of collectGraphics(doc)) {
+          const pageItem = graphic.pageItem;
+          if (!pageItem?.isValid) continue;
+          const bounds = readBounds(pageItem);
+          if (bounds.length < 4) continue;
+          snaps.push({
+            item: pageItem,
+            pageName: graphic.pageName,
+            bounds,
+            utility: isUtilityItem(pageItem),
+            coloredFill: false,
+            hasGraphic: true,
+          });
+        }
+      } catch {
+        // collectGraphics pode falhar em documentos corrompidos
+      }
 
       const seen = new Set<string>();
 

@@ -5,6 +5,7 @@ import {
   StylePropertyIssue,
   approxEqual,
   compareSpacingMm,
+  formatLeadingActual,
   formatMm,
   isAcceptedLanguage,
   isAutoLeadingValue,
@@ -76,12 +77,11 @@ export function compareCreditoStyle(style: ParagraphStyle): StylePropertyIssue[]
   }
 
   const leading = readNumberProperty(style, "leading", "Entrelinha");
-  pushIssue(issues, leading.issue);
   if (leading.value !== null && !isAutoLeadingValue(leading.value)) {
     issues.push({
       property: "Entrelinha",
       expected: "Automática",
-      actual: `${leading.value} pt`,
+      actual: formatLeadingActual(leading.value),
     });
   }
 

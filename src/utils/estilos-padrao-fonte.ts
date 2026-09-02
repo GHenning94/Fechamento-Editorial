@@ -6,6 +6,7 @@ import {
   StylePropertyIssue,
   approxEqual,
   compareSpacingMm,
+  formatLeadingActual,
   formatMm,
   isAcceptedLanguage,
   isObliqueFontStyle,
@@ -137,12 +138,11 @@ export function compareFonteStyle(
   }
 
   const leading = readNumberProperty(style, "leading", "Entrelinha");
-  pushIssue(issues, leading.issue);
   if (leading.value !== null && !approxEqual(leading.value, profile.leadingPt, SIZE_TOLERANCE_PT)) {
     issues.push({
       property: "Entrelinha",
       expected: `${profile.leadingPt} pt`,
-      actual: `${leading.value} pt`,
+      actual: formatLeadingActual(leading.value),
     });
   }
 

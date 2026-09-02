@@ -15,23 +15,40 @@ const uxp = require("uxp") as {
 
 const cacheByLinkId = new Map<number, string>();
 const cacheByName = new Map<string, string>();
+const cacheByPath = new Map<string, string>();
 const HEAD_BYTES = 524288;
 
 export function clearFileColorSpaceCache(): void {
   cacheByLinkId.clear();
   cacheByName.clear();
+  cacheByPath.clear();
 }
 
-export function rememberFileColorSpace(linkId: number | null, fileName: string, space: string): void {
+export function rememberFileColorSpace(
+  linkId: number | null,
+  fileName: string,
+  space: string,
+  filePath?: string
+): void {
   if (space === "Desconhecido") return;
   if (linkId != null) cacheByLinkId.set(linkId, space);
   const key = (fileName || "").toLowerCase();
   if (key) cacheByName.set(key, space);
+  const pathKey = coerceFilePath(filePath || "").toLowerCase();
+  if (pathKey) cacheByPath.set(pathKey, space);
 }
 
-export function lookupFileColorSpace(linkId: number | null, fileName: string): string | null {
+export function lookupFileColorSpace(
+  linkId: number | null,
+  fileName: string,
+  filePath?: string
+): string | null {
   if (linkId != null && cacheByLinkId.has(linkId)) {
     return cacheByLinkId.get(linkId) || null;
+  }
+  const pathKey = coerceFilePath(filePath || "").toLowerCase();
+  if (pathKey && cacheByPath.has(pathKey)) {
+    return cacheByPath.get(pathKey) || null;
   }
   const key = (fileName || "").toLowerCase();
   if (key && cacheByName.has(key)) {
@@ -173,6 +190,13 @@ function detectXmp(bytes: Uint8Array): string | null {
 function detectFromEpsFile(filePath: string, fileName: string): string | null {
   const header = readFileSliceSync(filePath, 0, 32);
   if (header && isDosEps(header)) {
+    const psStart = u32le(header, 4);
+    const psLen = u32le(header, 8);
+    const ps = readFileSliceSync(filePath, psStart, Math.min(psLen > 0 ? psLen : HEAD_BYTES, HEAD_BYTES));
+    if (ps) {
+      const fromPs = detectEps(ps) || detectXmp(ps) || detectPdf(ps);
+      if (fromPs) return fromPs;
+    }
     const tiffStart = u32le(header, 20);
     const tiffLen = u32le(header, 24);
     if (tiffStart > 0) {
@@ -181,13 +205,6 @@ function detectFromEpsFile(filePath: string, fileName: string): string | null {
         const fromTiff = detectTiff(tiff) || detectJpeg(tiff) || detectXmp(tiff);
         if (fromTiff) return fromTiff;
       }
-    }
-    const psStart = u32le(header, 4);
-    const psLen = u32le(header, 8);
-    const ps = readFileSliceSync(filePath, psStart, Math.min(psLen > 0 ? psLen : HEAD_BYTES, HEAD_BYTES));
-    if (ps) {
-      const fromPs = detectEps(ps) || detectXmp(ps) || detectPdf(ps);
-      if (fromPs) return fromPs;
     }
   }
 
@@ -198,16 +215,16 @@ function detectFromEpsFile(filePath: string, fileName: string): string | null {
 
 function detectFromLoadedBytes(fileName: string, bytes: Uint8Array): string | null {
   if (isDosEps(bytes)) {
-    const tiffStart = u32le(bytes, 20);
-    if (tiffStart > 0 && tiffStart < bytes.length) {
-      const fromTiff = detectTiff(bytes.subarray(tiffStart)) || detectJpeg(bytes.subarray(tiffStart));
-      if (fromTiff) return fromTiff;
-    }
     const psStart = u32le(bytes, 4);
     if (psStart > 0 && psStart < bytes.length) {
       const slice = bytes.subarray(psStart);
       const fromPs = detectEps(slice) || detectXmp(slice) || detectPdf(slice);
       if (fromPs) return fromPs;
+    }
+    const tiffStart = u32le(bytes, 20);
+    if (tiffStart > 0 && tiffStart < bytes.length) {
+      const fromTiff = detectTiff(bytes.subarray(tiffStart)) || detectJpeg(bytes.subarray(tiffStart));
+      if (fromTiff) return fromTiff;
     }
   }
   return detectColorSpaceFromBytes(fileName, bytes) || detectXmp(bytes);
@@ -337,6 +354,18 @@ function detectPdf(bytes: Uint8Array): string | null {
   return null;
 }
 
+function dscField(text: string, name: string): string {
+  const pattern = new RegExp(
+    `%%${name}:\\s*([^\\r\\n]*)((?:\\r?\\n%%\\+\\s*[^\\r\\n]*)*)`,
+    "i"
+  );
+  const match = text.match(pattern);
+  if (!match) return "";
+  return `${match[1] || ""} ${String(match[2] || "").replace(/%%\+/g, " ")}`
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function detectEps(bytes: Uint8Array): string | null {
   let start = 0;
   if (bytes.length >= 32 && bytes[0] === 0xc5 && bytes[1] === 0xd0 && bytes[2] === 0xd3 && bytes[3] === 0xc6) {
@@ -366,22 +395,40 @@ function detectEps(bytes: Uint8Array): string | null {
     if (channels === 1) return "Gray";
   }
 
-  const process = text.match(/%%documentprocesscolors:\s*([^\r\n]*)/);
+  const process = dscField(text, "documentprocesscolors");
   if (process) {
-    const colors = process[1];
-    if (colors.includes("cyan") || colors.includes("magenta") || colors.includes("yellow") || colors.includes("black")) {
+    if (
+      process.includes("cyan") ||
+      process.includes("magenta") ||
+      process.includes("yellow") ||
+      process.includes("black")
+    ) {
       return "CMYK";
     }
-    if (colors.includes("red") || colors.includes("green") || colors.includes("blue")) return "RGB";
+    if (process.includes("red") || process.includes("green") || process.includes("blue")) return "RGB";
+  }
+
+  const aiModel = text.match(/%ai\d+_colormodel:\s*(\d+)/);
+  if (aiModel) {
+    const mode = Number(aiModel[1]);
+    if (mode === 1) return "CMYK";
+    if (mode === 2) return "RGB";
+    if (mode === 0) return "Gray";
+  }
+
+  if (text.includes("%%dcs") || text.includes("cyanplate") || text.includes("%%platefile")) {
+    return "CMYK";
   }
 
   if (
     text.includes("%%cmykcustomcolor") ||
+    text.includes("%%cmykprocesscolor") ||
     text.includes("%%aicmykcolor") ||
     text.includes("color(cmyk)") ||
     text.includes("/devicecmyk") ||
     text.includes("cmykcustomcolor") ||
-    text.includes("setcmykcolor")
+    text.includes("setcmykcolor") ||
+    text.includes("setcmyk")
   ) {
     return "CMYK";
   }
@@ -393,6 +440,10 @@ function detectEps(bytes: Uint8Array): string | null {
   if (text.includes("ai9_colorusage") || text.includes("ai5_colorusage") || text.includes("ai8_colorusage")) {
     if (text.includes("cmyk")) return "CMYK";
     if (text.includes("rgb")) return "RGB";
+  }
+
+  if (/\bcyan\b/.test(text) && /\bmagenta\b/.test(text) && /\byellow\b/.test(text)) {
+    return "CMYK";
   }
 
   const psdAt = raw.indexOf("8BPS");
@@ -444,9 +495,9 @@ export function detectColorSpaceFromBytes(fileName: string, bytes: Uint8Array): 
 function tryDetectOnPath(filePath: string, fileName: string): string | null {
   const path = coerceFilePath(filePath);
   if (!path) return null;
-  const ext = (fileName || path).toLowerCase();
-  if (ext.endsWith(".eps") || ext.endsWith(".ai")) {
-    return detectFromEpsFile(path, fileName);
+  const source = `${fileName || ""} ${path}`.toLowerCase();
+  if (/\.(eps|ai)(?:$|[?#])/i.test(source)) {
+    return detectFromEpsFile(path, fileName || path);
   }
   const bytes = readFileSliceSync(path, 0, HEAD_BYTES);
   if (!bytes) return null;
@@ -481,7 +532,7 @@ export async function prefetchColorSpacesFromLinks(
       try {
         const space = await detectColorSpaceFromPath(filePath, link.name);
         if (space) {
-          rememberFileColorSpace(link.id, link.name, space);
+          rememberFileColorSpace(link.id, link.name, space, filePath);
           break;
         }
       } catch {
@@ -500,18 +551,21 @@ export function resolveGraphicColorSpace(options: {
   linkId?: number | null;
 }): string {
   const fileName = options.fileName || "";
-  const preferFile = /\.(eps|ai|psd|psb)$/i.test(fileName);
   const paths = [options.filePath, ...(options.filePaths || [])]
     .map((item) => coerceFilePath(item))
     .filter(Boolean);
+  const preferFile =
+    /\.(eps|ai|psd|psb)$/i.test(fileName) || paths.some((path) => /\.(eps|ai|psd|psb)$/i.test(path));
 
   const fromFileCacheOrDisk = (): string | null => {
-    const cached = lookupFileColorSpace(options.linkId ?? null, fileName);
+    const cached = lookupFileColorSpace(options.linkId ?? null, fileName, paths[0]);
     if (cached) return cached;
     for (const filePath of paths) {
-      const fromFile = tryDetectOnPath(filePath, fileName);
+      const fromCache = lookupFileColorSpace(options.linkId ?? null, fileName, filePath);
+      if (fromCache) return fromCache;
+      const fromFile = tryDetectOnPath(filePath, fileName || filePath);
       if (fromFile) {
-        rememberFileColorSpace(options.linkId ?? null, fileName, fromFile);
+        rememberFileColorSpace(options.linkId ?? null, fileName, fromFile, filePath);
         return fromFile;
       }
     }
@@ -526,10 +580,8 @@ export function resolveGraphicColorSpace(options: {
   const fromHost = getImageColorSpaceLabel(options.space);
   if (fromHost && fromHost !== "Desconhecido") return fromHost;
 
-  if (!preferFile) {
-    const fromFile = fromFileCacheOrDisk();
-    if (fromFile) return fromFile;
-  }
+  const fromFile = fromFileCacheOrDisk();
+  if (fromFile) return fromFile;
 
   return "Desconhecido";
 }

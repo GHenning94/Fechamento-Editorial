@@ -4,6 +4,7 @@ import { createResult } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import {
   collectUsedFonts,
+  fontDisplayName,
   getFontStatus,
   isFontMissing,
   isFontSubstituted,
@@ -20,12 +21,13 @@ export class FontesValidator extends BaseValidator {
 
       for (const { font } of usedFonts) {
         const status = getFontStatus(font);
+        const name = fontDisplayName(font) || font.fontFamily || "Fonte";
 
         if (isFontMissing(status)) {
           issues.push({
             message: "Fonte ausente",
-            object: font.name,
-            details: font.fontFamily,
+            object: name,
+            details: "A fonte não está instalada. Instale-a ou substitua no texto.",
           });
           continue;
         }
@@ -33,8 +35,8 @@ export class FontesValidator extends BaseValidator {
         if (isFontSubstituted(status)) {
           issues.push({
             message: "Fonte substituída",
-            object: font.name,
-            details: font.fontFamily,
+            object: name,
+            details: "O InDesign está usando uma fonte substituta. Instale a fonte original.",
           });
         }
       }
