@@ -36,6 +36,47 @@ export function isPluginUtilityLayerName(name: string): boolean {
   return isEditorialLayerName(name) || isRendimentoLayerName(name) || isGuiasLayerName(name);
 }
 
+function readItemLabel(item: { label?: string; name?: string } | null | undefined): string {
+  try {
+    return (item?.label || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function readItemName(item: { name?: string } | null | undefined): string {
+  try {
+    return (item?.name || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Tags do memorial descritivo / rendimento e qualquer objeto nessas layers. */
+export function isPluginGeneratedItem(item: PageItem | null | undefined): boolean {
+  let current: { label?: string; name?: string; itemLayer?: { name?: string }; parent?: unknown } | null | undefined =
+    item;
+  for (let depth = 0; depth < 8 && current; depth++) {
+    try {
+      if (isPluginUtilityLayerName(current.itemLayer?.name || "")) return true;
+    } catch {
+      // ignore
+    }
+    const label = readItemLabel(current).toLowerCase();
+    const name = readItemName(current);
+    if (
+      label === "eac-style-tag" ||
+      label === "eac-rendimento-tag" ||
+      name.startsWith("EAC_TAG_") ||
+      name.startsWith("EAC_REND_")
+    ) {
+      return true;
+    }
+    current = current.parent as typeof current;
+  }
+  return false;
+}
+
 /** Localiza a layer de estilos/memorial sem depender de visibilidade ou caixa. */
 export function findEditorialLayer(doc: Document): Layer | null {
   let exact: Layer | null = null;

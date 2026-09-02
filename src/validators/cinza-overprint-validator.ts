@@ -3,7 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionLength } from "../utils/collection-helpers";
-import { isPluginUtilityLayerName } from "../utils/editorial-layer";
+import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
   geometricBoundsOverlap,
   isColoredBackgroundFill,
@@ -50,11 +50,71 @@ function readBounds(item: PageItem): number[] {
 }
 
 function isUtilityItem(item: PageItem): boolean {
+  return isPluginGeneratedItem(item);
+}
+
+function readNumber(getter: () => unknown): number | null {
   try {
-    return isPluginUtilityLayerName(item.itemLayer?.name || "");
+    const value = getter();
+    if (typeof value === "number" && Number.isFinite(value)) return value;
   } catch {
-    return false;
+    // ignore
   }
+  return null;
+}
+
+function readTextInkBounds(range: TextStyleRange | Text, frame: PageItem): number[] {
+  const text = range as Text;
+  const left = readNumber(() => text.horizontalOffset);
+  const right = readNumber(() => text.endHorizontalOffset);
+  const baseline = readNumber(() => text.baseline);
+  const endBaseline = readNumber(() => text.endBaseline) ?? baseline;
+  const pointSize = readNumber(() => text.pointSize) || 12;
+  const ascent = readNumber(() => text.ascent) ?? pointSize * 0.8;
+  const descent = readNumber(() => text.descent) ?? pointSize * 0.25;
+
+  if (left != null && right != null && baseline != null && Math.abs(right - left) > 0.2) {
+    const top = Math.min(baseline, endBaseline ?? baseline) - ascent;
+    const bottom = Math.max(baseline, endBaseline ?? baseline) + descent;
+    if (bottom > top) return [top, Math.min(left, right), bottom, Math.max(left, right)];
+  }
+
+  try {
+    const first = text.characters?.item?.(0);
+    const length = getCollectionLength(text.characters);
+    const last = length > 0 ? text.characters?.item?.(length - 1) : first;
+    const x1 = readNumber(() => (first as Text)?.horizontalOffset);
+    const x2 = readNumber(() => (last as Text)?.horizontalOffset);
+    const y = readNumber(() => (first as Text)?.baseline);
+    const size = readNumber(() => (first as Text)?.pointSize) || pointSize;
+    if (x1 != null && y != null) {
+      const rightEdge = x2 != null && x2 >= x1 ? x2 + size * 0.5 : x1 + size;
+      return [y - size, x1, y + size * 0.3, rightEdge];
+    }
+  } catch {
+    // fallback no quadro
+  }
+
+  return readBounds(frame);
+}
+
+function overlapArea(a: number[], b: number[]): number {
+  if (!a || a.length < 4 || !b || b.length < 4) return 0;
+  const top = Math.max(Number(a[0]), Number(b[0]));
+  const left = Math.max(Number(a[1]), Number(b[1]));
+  const bottom = Math.min(Number(a[2]), Number(b[2]));
+  const right = Math.min(Number(a[3]), Number(b[3]));
+  if (bottom <= top || right <= left) return 0;
+  return (bottom - top) * (right - left);
+}
+
+function inkSitsOnColor(ink: number[], background: number[]): boolean {
+  const area = overlapArea(ink, background);
+  if (area <= 0.5) return false;
+  const inkW = Math.abs(Number(ink[3]) - Number(ink[1]));
+  const inkH = Math.abs(Number(ink[2]) - Number(ink[0]));
+  const inkArea = Math.max(0.5, inkW * inkH);
+  return area / inkArea >= 0.35;
 }
 
 function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
@@ -123,7 +183,7 @@ function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
   }
 }
 
-function collectParentFrames(range: TextStyleRange | Text, story: Story): PageItem[] {
+function collectParentFrames(range: TextStyleRange | Text): PageItem[] {
   const frames: PageItem[] = [];
   const seen = new Set<PageItem>();
   const push = (item: PageItem | null | undefined): void => {
@@ -151,14 +211,6 @@ function collectParentFrames(range: TextStyleRange | Text, story: Story): PageIt
     }
   } catch {
     // ignore
-  }
-
-  if (frames.length === 0) {
-    try {
-      forEachTextRun(story.textContainers, (item) => push(item as PageItem));
-    } catch {
-      // ignore
-    }
   }
 
   return frames;
@@ -196,18 +248,24 @@ function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
   return "";
 }
 
-function frameIsOnColoredBackground(frame: PageItem, snaps: ItemSnap[]): boolean {
+function grayTextSitsOnColoredBackground(
+  range: TextStyleRange | Text,
+  frame: PageItem,
+  snaps: ItemSnap[]
+): boolean {
+  if (isUtilityItem(frame)) return false;
+
   const fill = readItemFill(frame);
   if (isColoredBackgroundFill(fill, readFillTint(frame))) return true;
 
-  const bounds = readBounds(frame);
-  if (bounds.length < 4) return false;
+  const ink = readTextInkBounds(range, frame);
+  if (ink.length < 4) return false;
 
   for (const other of snaps) {
     if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
-    if (geometricBoundsOverlap(bounds, other.bounds)) return true;
+    if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 
   return false;
@@ -282,10 +340,10 @@ export class CinzaOverprintValidator extends BaseValidator {
 
         const consider = (run: TextStyleRange | Text): void => {
           if (!rangeIsGrayWithoutOverprint(run)) return;
-          const frames = collectParentFrames(run, story);
+          const frames = collectParentFrames(run);
           if (frames.length === 0) return;
           for (const frame of frames) {
-            if (frameIsOnColoredBackground(frame, snaps)) {
+            if (grayTextSitsOnColoredBackground(run, frame, snaps)) {
               reportFrame(frame);
             }
           }

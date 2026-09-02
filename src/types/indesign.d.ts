@@ -594,7 +594,11 @@ declare module "indesign" {
     justification?: number;
     contents?: string;
     horizontalOffset?: number;
+    endHorizontalOffset?: number;
     baseline?: number;
+    endBaseline?: number;
+    ascent?: number;
+    descent?: number;
     parentTextFrames?: PageItems | PageItem[];
     hyphenation?: boolean;
     noBreak?: boolean;
