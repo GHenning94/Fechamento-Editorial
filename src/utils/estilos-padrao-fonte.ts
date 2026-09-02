@@ -9,7 +9,6 @@ import {
   formatMm,
   isAcceptedLanguage,
   isObliqueFontStyle,
-  isRightAlign,
   pushIssue,
   readFontInfo,
   readNumberProperty,
@@ -23,8 +22,6 @@ export const FONTE_STANDARD_STYLE_NAMES = [
   "08_tabela_fonte",
 ] as const;
 
-type JustificationExpectation = "right";
-
 interface FonteStyleProfile {
   fontFamily: string;
   fontStyleIncludes: string;
@@ -35,7 +32,6 @@ interface FonteStyleProfile {
   spaceAfterMm: number;
   leftIndentMm: number;
   leftIndentLabel: string;
-  justification?: JustificationExpectation;
   acceptedLanguages: readonly string[];
 }
 
@@ -55,7 +51,6 @@ const FONTE_STYLE_PROFILES: Record<(typeof FONTE_STANDARD_STYLE_NAMES)[number], 
     spaceAfterMm: 4.233,
     leftIndentMm: 0,
     leftIndentLabel: "0 mm",
-    justification: "right",
   },
   "05_mapa_fonte": {
     ...SHARED_FONTE_BASE,
@@ -63,7 +58,6 @@ const FONTE_STYLE_PROFILES: Record<(typeof FONTE_STANDARD_STYLE_NAMES)[number], 
     spaceAfterMm: 3.528,
     leftIndentMm: 0,
     leftIndentLabel: "0 mm",
-    justification: "right",
   },
   "08_tabela_fonte": {
     ...SHARED_FONTE_BASE,
@@ -163,24 +157,6 @@ export function compareFonteStyle(
       expected: `${profile.autoLeadingPct}%`,
       actual: `${autoLeading.value}%`,
     });
-  }
-
-  if (profile.justification === "right") {
-    try {
-      if (!isRightAlign(style.justification)) {
-        issues.push({
-          property: "Alinhamento",
-          expected: "À direita",
-          actual: String(style.justification),
-        });
-      }
-    } catch {
-      issues.push({
-        property: "Alinhamento",
-        expected: "À direita",
-        actual: "Não foi possível ler",
-      });
-    }
   }
 
   const leftIndent = readNumberProperty(style, "leftIndent", "Recuo à esquerda");

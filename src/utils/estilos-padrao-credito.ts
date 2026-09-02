@@ -8,7 +8,6 @@ import {
   formatMm,
   isAcceptedLanguage,
   isAutoLeadingValue,
-  isCenterAlign,
   isObliqueFontStyle,
   pushIssue,
   readFontInfo,
@@ -96,22 +95,6 @@ export function compareCreditoStyle(style: ParagraphStyle): StylePropertyIssue[]
       property: "Entrelinha automática",
       expected: `${CREDITO_PROFILE.autoLeadingPct}%`,
       actual: `${autoLeading.value}%`,
-    });
-  }
-
-  try {
-    if (!isCenterAlign(style.justification)) {
-      issues.push({
-        property: "Alinhamento",
-        expected: "Centralizado",
-        actual: String(style.justification),
-      });
-    }
-  } catch {
-    issues.push({
-      property: "Alinhamento",
-      expected: "Centralizado",
-      actual: "Não foi possível ler",
     });
   }
 

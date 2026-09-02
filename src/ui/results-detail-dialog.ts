@@ -1,4 +1,5 @@
 import { onActionActivate } from "./action-control";
+import { boostElementWheelScroll } from "./fast-scroll";
 import { bindResultGroupToggles } from "./result-group-toggle";
 
 type UxpDialog = HTMLDialogElement & {
@@ -47,6 +48,41 @@ const KIND_TITLE_COLOR: Record<ResultDetailKind, string> = {
   error: "#e87474",
 };
 
+interface OpenDetail {
+  kind: ResultDetailKind;
+  listEl: HTMLElement;
+  titleEl: HTMLElement;
+  onIgnore?: (key: string) => void;
+  onIgnoreAll?: () => void;
+}
+
+const openDetails = new Map<ResultDetailKind, OpenDetail>();
+
+function paintList(listEl: HTMLElement, html: string, onIgnore?: (key: string) => void): void {
+  const y = listEl.scrollTop;
+  listEl.innerHTML = html || '<li class="empty-item">Nenhum item</li>';
+  ensureScrollSpacer(listEl);
+  bindResultGroupToggles(listEl);
+  if (onIgnore) bindIgnoreHandlers(listEl, onIgnore);
+  listEl.scrollTop = y;
+}
+
+export function updateOpenResultsDetailDialogs(
+  contents: Partial<Record<ResultDetailKind, string>>,
+  handlers?: {
+    onIgnore?: (key: string) => void;
+    onIgnoreAll?: () => void;
+  }
+): void {
+  (Object.keys(contents) as ResultDetailKind[]).forEach((kind) => {
+    const open = openDetails.get(kind);
+    if (!open) return;
+    if (handlers?.onIgnore) open.onIgnore = handlers.onIgnore;
+    if (handlers?.onIgnoreAll) open.onIgnoreAll = handlers.onIgnoreAll;
+    paintList(open.listEl, contents[kind] || "", open.onIgnore);
+  });
+}
+
 function bindIgnoreHandlers(
   listEl: HTMLElement,
   onIgnore: (key: string) => void
@@ -58,17 +94,7 @@ function bindIgnoreHandlers(
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const issueEl = button.closest(".result-group-issue");
-      const group = button.closest(".result-group");
       onIgnore(key);
-      issueEl?.remove();
-      if (group && !group.querySelector(".result-group-issue")) {
-        group.remove();
-      }
-      if (!listEl.querySelector("li:not(.results-scroll-spacer)")) {
-        listEl.innerHTML = '<li class="empty-item">Nenhum item</li>';
-      }
-      ensureScrollSpacer(listEl);
     };
   });
 }
@@ -214,13 +240,14 @@ function syncListHeight(root: HTMLElement, header: HTMLElement, listEl: HTMLElem
 }
 
 export function showResultsDetailDialog(options: ResultDetailOptions): void {
-  document.querySelectorAll(`[data-results-kind="${options.kind}"]`).forEach((el) => {
-    try {
-      (el as UxpDialog).close();
-    } catch {
-      el.remove();
-    }
-  });
+  const existing = openDetails.get(options.kind);
+  if (existing) {
+    existing.onIgnore = options.onIgnore;
+    existing.onIgnoreAll = options.onIgnoreAll;
+    existing.titleEl.textContent = options.title;
+    paintList(existing.listEl, options.html, existing.onIgnore);
+    return;
+  }
 
   const titleColor = KIND_TITLE_COLOR[options.kind];
 
@@ -271,12 +298,21 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   applyStaticStyles(dialog, root, header, titleEl, closeBtn, listEl, titleColor, ignoreAllBtn || undefined);
   ensureScrollSpacer(listEl);
   syncListHeight(root, header, listEl);
+  boostElementWheelScroll(listEl);
 
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
   }
 
   bindResultGroupToggles(listEl);
+
+  openDetails.set(options.kind, {
+    kind: options.kind,
+    listEl,
+    titleEl,
+    onIgnore: options.onIgnore,
+    onIgnoreAll: options.onIgnoreAll,
+  });
 
   let closed = false;
   let lastListHeight = 0;
@@ -298,13 +334,13 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   if (ignoreAllBtn && options.onIgnoreAll) {
     onActionActivate(ignoreAllBtn, () => {
       options.onIgnoreAll?.();
-      dialog.close();
     });
   }
 
   const teardown = (): void => {
     if (closed) return;
     closed = true;
+    openDetails.delete(options.kind);
     window.clearInterval(resizePoll);
     dialog.removeEventListener("close", teardown);
     dialog.remove();

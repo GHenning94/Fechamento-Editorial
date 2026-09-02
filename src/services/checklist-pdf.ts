@@ -529,10 +529,12 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
     const nAp = field.checked ? apYesId : apOffId;
-    const state = field.checked ? "/Yes" : "/Off";
+    // Pushbutton (Ff 65536): o Preview do macOS ignora /AP de checkbox e de rádio
+    // e redesenha o chrome nativo (quadrado cinza) depois do clique. Botão usa o
+    // Form XObject circular e não troca para o widget nativo ao clicar fora.
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV ${state} /AS ${state} /H /P /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /BC [] /BG [] >> /AP << /N ${nAp} 0 R /D ${apYesId} 0 R >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /P /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /R 0 /BC [] /BG [] /CA () >> /AP << /N ${nAp} 0 R /D ${apYesId} 0 R /R ${nAp} 0 R >> >>`
     );
   }
 

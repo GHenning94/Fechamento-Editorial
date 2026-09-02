@@ -11,7 +11,6 @@ import {
   isAutoLeadingValue,
   isObliqueFontStyle,
   isOpticalKerning,
-  isRightAlign,
   pushIssue,
   readFontInfo,
   readNumberProperty,
@@ -33,7 +32,6 @@ export const PROFESSOR_REQUIRED_STYLE_NAME = "04_professor_resposta";
 const EFAI_POINT_SIZE_PT = 12;
 
 type LeadingMode = "fixed" | "auto";
-type JustificationExpectation = "right";
 
 interface ProfessorStyleProfile {
   fontFamily: string;
@@ -46,7 +44,6 @@ interface ProfessorStyleProfile {
   leftIndentMm: number;
   leftIndentLabel: string;
   fillColor: string;
-  justification?: JustificationExpectation;
   hyphenationZoneMm: number;
   spaceBeforeMm: number;
   spaceAfterMm: number;
@@ -100,7 +97,6 @@ const PROFESSOR_STYLE_PROFILES: Record<string, Partial<ProfessorStyleProfile>> =
     pointSizeEfAfPt: 7,
     leadingMode: "auto",
     leadingPt: undefined,
-    justification: "right",
   },
 };
 
@@ -266,24 +262,6 @@ export function compareProfessorStyle(
     });
   }
 
-  if (profile.justification === "right") {
-    try {
-      if (!isRightAlign(style.justification)) {
-        issues.push({
-          property: "Alinhamento",
-          expected: "À direita",
-          actual: String(style.justification),
-        });
-      }
-    } catch {
-      issues.push({
-        property: "Alinhamento",
-        expected: "À direita",
-        actual: "Não foi possível ler",
-      });
-    }
-  }
-
   try {
     const languageName = style.appliedLanguage?.name || "";
     if (!isAcceptedLanguage(languageName, profile.acceptedLanguages)) {
@@ -363,7 +341,6 @@ export const PROFESSOR_VALIDATED_PROPERTIES = [
   "Recuo à esquerda",
   "Cor",
   "Kerning",
-  "Alinhamento",
   "Idioma",
   "Zona de hifenização",
   "Espaço anterior",

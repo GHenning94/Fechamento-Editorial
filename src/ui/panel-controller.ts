@@ -14,11 +14,12 @@ import { getDefaultReportUserName } from "../utils/indesign-runtime";
 import { onActionActivate, setActionDisabled } from "./action-control";
 import { promptConfirmDialog } from "./confirm-dialog";
 import { promptUserNameDialog } from "./user-name-dialog";
-import { showResultsDetailDialog } from "./results-detail-dialog";
+import { showResultsDetailDialog, updateOpenResultsDetailDialogs } from "./results-detail-dialog";
 import { bindResultGroupToggles } from "./result-group-toggle";
 import { tryExpandPanelToHostHeight } from "./panel-expand";
 import { formatIssueLine } from "../utils/issue-text";
 import { getValidatorSuccessText } from "../utils/validator-success-text";
+import { boostElementWheelScroll } from "./fast-scroll";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -60,6 +61,9 @@ export class PanelController {
     this.statusMessage = root.querySelector("#status-message");
     this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
     this.bindResultExpanders();
+    [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
+      if (list) boostElementWheelScroll(list);
+    });
     if (this.btnIgnoreAllWarnings) {
       onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
     }
@@ -347,6 +351,8 @@ export class PanelController {
       this.btnIgnoreAllWarnings.classList.toggle("hidden", safe.warnings === 0);
     }
 
+    this.syncOpenResultWindows();
+
     if (statusMessage) {
       this.setStatus(
         statusMessage,
@@ -357,6 +363,24 @@ export class PanelController {
     this.onSummaryFiltered?.(safe);
   }
 
+  private syncOpenResultWindows(): void {
+    updateOpenResultsDetailDialogs(
+      {
+        approved: this.listApproved?.innerHTML || '<li class="empty-item">Nenhum item</li>',
+        warning: this.listWarnings?.innerHTML || '<li class="empty-item">Nenhum item</li>',
+        error: this.listErrors?.innerHTML || '<li class="empty-item">Nenhum item</li>',
+      },
+      {
+        onIgnore: (key: string) => {
+          this.ignoredWarningKeys.add(key);
+          this.refreshSummaryUi();
+          this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
+        },
+        onIgnoreAll: () => this.ignoreAllWarnings(),
+      }
+    );
+  }
+
   private ignoreAllWarnings(): void {
     const items = this.collectIssuesBySeverity(this.rawSummary?.results || [], "warning");
     if (items.length === 0) return;
@@ -365,13 +389,6 @@ export class PanelController {
     }
     this.refreshSummaryUi();
     this.setStatus("Todos os avisos foram ignorados. Eles não sairão no relatório.", "info");
-    document.querySelectorAll('[data-results-kind="warning"]').forEach((el) => {
-      try {
-        (el as HTMLDialogElement).close();
-      } catch {
-        el.remove();
-      }
-    });
   }
 
   private bindIgnoreButtons(): void {

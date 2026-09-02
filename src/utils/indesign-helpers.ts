@@ -10,8 +10,10 @@ import {
   isGuiasDeletarColorName,
   normalizeColorName,
 } from "./editorial-color";
+import { getImageColorSpaceLabel } from "./color-model";
 
 export { getActiveDocument } from "./indesign-runtime";
+export { getImageColorSpaceLabel } from "./color-model";
 
 export function layerExists(doc: Document, layerName: string): Layer | null {
   try {
@@ -52,16 +54,6 @@ export function getColorSpaceLabel(space: number): string {
   if (space === CS.RGB) return "RGB";
   if (space === CS.LAB) return "LAB";
   if (space === CS.HSB) return "HSB";
-  return "Desconhecido";
-}
-
-export function getImageColorSpaceLabel(space: number): string {
-  const { ImageColorSpace } = getInDesignModule();
-  const ICS = ImageColorSpace as { CMYK: number; RGB: number; LAB: number; GRAY: number };
-  if (space === ICS.CMYK) return "CMYK";
-  if (space === ICS.RGB) return "RGB";
-  if (space === ICS.LAB) return "LAB";
-  if (space === ICS.GRAY) return "Gray";
   return "Desconhecido";
 }
 
@@ -135,6 +127,15 @@ export function walkDirectPageItems(doc: Document, callback: PageItemCallback): 
     const items = page.pageItems;
     if (items) {
       forEachPageItem(items, page, pageName, callback);
+    }
+
+    try {
+      const masterItems = (page as Page & { masterPageItems?: unknown }).masterPageItems;
+      if (masterItems) {
+        forEachPageItem(masterItems, page, pageName, callback);
+      }
+    } catch {
+      // masterPageItems pode não existir em alguns hosts
     }
   });
 }
@@ -218,7 +219,7 @@ export function isOnHiddenLayer(item: PageItem): boolean {
 
 export function hasMeasurableBounds(item: PageItem): boolean {
   try {
-    const geo = item.geometricBounds;
+    const geo = readItemBounds(item);
     if (!geo || geo.length < 4) {
       return false;
     }
@@ -227,6 +228,22 @@ export function hasMeasurableBounds(item: PageItem): boolean {
   } catch {
     return false;
   }
+}
+
+function readItemBounds(item: PageItem): number[] | null {
+  try {
+    const geo = item.geometricBounds;
+    if (geo && geo.length >= 4) return geo;
+  } catch {
+    // tenta visibleBounds
+  }
+  try {
+    const visible = (item as PageItem & { visibleBounds?: number[] }).visibleBounds;
+    if (visible && visible.length >= 4) return visible;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function getSpreadPages(spread: Spread): Page[] {
@@ -239,35 +256,9 @@ function getSpreadPages(spread: Spread): Page[] {
   return pages;
 }
 
-function getSpreadPageItems(spread: Spread): PageItem[] {
-  const items: PageItem[] = [];
-  const direct = spread.allPageItems ?? spread.pageItems;
-  if (direct) {
-    forEachCollectionItem<PageItem>(direct, (item) => {
-      if (item?.isValid) {
-        items.push(item);
-      }
-    });
-    return items;
-  }
-
-  forEachCollectionItem<Page>(spread.pages, (page) => {
-    if (!page?.isValid) return;
-    const pageItems = page.allPageItems ?? page.pageItems;
-    if (!pageItems) return;
-    forEachCollectionItem<PageItem>(pageItems, (item) => {
-      if (item?.isValid) {
-        items.push(item);
-      }
-    });
-  });
-
-  return items;
-}
-
 function resolveNearestPageName(item: PageItem, pages: Page[]): string {
   try {
-    const geo = item.geometricBounds;
+    const geo = readItemBounds(item);
     if (!geo || geo.length < 4 || pages.length === 0) {
       return "Pasteboard";
     }
@@ -336,7 +327,11 @@ export function getPageItemDisplayName(item: PageItem): string {
   }
 }
 
-/** Percorre apenas objetos realmente no pasteboard (parentPage = NOTHING), no nível do spread. */
+/**
+ * Percorre objetos do spread (página + pasteboard) e reporta os que estão
+ * 100% fora de todas as páginas, inclusive os que o InDesign ainda associa
+ * a uma parentPage (caso típico de box no pasteboard).
+ */
 export function walkPasteboardItems(
   doc: Document,
   callback: (item: PageItem, spreadPages: Page[], pageName: string) => void
@@ -347,21 +342,45 @@ export function walkPasteboardItems(
     if (!spread?.isValid) return;
 
     const spreadPages = getSpreadPages(spread);
-    const spreadItems = getSpreadPageItems(spread);
 
-    for (const item of spreadItems) {
-      if (!item.isValid || !isOnPasteboard(item) || !isTopLevelSpreadItem(item)) {
-        continue;
+    const visit = (item: PageItem, depth: number): void => {
+      if (!item?.isValid || depth > 8) return;
+      if (isOnHiddenLayer(item) || !hasMeasurableBounds(item)) return;
+
+      if (isFullyOutsideAllPages(item, spreadPages, doc)) {
+        const key = getPageItemDedupKey(item);
+        if (seen.has(key)) return;
+        seen.add(key);
+        callback(item, spreadPages, resolveNearestPageName(item, spreadPages));
+        return;
       }
-      if (isOnHiddenLayer(item) || !hasMeasurableBounds(item)) {
-        continue;
+
+      try {
+        if (item.pageItems && item.pageItems.length > 0) {
+          forEachCollectionItem<PageItem>(item.pageItems, (child) => {
+            visit(child, depth + 1);
+          });
+        }
+      } catch {
+        // ignora grupo inválido
       }
+    };
 
-      const key = getPageItemDedupKey(item);
-      if (seen.has(key)) continue;
-      seen.add(key);
+    const roots: PageItem[] = [];
+    if (spread.pageItems) {
+      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
+        if (item?.isValid) roots.push(item);
+      });
+    }
+    for (const page of spreadPages) {
+      if (!page.pageItems) continue;
+      forEachCollectionItem<PageItem>(page.pageItems, (item) => {
+        if (item?.isValid) roots.push(item);
+      });
+    }
 
-      callback(item, spreadPages, resolveNearestPageName(item, spreadPages));
+    for (const item of roots) {
+      visit(item, 0);
     }
   });
 }
@@ -386,6 +405,121 @@ export function getPageItemDedupKey(item: PageItem): string {
   }
 }
 
+type GraphicLike = {
+  itemLink: import("indesign").Link | null;
+  isValid: boolean;
+  space: unknown;
+  effectivePpi?: number[];
+  effectiveResolution?: number;
+  actualPpi?: number[];
+};
+
+function minPositive(values: number[] | undefined): number {
+  if (!values || values.length < 1) return 0;
+  const nums = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  if (nums.length === 0) return 0;
+  return Math.min(...nums);
+}
+
+/** DPI efetivo após escala. actualPpi sozinho ignora imagens esticadas abaixo de 300. */
+export function getGraphicDpi(graphic: GraphicLike): number {
+  try {
+    const raw = graphic.effectivePpi as unknown;
+    if (typeof raw === "number" && raw > 0) return raw;
+    const effective = minPositive(graphic.effectivePpi);
+    if (effective > 0) return effective;
+  } catch {
+    // ignore
+  }
+  try {
+    if (graphic.effectiveResolution && graphic.effectiveResolution > 0) {
+      return graphic.effectiveResolution;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    return minPositive(graphic.actualPpi);
+  } catch {
+    // ignore
+  }
+  return 0;
+}
+
+function graphicIdentity(graphic: GraphicLike, item: PageItem): string {
+  try {
+    const link = graphic.itemLink;
+    if (link && link.isValid && typeof link.id === "number") {
+      return `link:${link.id}`;
+    }
+    if (link && link.isValid && link.name) {
+      return `name:${link.name}`;
+    }
+  } catch {
+    // ignore
+  }
+  return `item:${item.name || "Imagem"}`;
+}
+
+export function collectGraphicsFromItem(
+  item: PageItem,
+  pageName: string,
+  graphics: GraphicInfo[],
+  seen = new Set<string>()
+): void {
+  const pushGraphic = (graphic: GraphicLike): void => {
+    if (!graphic?.isValid) return;
+    const key = `${pageName}:${graphicIdentity(graphic, item)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    let imageName = item.name || "Imagem";
+    try {
+      const link = graphic.itemLink;
+      if (link && link.isValid && link.name) imageName = link.name;
+    } catch {
+      // ignore
+    }
+
+    let space: unknown;
+    try {
+      space = graphic.space;
+    } catch {
+      space = null;
+    }
+
+    graphics.push({
+      pageName,
+      imageName,
+      dpi: getGraphicDpi(graphic),
+      colorSpace: getImageColorSpaceLabel(space),
+      pageItem: item,
+    });
+  };
+
+  try {
+    const allGraphics = (item as PageItem & { allGraphics?: unknown }).allGraphics;
+    const allCount = allGraphics ? (allGraphics as { length?: number }).length || 0 : 0;
+    if (allGraphics && allCount > 0) {
+      forEachCollectionItem<GraphicLike>(allGraphics, pushGraphic);
+      return;
+    }
+  } catch {
+    // cai no fallback graphics/images
+  }
+
+  try {
+    forEachCollectionItem<GraphicLike>(item.graphics, pushGraphic);
+  } catch {
+    // ignore
+  }
+  try {
+    forEachCollectionItem<GraphicLike>(item.images, pushGraphic);
+  } catch {
+    // ignore
+  }
+}
+
 export function collectGraphics(doc: Document): GraphicInfo[] {
   const cached = getValidationScan()?.getGraphics();
   if (cached) {
@@ -393,68 +527,17 @@ export function collectGraphics(doc: Document): GraphicInfo[] {
   }
 
   const graphics: GraphicInfo[] = [];
+  const seen = new Set<string>();
 
   walkDirectPageItems(doc, (item, _page, pageName) => {
     try {
-      forEachCollectionItem<{ itemLink: import("indesign").Link | null; isValid: boolean; space: number; effectiveResolution: number; actualPpi: number[] }>(
-        item.graphics,
-        (graphic) => {
-          if (!graphic || !graphic.isValid) return;
-
-          const link = graphic.itemLink;
-          const imageName = link && link.isValid ? link.name : item.name || "Imagem";
-          const dpi = getGraphicDpi(graphic);
-          const colorSpace = getImageColorSpaceLabel(graphic.space);
-
-          graphics.push({
-            pageName,
-            imageName,
-            dpi,
-            colorSpace,
-            pageItem: item,
-          });
-        }
-      );
-
-      forEachCollectionItem<{ itemLink: import("indesign").Link | null; isValid: boolean; space: number; effectiveResolution: number; actualPpi: number[] }>(
-        item.images,
-        (image) => {
-          if (!image || !image.isValid) return;
-
-          const link = image.itemLink;
-          const imageName = link && link.isValid ? link.name : item.name || "Imagem";
-          const dpi = getGraphicDpi(image);
-          const colorSpace = getImageColorSpaceLabel(image.space);
-
-          graphics.push({
-            pageName,
-            imageName,
-            dpi,
-            colorSpace,
-            pageItem: item,
-          });
-        }
-      );
+      collectGraphicsFromItem(item, pageName, graphics, seen);
     } catch {
       // ignore invalid items
     }
   });
 
   return graphics;
-}
-
-function getGraphicDpi(graphic: { effectiveResolution: number; actualPpi: number[] }): number {
-  try {
-    if (graphic.actualPpi && graphic.actualPpi.length >= 2) {
-      return Math.min(graphic.actualPpi[0], graphic.actualPpi[1]);
-    }
-    if (graphic.effectiveResolution) {
-      return graphic.effectiveResolution;
-    }
-  } catch {
-    // ignore
-  }
-  return 0;
 }
 
 export function collectStrokedItems(doc: Document): StrokeInfo[] {
@@ -547,7 +630,7 @@ export function getPageBoundsWithBleed(page: Page, doc: Document): number[] {
 export function isFullyOutsidePageBounds(item: PageItem, page: Page, doc: Document): boolean {
   try {
     const bounds = getPageBoundsWithBleed(page, doc);
-    const geo = item.geometricBounds;
+    const geo = readItemBounds(item);
     if (!bounds || !geo || bounds.length < 4 || geo.length < 4) {
       return false;
     }

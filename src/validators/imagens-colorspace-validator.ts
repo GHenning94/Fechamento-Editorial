@@ -14,14 +14,16 @@ export class ImagensColorspaceValidator extends BaseValidator {
       const graphics = collectGraphics(doc);
 
       for (const graphic of graphics) {
-        if (graphic.colorSpace !== "CMYK") {
-          issues.push({
-            message: "RGB encontrado",
-            page: graphic.pageName,
-            object: graphic.imageName,
-            value: graphic.colorSpace,
-          });
+        if (graphic.colorSpace === "CMYK" || graphic.colorSpace === "Desconhecido") {
+          continue;
         }
+
+        issues.push({
+          message: `${graphic.colorSpace} encontrado`,
+          page: graphic.pageName,
+          object: graphic.imageName,
+          value: graphic.colorSpace,
+        });
       }
 
       return createResult(this.id, this.name, issues, "error");

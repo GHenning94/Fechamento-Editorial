@@ -1,33 +1,10 @@
 import type { Document } from "indesign";
 import { GraphicInfo, StrokeInfo } from "../models/validator";
 import {
-  getImageColorSpaceLabel,
+  collectGraphicsFromItem,
   getPageItemDisplayName,
   walkDirectPageItems,
 } from "../utils/indesign-helpers";
-import { forEachCollectionItem } from "../utils/collection-helpers";
-
-type GraphicLike = {
-  itemLink: import("indesign").Link | null;
-  isValid: boolean;
-  space: number;
-  effectiveResolution: number;
-  actualPpi: number[];
-};
-
-function getGraphicDpi(graphic: { effectiveResolution: number; actualPpi: number[] }): number {
-  try {
-    if (graphic.actualPpi && graphic.actualPpi.length >= 2) {
-      return Math.min(graphic.actualPpi[0], graphic.actualPpi[1]);
-    }
-    if (graphic.effectiveResolution) {
-      return graphic.effectiveResolution;
-    }
-  } catch {
-    // ignore
-  }
-  return 0;
-}
 
 export class DocumentScan {
   private graphicsCache: GraphicInfo[] | null = null;
@@ -52,6 +29,7 @@ export class DocumentScan {
 
     const graphics: GraphicInfo[] = [];
     const strokes: StrokeInfo[] = [];
+    const graphicSeen = new Set<string>();
 
     walkDirectPageItems(this.doc, (item, _page, pageName) => {
       try {
@@ -65,7 +43,7 @@ export class DocumentScan {
           });
         }
 
-        this.collectGraphicsFromItem(item, pageName, graphics);
+        collectGraphicsFromItem(item, pageName, graphics, graphicSeen);
       } catch {
         // ignora item inválido
       }
@@ -73,41 +51,5 @@ export class DocumentScan {
 
     this.graphicsCache = graphics;
     this.strokesCache = strokes;
-  }
-
-  private collectGraphicsFromItem(
-    item: import("indesign").PageItem,
-    pageName: string,
-    graphics: GraphicInfo[]
-  ): void {
-    forEachCollectionItem<GraphicLike>(item.graphics, (graphic) => {
-      if (!graphic?.isValid) return;
-
-      const link = graphic.itemLink;
-      const imageName = link && link.isValid ? link.name : item.name || "Imagem";
-
-      graphics.push({
-        pageName,
-        imageName,
-        dpi: getGraphicDpi(graphic),
-        colorSpace: getImageColorSpaceLabel(graphic.space),
-        pageItem: item,
-      });
-    });
-
-    forEachCollectionItem<GraphicLike>(item.images, (image) => {
-      if (!image?.isValid) return;
-
-      const link = image.itemLink;
-      const imageName = link && link.isValid ? link.name : item.name || "Imagem";
-
-      graphics.push({
-        pageName,
-        imageName,
-        dpi: getGraphicDpi(image),
-        colorSpace: getImageColorSpaceLabel(image.space),
-        pageItem: item,
-      });
-    });
   }
 }

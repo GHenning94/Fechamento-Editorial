@@ -111,7 +111,7 @@ function isColorInNamedFolder(color: Color, folderNames: Set<string>): boolean {
 
 function isProcessColorSwatch(item: Swatch | Color): item is Color {
   const color = item as Color;
-  return typeof color.space === "number" && typeof color.model === "number";
+  return color.model != null || typeof color.space === "number";
 }
 
 /**

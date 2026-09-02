@@ -257,6 +257,7 @@ declare module "indesign" {
     fillOverprint: boolean;
     strokeOverprint: boolean;
     geometricBounds: number[];
+    visibleBounds?: number[];
     parentPage: Page | number;
     pageItems?: PageItems;
     allPageItems?: PageItems;
@@ -269,6 +270,7 @@ declare module "indesign" {
     parentStory?: Story;
     graphics?: Graphics;
     images?: Images;
+    allGraphics?: Graphics;
     remove?(): void;
     texts?: Texts;
     textFramePreferences?: TextFramePreferences;
@@ -330,6 +332,7 @@ declare module "indesign" {
     itemLink: Link | null;
     space: number;
     effectiveResolution: number;
+    effectivePpi?: number[];
     actualPpi: number[];
     parent: PageItem;
     isValid: boolean;
@@ -339,6 +342,7 @@ declare module "indesign" {
     itemLink: Link | null;
     space: number;
     effectiveResolution: number;
+    effectivePpi?: number[];
     actualPpi: number[];
     parent: PageItem;
     isValid: boolean;
@@ -569,6 +573,7 @@ declare module "indesign" {
     parent?: Spread | unknown;
     pageItems: PageItems;
     allPageItems: PageItems;
+    masterPageItems?: PageItems;
     equals(other: Page): boolean;
     exportFile(format: string, to: File | string, showingOptions?: boolean): void;
     textFrames?: TextFrames;

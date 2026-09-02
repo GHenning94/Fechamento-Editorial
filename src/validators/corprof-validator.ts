@@ -1,9 +1,10 @@
 import type { Document } from "indesign";
-import { getInDesignModule } from "../utils/indesign-runtime";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { COLOR_CORPROF, VALIDATOR_IDS } from "../utils/constants";
-import { findCorProfColor } from "../utils/editorial-color";
+import { findCorProfColor, isCorProfColorName } from "../utils/editorial-color";
+import { isSpotColor } from "../utils/color-model";
+import { colorOverprintSatisfied } from "../utils/guide-color-overprint";
 
 export class CorProfValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.CORPROF;
@@ -13,9 +14,6 @@ export class CorProfValidator extends BaseValidator {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
       const match = findCorProfColor(doc);
-
-      const { ColorModel } = getInDesignModule();
-      const CM = ColorModel as { SPOT: number };
 
       if (!match) {
         issues.push({
@@ -33,14 +31,14 @@ export class CorProfValidator extends BaseValidator {
         });
       }
 
-      if (match.color.model !== CM.SPOT) {
+      if (!isSpotColor(match.color)) {
         issues.push({
           message: "CorProf deve ser Spot Color",
           object: match.foundName,
         });
       }
 
-      if (!match.color.overprintFill) {
+      if (!colorOverprintSatisfied(doc, match.color, isCorProfColorName)) {
         issues.push({
           message: "CorProf sem Overprint Fill ativo",
           object: match.foundName,
