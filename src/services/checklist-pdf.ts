@@ -60,7 +60,7 @@ interface CheckboxField {
 
 function sanitizePdfText(text: string): string {
   return (text || "")
-    .replace(/[\u2013\u2014\u2212]/g, " - ")
+    .replace(/[\u2013\u2014\u2212]/g, "-")
     .replace(/\u2026/g, "...")
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
@@ -210,10 +210,10 @@ function checkboxAppearanceStream(size: number, checked: boolean): string {
   }
   return [
     `${MAGENTA} rg ${circlePath(cx, cy, r)} h f`,
-    `${WHITE} RG 1.25 w 1 J 1 j`,
-    `${(cx - 2.2).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
-    `${(cx - 0.4).toFixed(2)} ${(cy - 2.1).toFixed(2)} l`,
-    `${(cx + 2.6).toFixed(2)} ${(cy + 2.0).toFixed(2)} l S`,
+    `${WHITE} RG 1.7 w 1 J 1 j`,
+    `${(cx - 2.6).toFixed(2)} ${(cy - 0.1).toFixed(2)} m`,
+    `${(cx - 0.5).toFixed(2)} ${(cy - 2.45).toFixed(2)} l`,
+    `${(cx + 3.05).toFixed(2)} ${(cy + 2.35).toFixed(2)} l S`,
   ].join(" ");
 }
 
@@ -529,9 +529,10 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
     const nAp = field.checked ? apYesId : apOffId;
+    const state = field.checked ? "/Yes" : "/Off";
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /BC [] /BG [] /CA () >> /AP << /N ${nAp} 0 R /D ${nAp} 0 R /R ${nAp} 0 R >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV ${state} /AS ${state} /H /P /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /BC [] /BG [] >> /AP << /N ${nAp} 0 R /D ${apYesId} 0 R >> >>`
     );
   }
 

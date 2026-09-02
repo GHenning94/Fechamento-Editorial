@@ -67,7 +67,7 @@ export class LayersObrigatoriasValidator extends BaseValidator {
 
 export class LayersNomenclaturaValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.LAYERS_NOMENCLATURA;
-  readonly name = "Layers — Nomenclatura";
+  readonly name = "Layers - Nomenclatura";
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {

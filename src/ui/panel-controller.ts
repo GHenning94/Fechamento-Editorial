@@ -18,6 +18,7 @@ import { showResultsDetailDialog } from "./results-detail-dialog";
 import { bindResultGroupToggles } from "./result-group-toggle";
 import { tryExpandPanelToHostHeight } from "./panel-expand";
 import { formatIssueLine } from "../utils/issue-text";
+import { getValidatorSuccessText } from "../utils/validator-success-text";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -174,7 +175,20 @@ export class PanelController {
     try {
       const hasMemorial = hasMemorialLayer();
       const hasRendimento = hasRendimentoLayer();
-      if (!hasMemorial || !hasRendimento) {
+      if (!hasMemorial && !hasRendimento) {
+        const proceed = await promptConfirmDialog(
+          [
+            "Não existem a layer de memorial descritivo e a layer de rendimento neste documento.",
+            "Os PDFs serão gerados mesmo assim, sem essas layers.",
+            "Deseja fechar o material mesmo assim?",
+          ].join("\n"),
+          "Layers de memorial e rendimento"
+        );
+        if (!proceed) {
+          this.setStatus("Fechamento cancelado.", "info");
+          return;
+        }
+      } else if (!hasMemorial || !hasRendimento) {
         const lines: string[] = [];
         if (!hasMemorial) {
           lines.push("Não existe a layer de memorial descritivo neste documento.");
@@ -184,12 +198,9 @@ export class PanelController {
         }
         lines.push("Os PDFs serão gerados mesmo assim, sem essa layer.");
         lines.push("Deseja fechar o material mesmo assim?");
-        const title =
-          !hasMemorial && !hasRendimento
-            ? "Layers obrigatórias"
-            : !hasMemorial
-              ? "Layer de memorial descritivo"
-              : "Layer de rendimento";
+        const title = !hasMemorial
+          ? "Layer de memorial descritivo"
+          : "Layer de rendimento";
         const proceed = await promptConfirmDialog(lines.join("\n"), title);
         if (!proceed) {
           this.setStatus("Fechamento cancelado.", "info");
@@ -320,6 +331,7 @@ export class PanelController {
 
     if (this.listApproved) {
       this.listApproved.innerHTML = this.renderResultList(safe.results, "success");
+      bindResultGroupToggles(this.listApproved);
     }
     if (this.listWarnings) {
       this.listWarnings.innerHTML = this.renderResultList(this.rawSummary?.results || [], "warning", true);
@@ -488,10 +500,30 @@ export class PanelController {
         return '<li class="empty-item">Nenhum item</li>';
       }
       return approved
-        .map(
-          (result) =>
-            `<li><span class="item-title">${this.escape(result.validatorName)}</span> — OK</li>`
-        )
+        .map((result) => {
+          const description = getValidatorSuccessText(result.validatorId, result.validatorName);
+          return `
+          <li class="result-group">
+            <div
+              class="result-group-toggle"
+              data-result-group-toggle
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+            >
+              <span class="result-group-chevron">▸</span>
+              <span class="item-title">${this.escape(result.validatorName)}</span>
+            </div>
+            <div class="result-group-body">
+              <div class="result-group-issue">
+                <div class="issue-line-row">
+                  <div class="issue-line">${this.escape(description)}</div>
+                </div>
+              </div>
+            </div>
+          </li>
+        `;
+        })
         .join("");
     }
 

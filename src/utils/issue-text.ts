@@ -25,7 +25,7 @@ export function formatIssueLine(
     includeDetails?: boolean;
   }
 ): string {
-  const sep = options?.separator ?? " — ";
+  const sep = options?.separator ?? " - ";
   let line = (issue.message || "").trim();
   if (options?.kind) {
     line = `${options.kind}: ${line}`;
@@ -34,7 +34,7 @@ export function formatIssueLine(
   if (issue.page) {
     const page = issue.page.trim();
     if (page && !includesIgnoreCase(line, page)) {
-      const pageLabel = sep.includes("—") ? `Pág: ${page}` : `pág. ${page}`;
+      const pageLabel = sep.includes(" - ") || sep.includes("-") ? `Pág: ${page}` : `pág. ${page}`;
       line = appendUniqueSegment(line, pageLabel, sep);
     }
   }

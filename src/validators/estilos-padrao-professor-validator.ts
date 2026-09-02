@@ -29,7 +29,7 @@ function collectParagraphStyleNames(doc: Document): Set<string> {
 
 export class EstilosPadraoProfessorValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.ESTILOS_PADRAO_PROFESSOR;
-  readonly name = "Estilos Padrão — Professor";
+  readonly name = "Estilos Padrão - Professor";
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {

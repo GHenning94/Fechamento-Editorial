@@ -32,7 +32,7 @@ export class LinksValidator extends BaseValidator {
               message: "Link ausente/quebrado",
               page: pageName,
               object: objectName,
-              details: `${getLinkDetails(link)} — ${getLinkFixSuggestion(status, link)}`,
+              details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
             });
             continue;
           }
@@ -42,7 +42,7 @@ export class LinksValidator extends BaseValidator {
               message: "Link modificado",
               page: pageName,
               object: objectName,
-              details: `${getLinkDetails(link)} — ${getLinkFixSuggestion(status, link)}`,
+              details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
             });
             continue;
           }
@@ -52,7 +52,7 @@ export class LinksValidator extends BaseValidator {
               message: "Link inacessível",
               page: pageName,
               object: objectName,
-              details: `${getLinkDetails(link)} — ${getLinkFixSuggestion(status, link)}`,
+              details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
             });
           }
         }

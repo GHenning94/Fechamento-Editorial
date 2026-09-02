@@ -12,9 +12,10 @@ import { yieldToHost } from "../utils/yield-to-host";
 const TAG_LABEL = "eac-rendimento-tag";
 const STYLE_NAME = "EAC_RendimentoLabel";
 const COLOR_FILL = "EAC_RENDIMENTO_FILL";
-const TAG_HEIGHT = 18;
-const TAG_INSET_X = 6;
-const TAG_MARGIN = 10;
+const TAG_HEIGHT = 28;
+const TAG_INSET_X = 10;
+const TAG_POINT_SIZE = 15;
+const TAG_LEADING = 16;
 
 export interface RendimentoTagsResult {
   layerName: string;
@@ -50,28 +51,329 @@ function isOwnTag(item: PageItem): boolean {
   return false;
 }
 
-function countFrameCharacters(frame: PageItem): number {
+function normalizeKey(value: string): string {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
+}
+
+function isPaginationName(value: string): boolean {
+  const key = normalizeKey(value);
+  if (!key) return false;
+  return /pagin|folio|page\s*num|num(ero)?\s*(da\s*)?pag/.test(key);
+}
+
+function itemId(item: PageItem): string {
   try {
-    const chars = (frame as { characters?: unknown }).characters;
-    if (chars) return getCollectionLength(chars);
+    const id = (item as PageItem & { id?: number }).id;
+    if (typeof id === "number") return `id:${id}`;
+  } catch {
+    // ignore
+  }
+  try {
+    const geo = item.geometricBounds;
+    if (geo && geo.length >= 4) return `geo:${geo.map((n) => Number(n).toFixed(2)).join(",")}`;
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function isVisibleItem(item: PageItem): boolean {
+  try {
+    if ((item as PageItem & { visible?: boolean }).visible === false) return false;
+  } catch {
+    // ignore
+  }
+  try {
+    const layer = item.itemLayer;
+    if (layer?.isValid && layer.visible === false) return false;
+  } catch {
+    // ignore
+  }
+  try {
+    if ((item as PageItem & { nonprinting?: boolean }).nonprinting) return false;
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
+function boundsOverlap(a: number[], b: number[]): boolean {
+  if (!a || a.length < 4 || !b || b.length < 4) return true;
+  const ay1 = Math.min(a[0], a[2]);
+  const ay2 = Math.max(a[0], a[2]);
+  const ax1 = Math.min(a[1], a[3]);
+  const ax2 = Math.max(a[1], a[3]);
+  const by1 = Math.min(b[0], b[2]);
+  const by2 = Math.max(b[0], b[2]);
+  const bx1 = Math.min(b[1], b[3]);
+  const bx2 = Math.max(b[1], b[3]);
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+}
+
+function isOnPageArea(item: PageItem, pageBounds: number[] | null): boolean {
+  if (!pageBounds) return true;
+  try {
+    const geo = item.geometricBounds;
+    if (!geo || geo.length < 4) return true;
+    return boundsOverlap(geo, pageBounds);
+  } catch {
+    return true;
+  }
+}
+
+let cachedPageNumberSpecials: Set<unknown> | null = null;
+
+function pageNumberSpecials(): Set<unknown> {
+  if (cachedPageNumberSpecials) return cachedPageNumberSpecials;
+  const { SpecialCharacters } = getInDesignModule() as {
+    SpecialCharacters?: {
+      AUTO_PAGE_NUMBER?: unknown;
+      NEXT_PAGE_NUMBER?: unknown;
+      PREVIOUS_PAGE_NUMBER?: unknown;
+      SECTION_MARKER?: unknown;
+    };
+  };
+  cachedPageNumberSpecials = new Set(
+    [
+      SpecialCharacters?.AUTO_PAGE_NUMBER,
+      SpecialCharacters?.NEXT_PAGE_NUMBER,
+      SpecialCharacters?.PREVIOUS_PAGE_NUMBER,
+      SpecialCharacters?.SECTION_MARKER,
+    ].filter((value) => value != null)
+  );
+  return cachedPageNumberSpecials;
+}
+
+function isPaginationFrame(item: PageItem, page: Page): boolean {
+  try {
+    if (isPaginationName(item.name || "")) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    if (isPaginationName(item.itemLayer?.name || "")) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const paras = (item as PageItem & { paragraphs?: unknown }).paragraphs;
+    const para = getCollectionItem<{ appliedParagraphStyle?: { name?: string } }>(paras, 0);
+    if (isPaginationName(para?.appliedParagraphStyle?.name || "")) return true;
+  } catch {
+    // ignore
+  }
+
+  let raw = "";
+  try {
+    raw = String((item as { contents?: unknown }).contents || "").replace(/\s+/g, "");
+  } catch {
+    raw = "";
+  }
+  if (!raw) return false;
+
+  const pageName = String(page.name || "").replace(/\s+/g, "");
+  if (pageName && raw === pageName) return true;
+  try {
+    const offset = (page as Page & { documentOffset?: number }).documentOffset;
+    if (typeof offset === "number" && raw === String(offset + 1)) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function isCountableCharacter(ch: { contents?: unknown; appliedParagraphStyle?: { name?: string } }): boolean {
+  const specials = pageNumberSpecials();
+  const contents = ch?.contents;
+  if (contents == null) return false;
+  if (specials.has(contents)) return false;
+  try {
+    if (isPaginationName(ch.appliedParagraphStyle?.name || "")) return false;
+  } catch {
+    // ignore
+  }
+  if (typeof contents === "string") {
+    if (!contents || contents === "\r" || contents === "\n" || contents === "\u0003" || contents === "\u0007") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function countFrameCharacters(frame: PageItem, page: Page): number {
+  if (isPaginationFrame(frame, page)) return 0;
+
+  try {
+    const lines = (frame as PageItem & { lines?: unknown }).lines;
+    const lineCount = getCollectionLength(lines);
+    if (lineCount > 0) {
+      let total = 0;
+      forEachCollectionItem<{ characters?: unknown }>(lines, (line) => {
+        forEachCollectionItem<{ contents?: unknown; appliedParagraphStyle?: { name?: string } }>(
+          line.characters,
+          (ch) => {
+            if (isCountableCharacter(ch)) total += 1;
+          }
+        );
+      });
+      return total;
+    }
   } catch {
     // fallback
   }
+
   try {
-    return String((frame as { contents?: unknown }).contents || "").length;
+    const chars = (frame as { characters?: unknown }).characters;
+    if (chars) {
+      let total = 0;
+      forEachCollectionItem<{ contents?: unknown; appliedParagraphStyle?: { name?: string } }>(chars, (ch) => {
+        if (isCountableCharacter(ch)) total += 1;
+      });
+      return total;
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const raw = String((frame as { contents?: unknown }).contents || "");
+    return raw.replace(/[\r\n\u0003]/g, "").length;
   } catch {
     return 0;
   }
 }
 
+function isUsableMaster(master: { isValid?: boolean } | null | undefined): boolean {
+  if (!master) return false;
+  try {
+    if ((master as { isValid?: boolean }).isValid === false) return false;
+  } catch {
+    return false;
+  }
+  try {
+    const name = String(master);
+    if (/nothing/i.test(name)) return false;
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
+function matchingMasterPage(page: Page): Page | null {
+  let master: { pages?: unknown; isValid?: boolean } | null = null;
+  try {
+    master = (page as Page & { appliedMaster?: { pages?: unknown; isValid?: boolean } }).appliedMaster || null;
+  } catch {
+    return null;
+  }
+  if (!master) return null;
+  if (!isUsableMaster(master)) return null;
+  const masterSpread = master;
+
+  const length = getCollectionLength(masterSpread.pages);
+  if (length <= 0) return null;
+  if (length === 1) return getCollectionItem<Page>(masterSpread.pages, 0);
+
+  let matched: Page | null = null;
+  try {
+    const side = (page as Page & { side?: unknown }).side;
+    forEachCollectionItem<Page>(masterSpread.pages, (masterPage) => {
+      if (matched || !masterPage?.isValid) return;
+      try {
+        if (side != null && (masterPage as Page & { side?: unknown }).side === side) {
+          matched = masterPage;
+        }
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+  if (matched) return matched;
+
+  try {
+    const parent = (page as Page & { parent?: { pages?: unknown } }).parent;
+    let found = -1;
+    forEachCollectionItem<Page>(parent?.pages, (spreadPage, index) => {
+      if (found >= 0 || !spreadPage?.isValid) return;
+      try {
+        if (
+          (spreadPage as Page & { id?: number }).id === (page as Page & { id?: number }).id
+        ) {
+          found = index;
+        }
+      } catch {
+        // ignore
+      }
+    });
+    if (found >= 0 && found < length) {
+      return getCollectionItem<Page>(masterSpread.pages, found);
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+function collectTextFrames(page: Page): PageItem[] {
+  const frames: PageItem[] = [];
+  const seen = new Set<string>();
+  const pageBounds = page.bounds || null;
+
+  const addFrom = (collection: unknown): void => {
+    forEachCollectionItem<PageItem>(collection, (item) => {
+      if (!item?.isValid) return;
+      if (!isTextFrameItem(item)) return;
+      if (isOwnTag(item) || isOnSkipLayer(item)) return;
+      if (!isVisibleItem(item)) return;
+      if (!isOnPageArea(item, pageBounds)) return;
+      const keys: string[] = [];
+      const id = itemId(item);
+      if (id) keys.push(id);
+      try {
+        const geo = item.geometricBounds;
+        if (geo && geo.length >= 4) {
+          keys.push(`geo:${geo.map((n) => Number(n).toFixed(1)).join(",")}`);
+        }
+      } catch {
+        // ignore
+      }
+      if (keys.length > 0 && keys.some((key) => seen.has(key))) return;
+      keys.forEach((key) => seen.add(key));
+      frames.push(item);
+    });
+  };
+
+  addFrom(page.allPageItems);
+  addFrom(page.pageItems);
+
+  try {
+    const masterItems = (page as Page & { masterPageItems?: unknown }).masterPageItems;
+    addFrom(masterItems);
+  } catch {
+    // ignore
+  }
+
+  const masterPage = matchingMasterPage(page);
+  if (masterPage?.isValid) {
+    addFrom(masterPage.allPageItems);
+    addFrom(masterPage.pageItems);
+  }
+
+  return frames;
+}
+
 function countPageCharacters(page: Page): number {
   let total = 0;
-  forEachCollectionItem<PageItem>(page.allPageItems, (item) => {
-    if (!item?.isValid) return;
-    if (!isTextFrameItem(item)) return;
-    if (isOwnTag(item) || isOnSkipLayer(item)) return;
-    total += countFrameCharacters(item);
-  });
+  for (const frame of collectTextFrames(page)) {
+    total += countFrameCharacters(frame, page);
+  }
   return total;
 }
 
@@ -302,12 +604,12 @@ function applyCalibriBold(target: { appliedFont?: unknown; fontStyle?: string })
 function styleTagParagraph(style: ParagraphStyle, paper: Swatch | Color | null): void {
   applyCalibriBold(style);
   try {
-    style.pointSize = 13;
+    style.pointSize = TAG_POINT_SIZE;
   } catch {
     // ignore
   }
   try {
-    style.leading = 14;
+    style.leading = TAG_LEADING;
   } catch {
     // ignore
   }
@@ -402,12 +704,12 @@ function lockTagText(
   }
   applyCalibriBold(text);
   try {
-    text.pointSize = 13;
+    text.pointSize = TAG_POINT_SIZE;
   } catch {
     // ignore
   }
   try {
-    (text as Text & { leading?: number }).leading = 14;
+    (text as Text & { leading?: number }).leading = TAG_LEADING;
   } catch {
     // ignore
   }
@@ -422,7 +724,7 @@ function lockTagText(
 
 function estimateTagWidth(value: string): number {
   const digits = Math.max(1, value.length);
-  return TAG_INSET_X * 2 + digits * 8 + 4;
+  return TAG_INSET_X * 2 + digits * 10 + 8;
 }
 
 function placeTag(
@@ -439,10 +741,12 @@ function placeTag(
 
   const label = String(count);
   const width = estimateTagWidth(label);
-  const top = bounds[0] + TAG_MARGIN;
-  const right = bounds[3] - TAG_MARGIN;
-  const left = right - width;
-  const bottom = top + TAG_HEIGHT;
+  const centerY = (bounds[0] + bounds[2]) / 2;
+  const centerX = (bounds[1] + bounds[3]) / 2;
+  const top = centerY - TAG_HEIGHT / 2;
+  const bottom = centerY + TAG_HEIGHT / 2;
+  const left = centerX - width / 2;
+  const right = centerX + width / 2;
 
   const frame = page.textFrames?.add();
   if (!frame?.isValid) return;
