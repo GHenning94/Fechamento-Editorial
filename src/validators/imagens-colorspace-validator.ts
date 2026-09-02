@@ -1,16 +1,8 @@
 import type { Document } from "indesign";
 import { BaseValidator } from "./base-validator";
-import { createResult } from "../models/validation-result";
+import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { collectGraphics } from "../utils/indesign-helpers";
-
-function fileNameOf(graphic: { imageName: string; fileName?: string }): string {
-  return graphic.fileName || graphic.imageName || "";
-}
-
-function isEpsOrPsd(name: string): boolean {
-  return /\.(eps|psd)$/i.test(name);
-}
 
 export class ImagensColorspaceValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.IMAGENS_COLORSPACE;
@@ -18,28 +10,35 @@ export class ImagensColorspaceValidator extends BaseValidator {
 
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
-      const issues = [];
+      const issues: ValidationIssue[] = [];
       const graphics = collectGraphics(doc);
+      const seenFiles = new Set<string>();
 
       for (const graphic of graphics) {
-        const name = fileNameOf(graphic);
-        const requiresProfile = isEpsOrPsd(name);
+        const name = graphic.fileName || graphic.imageName || "";
+        const fileKey = name.toLowerCase();
+        if (fileKey && seenFiles.has(fileKey)) continue;
+        if (fileKey) seenFiles.add(fileKey);
 
         if (graphic.colorSpace === "CMYK") continue;
-        if (graphic.colorSpace === "Desconhecido" && !requiresProfile) continue;
 
+        const unidentified = graphic.colorSpace === "Desconhecido";
         issues.push({
-          message:
-            graphic.colorSpace === "Desconhecido"
-              ? "Espaço de cor não identificado"
-              : `${graphic.colorSpace} encontrado`,
+          message: unidentified ? "Espaço de cor não identificado" : `${graphic.colorSpace} encontrado`,
           page: graphic.pageName,
           object: graphic.imageName,
           value: graphic.colorSpace,
+          severity: unidentified ? "warning" : "error",
         });
       }
 
-      return createResult(this.id, this.name, issues, "error");
+      const severity = issues.some((issue) => (issue.severity || "error") === "error")
+        ? "error"
+        : issues.length > 0
+          ? "warning"
+          : "success";
+
+      return createResult(this.id, this.name, issues, severity);
     });
   }
 }

@@ -53,7 +53,10 @@ const PANEL_HTML = `
   </section>
 
   <section class="progress-section">
-    <span id="progress-label" class="progress-label">Aguardando…</span>
+    <div class="progress-row">
+      <span id="progress-label" class="progress-label">Aguardando…</span>
+      <div id="btn-cancel-checklist" class="btn btn-cancel-checklist hidden" role="button" tabindex="0">Cancelar</div>
+    </div>
     <progress id="progress-bar" max="100" value="0"></progress>
   </section>
 

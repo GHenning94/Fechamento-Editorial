@@ -346,19 +346,23 @@ function ensureTagParagraphStyle(doc: Document): ParagraphStyle | null {
   }
 }
 
+function applyCalibriRegular(target: { appliedFont?: unknown; fontStyle?: string }): void {
+  try {
+    (target as { appliedFont: string }).appliedFont = "Calibri";
+  } catch {
+    // ignore
+  }
+  try {
+    target.fontStyle = "Regular";
+  } catch {
+    // ignore
+  }
+}
+
 function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
   const ink = colorByName(doc, "EAC_TAG_INK") || swatchByName(doc, ["Black", "Preto"]);
   const none = swatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
-  try {
-    style.appliedFont = "Minion Pro";
-  } catch {
-    // ignore
-  }
-  try {
-    (style as ParagraphStyle & { fontStyle?: string }).fontStyle = "Medium";
-  } catch {
-    // ignore
-  }
+  applyCalibriRegular(style);
   try {
     (style as ParagraphStyle & { pointSize?: number }).pointSize = 12;
   } catch {
@@ -719,16 +723,7 @@ function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Doc
   } catch {
     // ignore
   }
-  try {
-    text.appliedFont = "Minion Pro";
-  } catch {
-    // ignore
-  }
-  try {
-    text.fontStyle = "Medium";
-  } catch {
-    // ignore
-  }
+  applyCalibriRegular(text);
   try {
     text.pointSize = 12;
   } catch {

@@ -11,6 +11,7 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { PackageCancelledError, promptPackageFolder } from "../utils/file-system";
 import { yieldToHost } from "../utils/yield-to-host";
 import { getDefaultReportUserName } from "../utils/indesign-runtime";
+import { isChecklistCancelled } from "../core/checklist-runner";
 import { onActionActivate, setActionDisabled } from "./action-control";
 import { promptConfirmDialog } from "./confirm-dialog";
 import { promptUserNameDialog } from "./user-name-dialog";
@@ -31,6 +32,8 @@ export class PanelController {
   private btnClose: HTMLElement | null;
   private progressBar: HTMLProgressElement | null;
   private progressLabel: HTMLElement | null;
+  private btnCancelChecklist: HTMLElement | null;
+  private checklistAbort: AbortController | null = null;
   private countErrors: HTMLElement | null;
   private countWarnings: HTMLElement | null;
   private countApproved: HTMLElement | null;
@@ -52,6 +55,7 @@ export class PanelController {
     this.btnClose = root.querySelector("#btn-close");
     this.progressBar = root.querySelector("#progress-bar");
     this.progressLabel = root.querySelector("#progress-label");
+    this.btnCancelChecklist = root.querySelector("#btn-cancel-checklist");
     this.countErrors = root.querySelector("#count-errors");
     this.countWarnings = root.querySelector("#count-warnings");
     this.countApproved = root.querySelector("#count-approved");
@@ -66,6 +70,9 @@ export class PanelController {
     });
     if (this.btnIgnoreAllWarnings) {
       onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
+    }
+    if (this.btnCancelChecklist) {
+      onActionActivate(this.btnCancelChecklist, () => this.cancelRunningChecklist());
     }
   }
 
@@ -270,9 +277,15 @@ export class PanelController {
     try {
       await action();
     } catch (error) {
+      if (isChecklistCancelled(error)) {
+        this.resetProgress();
+        this.setStatus("Checklist cancelado.", "info");
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.setStatus(message, "error");
     } finally {
+      this.finishChecklistRun();
       this.setBusy(false);
     }
   }
@@ -283,6 +296,28 @@ export class PanelController {
     setActionDisabled(this.btnCreateRendimento, busy);
     setActionDisabled(this.btnClose, busy);
     setActionDisabled(this.btnDownloadReport, busy || !this.reportDownloadAllowed);
+  }
+
+  startChecklistSignal(): AbortSignal {
+    this.checklistAbort = new AbortController();
+    this.setChecklistCancelVisible(true);
+    return this.checklistAbort.signal;
+  }
+
+  finishChecklistRun(): void {
+    this.checklistAbort = null;
+    this.setChecklistCancelVisible(false);
+  }
+
+  private cancelRunningChecklist(): void {
+    if (!this.checklistAbort) return;
+    this.checklistAbort.abort();
+    this.setProgress(this.progressBar?.value || 0, "Cancelando…");
+    this.setStatus("Cancelando checklist…", "info");
+  }
+
+  private setChecklistCancelVisible(visible: boolean): void {
+    this.btnCancelChecklist?.classList.toggle("hidden", !visible);
   }
 
   setReportDownloadEnabled(enabled: boolean): void {
@@ -354,10 +389,7 @@ export class PanelController {
     this.syncOpenResultWindows();
 
     if (statusMessage) {
-      this.setStatus(
-        statusMessage,
-        safe.errors > 0 ? "error" : safe.warnings > 0 ? "warning" : "success"
-      );
+      this.setStatus(statusMessage, "success");
     }
 
     this.onSummaryFiltered?.(safe);

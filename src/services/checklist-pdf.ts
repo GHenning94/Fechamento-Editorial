@@ -7,13 +7,15 @@ const PAGE_H = 841.89;
 const MARGIN_X = 36;
 const MAGENTA = "0.847 0.200 0.380";
 const MAGENTA_LIGHT = "0.957 0.769 0.824";
+const CHECK_ON = "0.369 0.812 0.557";
+const CHECK_OFF = "0.80 0.93 0.86";
 const GRAY = "0.361 0.361 0.361";
 const BLACK = "0 0 0";
 const WHITE = "1 1 1";
 const RULE = "0.82 0.82 0.82";
 const FOOTER_H = 50;
 const BOTTOM_MARGIN = 32;
-const CHECK_SIZE = 11;
+const CHECK_SIZE = 12;
 const INSTRUCTIONS = [
   "Esta checklist deve ser preenchida inicialmente pelo(s) responsável(eis) do projeto e completada por qualquer um do time que venha a finalizar o processo.",
   "Será o documento de referência para atestar a qualidade e cercar possíveis erros que possam ser escalonados durante o processo de produção de arte.",
@@ -202,18 +204,18 @@ function textAt(x: number, y: number, size: number, font: "F1" | "F2", color: st
 }
 
 function checkboxAppearanceStream(size: number, checked: boolean): string {
-  const r = size / 2 - 0.55;
+  const r = size / 2 - 0.35;
   const cx = size / 2;
   const cy = size / 2;
   if (!checked) {
-    return `${MAGENTA_LIGHT} rg ${circlePath(cx, cy, r)} h f`;
+    return `${CHECK_OFF} rg ${circlePath(cx, cy, r)} h f`;
   }
   return [
-    `${MAGENTA} rg ${circlePath(cx, cy, r)} h f`,
+    `${CHECK_ON} rg ${circlePath(cx, cy, r)} h f`,
     `${WHITE} RG 1.7 w 1 J 1 j`,
-    `${(cx - 2.6).toFixed(2)} ${(cy - 0.1).toFixed(2)} m`,
-    `${(cx - 0.5).toFixed(2)} ${(cy - 2.45).toFixed(2)} l`,
-    `${(cx + 3.05).toFixed(2)} ${(cy + 2.35).toFixed(2)} l S`,
+    `${(cx - 2.7).toFixed(2)} ${(cy - 0.1).toFixed(2)} m`,
+    `${(cx - 0.5).toFixed(2)} ${(cy - 2.55).toFixed(2)} l`,
+    `${(cx + 3.15).toFixed(2)} ${(cy + 2.45).toFixed(2)} l S`,
   ].join(" ");
 }
 
@@ -529,12 +531,12 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
     const state = field.checked ? "/Yes" : "/Off";
-    // Checkbox (Ff 0) com /AP /N em dicionário (Yes + Off). Sem /D: o visto não
-    // pode mais aparecer só no mouse-down e sumir. Preview/Acrobat trocam /AS
-    // e usam o Form XObject circular correspondente.
+    const mkBg = field.checked ? CHECK_ON : CHECK_OFF;
+    // Radio (Ff 32768) sem NoToggleToOff: o Preview usa chrome circular nativo
+    // em vez do checkbox quadrado cinza. Nomes /T únicos = grupos independentes.
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 >> /MK << /R 0 /BC [] /BG [] /CA () >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 32768 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /BS << /W 0 /S /S >> /MK << /BG [${mkBg}] /BC [] /CA () >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
     );
   }
 

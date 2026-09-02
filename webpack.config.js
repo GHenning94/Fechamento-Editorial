@@ -50,6 +50,7 @@ module.exports = (env, argv) => {
       "indesign-19.0": "commonjs2 indesign-19.0",
       "indesign-18.5": "commonjs2 indesign-18.5",
       os: "commonjs2 os",
+      fs: "commonjs2 fs",
       clipboard: "commonjs2 clipboard",
     },
     optimization: {

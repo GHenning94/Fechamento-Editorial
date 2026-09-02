@@ -28,8 +28,8 @@ export class ClosureOrchestrator {
   private exportService = new ExportService();
   private reportService = new ReportService();
 
-  async runChecklist(onProgress?: ProgressCallback): Promise<ValidationSummary> {
-    const summary = await this.checklistRunner.runAsync(onProgress);
+  async runChecklist(onProgress?: ProgressCallback, signal?: AbortSignal): Promise<ValidationSummary> {
+    const summary = await this.checklistRunner.runAsync(onProgress, signal);
     this.cacheCurrentDocumentChecklist(summary);
     return summary;
   }

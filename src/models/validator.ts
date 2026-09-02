@@ -16,6 +16,8 @@ export interface GraphicInfo {
   colorSpace: string;
   pageItem: PageItem;
   fileName?: string;
+  filePath?: string;
+  linkId?: number;
 }
 
 export interface StrokeInfo {

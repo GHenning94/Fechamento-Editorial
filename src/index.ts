@@ -1,5 +1,6 @@
 import "./ui/styles.css";
 import { ClosureOrchestrator } from "./core/closure-orchestrator";
+import { ChecklistCancelledError, isChecklistCancelled } from "./core/checklist-runner";
 import { LICENSE_DEV_ALLOW_RESET } from "./licensing/license-config";
 import { deactivateLicense, isLicenseActive } from "./licensing/license-service";
 import { ValidationSummary } from "./models/validation-result";
@@ -112,12 +113,13 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       controller.resetProgress();
       controller.setStatus("Executando checklist editorial...", "info");
       await yieldToHost(40);
+      const signal = controller.startChecklistSignal();
 
       try {
         const summary = await orchestrator.runChecklist((current, total, label) => {
           const percent = Math.round((current / total) * 100);
           controller.setProgress(percent, `Checklist: ${label}`);
-        });
+        }, signal);
 
         lastChecklistSummary = summary;
         controller.setReportDownloadEnabled(true);
@@ -128,10 +130,17 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         });
         controller.renderSummary(summary, "Checklist");
       } catch (error) {
+        if (isChecklistCancelled(error) || error instanceof ChecklistCancelledError) {
+          controller.resetProgress();
+          controller.setStatus("Checklist cancelado.", "info");
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         controller.setProgress(100, "Checklist interrompido");
         controller.setStatus(message, "error");
         throw error;
+      } finally {
+        controller.finishChecklistRun();
       }
     },
 

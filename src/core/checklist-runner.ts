@@ -1,8 +1,13 @@
-import type { Document } from "indesign";
+import type { Document, Link } from "indesign";
 import { createAllValidators } from "../validators";
 import { IValidator } from "../models/validator";
 import { summarizeResults, ValidationResult, ValidationSummary } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
+import { forEachCollectionItem } from "../utils/collection-helpers";
+import {
+  clearFileColorSpaceCache,
+  prefetchColorSpacesFromLinks,
+} from "../utils/file-color-space";
 import {
   clearInDesignSelection,
   getActiveDocument,
@@ -20,6 +25,42 @@ import {
 } from "../utils/layer-lock";
 
 export type ProgressCallback = (current: number, total: number, label: string) => void;
+
+export class ChecklistCancelledError extends Error {
+  constructor(message = "Checklist cancelado.") {
+    super(message);
+    this.name = "ChecklistCancelledError";
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new ChecklistCancelledError();
+  }
+}
+
+function collectLinkColorTargets(): Array<{ id: number; name: string; filePath: string }> {
+  const doc = getActiveDocument();
+  const links: Array<{ id: number; name: string; filePath: string }> = [];
+  forEachCollectionItem<Link>(doc.links, (link) => {
+    if (!link?.isValid) return;
+    const filePath = link.filePath || link.linkResourceURI || "";
+    if (!filePath || filePath.toLowerCase().startsWith("http")) return;
+    links.push({
+      id: link.id,
+      name: link.name || "",
+      filePath,
+    });
+  });
+  return links;
+}
+
+export function isChecklistCancelled(error: unknown): boolean {
+  return (
+    error instanceof ChecklistCancelledError ||
+    (error instanceof Error && error.name === "ChecklistCancelledError")
+  );
+}
 
 const BETWEEN_VALIDATOR_MS = 80;
 const AFTER_HEAVY_VALIDATOR_MS = 160;
@@ -109,13 +150,29 @@ export class ChecklistRunner {
     );
   }
 
-  async runAsync(onProgress?: ProgressCallback): Promise<ValidationSummary> {
+  async runAsync(onProgress?: ProgressCallback, signal?: AbortSignal): Promise<ValidationSummary> {
+    throwIfAborted(signal);
+    clearFileColorSpaceCache();
     const validators = createAllValidators();
     const results: ValidationResult[] = [];
     const total = validators.length;
 
     clearInDesignSelection();
     await yieldForUi();
+    throwIfAborted(signal);
+
+    try {
+      const linkTargets = runInDesignReadOnly("EDITORIAL AUTOCLOSE - Links para espaço de cor", () =>
+        collectLinkColorTargets()
+      );
+      onProgress?.(0, total, "Lendo perfil de cor dos arquivos");
+      await prefetchColorSpacesFromLinks(linkTargets, signal);
+    } catch (error) {
+      if (error instanceof ChecklistCancelledError) throw error;
+      // segue a validação mesmo se a leitura de arquivo falhar
+    }
+
+    throwIfAborted(signal);
 
     let lockSnapshot: LayerLockSnapshot[] = [];
     try {
@@ -128,6 +185,7 @@ export class ChecklistRunner {
 
     try {
       for (let index = 0; index < validators.length; index++) {
+        throwIfAborted(signal);
         const validator = validators[index];
         const nextValidator = validators[index + 1];
         const batch = shouldBatchValidators(validator, nextValidator)
@@ -141,6 +199,7 @@ export class ChecklistRunner {
         const label = batch.map((item) => item.name).join(" + ");
         onProgress?.(index + 1, total, label);
         await yieldForUi();
+        throwIfAborted(signal);
 
         const useDirect = batch.some((item) => DIRECT_VALIDATOR_IDS.has(item.id));
         try {
@@ -162,6 +221,7 @@ export class ChecklistRunner {
 
         const isHeavy = batch.some((item) => HEAVY_VALIDATOR_IDS.has(item.id));
         await yieldToHost(isHeavy ? AFTER_HEAVY_VALIDATOR_MS : BETWEEN_VALIDATOR_MS);
+        throwIfAborted(signal);
       }
     } finally {
       try {
@@ -180,6 +240,7 @@ export class ChecklistRunner {
 
     onProgress?.(total, total, "Finalizando");
     await yieldForUi();
+    throwIfAborted(signal);
     return summarizeResults(results);
   }
 

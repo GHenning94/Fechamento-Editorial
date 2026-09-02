@@ -10,7 +10,7 @@ import {
   isGuiasDeletarColorName,
   normalizeColorName,
 } from "./editorial-color";
-import { getImageColorSpaceLabel } from "./color-model";
+import { resolveGraphicColorSpace } from "./file-color-space";
 
 export { getActiveDocument } from "./indesign-runtime";
 export { getImageColorSpaceLabel } from "./color-model";
@@ -420,6 +420,51 @@ export function getPageItemDedupKey(item: PageItem): string {
   }
 }
 
+function readGraphicSpace(graphic: GraphicLike): unknown {
+  const candidate = graphic as GraphicLike & {
+    imageColorSpace?: unknown;
+    colorSpace?: unknown;
+    properties?: { space?: unknown };
+  };
+  try {
+    if (graphic.space != null) return graphic.space;
+  } catch {
+    // ignore
+  }
+  try {
+    if (candidate.imageColorSpace != null) return candidate.imageColorSpace;
+  } catch {
+    // ignore
+  }
+  try {
+    if (candidate.colorSpace != null) return candidate.colorSpace;
+  } catch {
+    // ignore
+  }
+  try {
+    if (candidate.properties?.space != null) return candidate.properties.space;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function readLinkMeta(graphic: GraphicLike): { name: string; filePath: string; linkId: number | null } {
+  try {
+    const link = graphic.itemLink;
+    if (link && link.isValid) {
+      return {
+        name: link.name || "",
+        filePath: link.filePath || link.linkResourceURI || "",
+        linkId: typeof link.id === "number" ? link.id : null,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return { name: "", filePath: "", linkId: null };
+}
+
 type GraphicLike = {
   itemLink: import("indesign").Link | null;
   isValid: boolean;
@@ -476,28 +521,23 @@ export function collectGraphicsFromItem(
     if (seen.has(key)) return;
     seen.add(key);
 
-    let imageName = item.name || "Imagem";
-    try {
-      const link = graphic.itemLink;
-      if (link && link.isValid && link.name) imageName = link.name;
-    } catch {
-      // ignore
-    }
-
-    let space: unknown;
-    try {
-      space = graphic.space;
-    } catch {
-      space = null;
-    }
+    const meta = readLinkMeta(graphic);
+    const imageName = meta.name || item.name || "Imagem";
 
     graphics.push({
       pageName,
       imageName,
       dpi: getGraphicDpi(graphic),
-      colorSpace: getImageColorSpaceLabel(space),
+      colorSpace: resolveGraphicColorSpace({
+        space: readGraphicSpace(graphic),
+        fileName: imageName,
+        filePath: meta.filePath,
+        linkId: meta.linkId,
+      }),
       pageItem: item,
       fileName: imageName,
+      filePath: meta.filePath || undefined,
+      linkId: meta.linkId ?? undefined,
     });
   };
 
@@ -518,6 +558,57 @@ export function collectGraphicsFromItem(
   }
 }
 
+export function collectGraphicsFromLinks(
+  doc: Document,
+  graphics: GraphicInfo[],
+  seen: Set<string>
+): void {
+  forEachCollectionItem<Link>(doc.links, (link) => {
+    if (!link?.isValid) return;
+    const graphic = (link as Link & { parent?: GraphicLike }).parent;
+    if (!graphic?.isValid) return;
+
+    let pageItem: PageItem | null = null;
+    try {
+      pageItem = (graphic as GraphicLike & { parent?: PageItem }).parent || null;
+    } catch {
+      pageItem = null;
+    }
+
+    let pageName = "Página-mestra";
+    try {
+      const parentPage = pageItem?.parentPage;
+      if (parentPage && typeof parentPage === "object" && parentPage.name) {
+        pageName = parentPage.name;
+      }
+    } catch {
+      // ignore
+    }
+
+    const imageName = link.name || "Imagem";
+    const key = `link:${link.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const filePath = link.filePath || link.linkResourceURI || "";
+    graphics.push({
+      pageName,
+      imageName,
+      dpi: getGraphicDpi(graphic),
+      colorSpace: resolveGraphicColorSpace({
+        space: readGraphicSpace(graphic),
+        fileName: imageName,
+        filePath,
+        linkId: link.id,
+      }),
+      pageItem: pageItem || (graphic as unknown as PageItem),
+      fileName: imageName,
+      filePath: filePath || undefined,
+      linkId: link.id,
+    });
+  });
+}
+
 export function collectGraphics(doc: Document): GraphicInfo[] {
   const cached = getValidationScan()?.getGraphics();
   if (cached) {
@@ -536,49 +627,7 @@ export function collectGraphics(doc: Document): GraphicInfo[] {
   });
 
   try {
-    forEachCollectionItem<Link>(doc.links, (link) => {
-      if (!link?.isValid) return;
-      const graphic = (link as Link & { parent?: GraphicLike }).parent;
-      if (!graphic?.isValid) return;
-
-      let pageItem: PageItem | null = null;
-      try {
-        pageItem = (graphic as GraphicLike & { parent?: PageItem }).parent || null;
-      } catch {
-        pageItem = null;
-      }
-
-      let pageName = "Página-mestra";
-      try {
-        const parentPage = pageItem?.parentPage;
-        if (parentPage && typeof parentPage === "object" && parentPage.name) {
-          pageName = parentPage.name;
-        }
-      } catch {
-        // ignore
-      }
-
-      const imageName = link.name || "Imagem";
-      const key = `link:${link.id}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-
-      let space: unknown;
-      try {
-        space = graphic.space;
-      } catch {
-        space = null;
-      }
-
-      graphics.push({
-        pageName,
-        imageName,
-        dpi: getGraphicDpi(graphic),
-        colorSpace: getImageColorSpaceLabel(space),
-        pageItem: pageItem || (graphic as unknown as PageItem),
-        fileName: imageName,
-      });
-    });
+    collectGraphicsFromLinks(doc, graphics, seen);
   } catch {
     // painel Links pode falhar em documentos corrompidos
   }

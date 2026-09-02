@@ -67,7 +67,7 @@ export function readColorOverprintFill(color: Color): boolean | null {
 }
 
 export function getImageColorSpaceLabel(space: unknown): string {
-  if (space == null) return "Desconhecido";
+  if (space == null || space === 0 || space === "0") return "Desconhecido";
 
   try {
     const { ImageColorSpace, ColorSpace } = getInDesignModule() as {
@@ -84,8 +84,8 @@ export function getImageColorSpaceLabel(space: unknown): string {
     const csLab = enumValue(ColorSpace, ["LAB", "lab"]);
     const csHsb = enumValue(ColorSpace, ["HSB", "hsb"]);
 
-    if (space === icsCmyk || space === csCmyk || space === IMAGE_SPACE_CMYK) return "CMYK";
-    if (space === icsRgb || space === csRgb || space === IMAGE_SPACE_RGB) return "RGB";
+    if (space === icsCmyk || space === csCmyk || space === IMAGE_SPACE_CMYK || space === 0x434d594b) return "CMYK";
+    if (space === icsRgb || space === csRgb || space === IMAGE_SPACE_RGB || space === 1380401696) return "RGB";
     if (space === icsLab || space === csLab || space === IMAGE_SPACE_LAB) return "LAB";
     if (space === icsGray || space === IMAGE_SPACE_GRAY) return "Gray";
     if (space === csHsb) return "HSB";

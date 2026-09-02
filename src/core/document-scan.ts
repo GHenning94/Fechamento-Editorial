@@ -2,6 +2,7 @@ import type { Document } from "indesign";
 import { GraphicInfo, StrokeInfo } from "../models/validator";
 import {
   collectGraphicsFromItem,
+  collectGraphicsFromLinks,
   getPageItemDisplayName,
   walkDirectPageItems,
 } from "../utils/indesign-helpers";
@@ -48,6 +49,12 @@ export class DocumentScan {
         // ignora item inválido
       }
     });
+
+    try {
+      collectGraphicsFromLinks(this.doc, graphics, graphicSeen);
+    } catch {
+      // painel Links pode falhar em documentos corrompidos
+    }
 
     this.graphicsCache = graphics;
     this.strokesCache = strokes;
