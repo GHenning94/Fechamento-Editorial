@@ -164,6 +164,38 @@ function collectParentFrames(range: TextStyleRange | Text, story: Story): PageIt
   return frames;
 }
 
+function boundsClose(a: number[], b: number[]): boolean {
+  if (!a || a.length < 4 || !b || b.length < 4) return false;
+  return a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 0.5);
+}
+
+function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
+  try {
+    const parentPage = frame.parentPage;
+    if (parentPage && typeof parentPage === "object" && parentPage.name) {
+      return parentPage.name;
+    }
+  } catch {
+    // ignore
+  }
+
+  const bounds = readBounds(frame);
+  const byIdentity = snaps.find((item) => item.item === frame);
+  if (byIdentity?.pageName) return byIdentity.pageName;
+
+  const byBounds = snaps.find((item) => item.pageName && boundsClose(item.bounds, bounds));
+  if (byBounds?.pageName) return byBounds.pageName;
+
+  if (bounds.length >= 4) {
+    const overlapping = snaps.find(
+      (item) => item.pageName && (item.coloredFill || item.hasGraphic) && geometricBoundsOverlap(bounds, item.bounds)
+    );
+    if (overlapping?.pageName) return overlapping.pageName;
+  }
+
+  return "";
+}
+
 function frameIsOnColoredBackground(frame: PageItem, snaps: ItemSnap[]): boolean {
   const fill = readItemFill(frame);
   if (isColoredBackgroundFill(fill, readFillTint(frame))) return true;
@@ -226,10 +258,9 @@ export class CinzaOverprintValidator extends BaseValidator {
 
       const reportFrame = (frame: PageItem): void => {
         if (isUtilityItem(frame)) return;
-        const snap = snaps.find((item) => item.item === frame);
-        const pageName = snap?.pageName || "";
+        const pageName = resolveFramePageName(frame, snaps);
         const objectName = getPageItemDisplayName(frame);
-        const bounds = snap?.bounds?.length ? snap.bounds : readBounds(frame);
+        const bounds = readBounds(frame);
         const key = `${pageName}::${objectName}::${bounds.join(",")}`;
         if (seen.has(key)) return;
         seen.add(key);
