@@ -15,6 +15,7 @@ import {
   readItemFill,
   readLocalFillColor,
   textFillHasOverprint,
+  textFrameFillLeaksFromContents,
 } from "../utils/fill-color";
 import { collectGraphics, getPageItemDisplayName, walkDirectPageItems } from "../utils/indesign-helpers";
 
@@ -66,39 +67,48 @@ function readNumber(getter: () => unknown): number | null {
 
 function readTextInkBounds(range: TextStyleRange | Text): number[] {
   const text = range as Text;
-  const left = readNumber(() => text.horizontalOffset);
-  const right = readNumber(() => text.endHorizontalOffset);
-  const baseline = readNumber(() => text.baseline);
-  const endBaseline = readNumber(() => text.endBaseline) ?? baseline;
   const pointSize = readNumber(() => text.pointSize) || 12;
   const ascent = readNumber(() => text.ascent) ?? pointSize * 0.8;
   const descent = readNumber(() => text.descent) ?? pointSize * 0.25;
 
-  if (left != null && right != null && baseline != null && Math.abs(right - left) > 0.2) {
-    const top = Math.min(baseline, endBaseline ?? baseline) - ascent;
-    const bottom = Math.max(baseline, endBaseline ?? baseline) + descent;
-    if (bottom > top) return [top, Math.min(left, right), bottom, Math.max(left, right)];
-  }
+  const probe = (target: Text | TextStyleRange | null | undefined): number[] => {
+    if (!target) return [];
+    const left = readNumber(() => (target as Text).horizontalOffset);
+    const baseline = readNumber(() => (target as Text).baseline);
+    const size = readNumber(() => (target as Text).pointSize) || pointSize;
+    if (left == null || baseline == null) return [];
+    const rawRight = readNumber(() => (target as Text).endHorizontalOffset);
+    const maxWidth = size * 12;
+    const right =
+      rawRight != null && rawRight > left
+        ? Math.min(rawRight, left + maxWidth)
+        : left + Math.min(maxWidth, size * 4);
+    const top = baseline - (readNumber(() => (target as Text).ascent) ?? ascent);
+    const bottom = baseline + (readNumber(() => (target as Text).descent) ?? descent);
+    if (bottom <= top) return [];
+    return [top, Math.min(left, right), bottom, Math.max(left, right)];
+  };
 
   try {
     const chars = text.characters;
     const length = getCollectionLength(chars);
-    if (length <= 0) return [];
-    const first = chars?.item?.(0);
-    const last = chars?.item?.(length - 1);
-    const x1 = readNumber(() => (first as Text)?.horizontalOffset);
-    const x2 = readNumber(() => (last as Text)?.endHorizontalOffset) ?? readNumber(() => (last as Text)?.horizontalOffset);
-    const y = readNumber(() => (first as Text)?.baseline);
-    const size = readNumber(() => (first as Text)?.pointSize) || pointSize;
-    if (x1 != null && y != null) {
-      const rightEdge = x2 != null && Math.abs(x2 - x1) > 0.2 ? Math.max(x1, x2) : x1 + size * Math.min(length, 24) * 0.5;
-      return [y - size, Math.min(x1, rightEdge), y + size * 0.35, Math.max(x1, rightEdge)];
+    for (let i = 0; i < Math.min(length, 24); i++) {
+      const character = chars?.item?.(i) as Text | null;
+      if (!character) continue;
+      try {
+        const contents = (character as { contents?: string }).contents;
+        if (typeof contents === "string" && contents.trim() === "") continue;
+      } catch {
+        // usa o caractere mesmo assim
+      }
+      const bounds = probe(character);
+      if (bounds.length >= 4) return bounds;
     }
   } catch {
-    // sem fallback no quadro inteiro — isso gerava falso positivo
+    // fallback no início do trecho
   }
 
-  return [];
+  return probe(text);
 }
 
 function overlapArea(a: number[], b: number[]): number {
@@ -301,7 +311,8 @@ function grayTextSitsOnColoredBackground(
   const frameFill = readItemFill(frame);
   const frameTint = readFillTint(frame);
   const frameMatchesText = samples.some((sample) => sample.fill && fillsLookSame(frameFill, sample.fill));
-  if (isColoredBackgroundFill(frameFill, frameTint) && !frameMatchesText) {
+  const leakedFill = textFrameFillLeaksFromContents(frame);
+  if (isColoredBackgroundFill(frameFill, frameTint) && !frameMatchesText && !leakedFill) {
     return true;
   }
 
@@ -332,12 +343,13 @@ export class CinzaOverprintValidator extends BaseValidator {
       walkDirectPageItems(doc, (item, _page, pageName) => {
         if (!item?.isValid) return;
         const fill = readItemFill(item);
+        const leaked = textFrameFillLeaksFromContents(item);
         snaps.push({
           item,
           pageName,
           bounds: readBounds(item),
           utility: isUtilityItem(item),
-          coloredFill: isColoredBackgroundFill(fill, readFillTint(item)),
+          coloredFill: !leaked && isColoredBackgroundFill(fill, readFillTint(item)),
           hasGraphic: itemHasPlacedGraphic(item),
         });
       });

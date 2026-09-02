@@ -1,5 +1,5 @@
 import type { Color, PageItem, Swatch } from "indesign";
-import { getCollectionItem, forEachCollectionItem } from "./collection-helpers";
+import { getCollectionItem, getCollectionLength, forEachCollectionItem } from "./collection-helpers";
 import { getImageColorSpaceLabel, swatchNameOf } from "./color-model";
 
 const VALUE_EPS = 1.25;
@@ -576,4 +576,37 @@ export function readItemFill(item: PageItem): Swatch | Color | null {
   } catch {
     return null;
   }
+}
+
+export function isTextFrameItem(item: PageItem | null | undefined): boolean {
+  if (!item) return false;
+  try {
+    return /textframe/i.test(item.constructor?.name || "");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * O UXP costuma copiar a cor do primeiro texto para o preenchimento da caixa.
+ * Isso não é fundo colorido (ex.: título APOIO_GERAL_3 em caixa com fundo papel).
+ */
+export function textFrameFillLeaksFromContents(item: PageItem): boolean {
+  if (!isTextFrameItem(item)) return false;
+  const frameFill = readItemFill(item);
+  if (!isColoredBackgroundFill(frameFill, readFillTint(item))) return false;
+
+  try {
+    const chars = (item as PageItem & { characters?: unknown }).characters;
+    const length = Math.min(getCollectionLength(chars), 12);
+    for (let i = 0; i < length; i++) {
+      const character = (chars as { item?: (index: number) => { fillColor?: Swatch | Color } })?.item?.(i);
+      if (!character) continue;
+      const fill = readLocalFillColor(character);
+      if (fill && fillsLookSame(frameFill, fill)) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }

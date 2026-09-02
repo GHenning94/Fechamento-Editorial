@@ -100,8 +100,8 @@ export function summarizeResults(results: ValidationResult[]): ValidationSummary
     }
 
     if (hasError) errors += 1;
-    else if (hasWarning) warnings += 1;
-    else approved += 1;
+    if (hasWarning) warnings += 1;
+    if (!hasError && !hasWarning) approved += 1;
   }
 
   return { errors, warnings, approved, results };
