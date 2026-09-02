@@ -399,13 +399,40 @@ button::-moz-focus-inner {
 .progress-section {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .progress-label {
   display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
-  margin: 0 0 6px 0;
+  margin: 0;
+}
+
+.btn-cancel-checklist {
+  flex: 0 0 auto;
+  width: auto !important;
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  background-color: #3a1c1c !important;
+  color: #f0a0a0 !important;
+  border-color: #8b3a3a !important;
+}
+
+.btn-cancel-checklist:hover:not(.is-disabled):not([aria-disabled="true"]) {
+  background-color: #4a2222 !important;
+  border-color: #c45c5c !important;
+  color: #ffc8c8 !important;
 }
 
 progress {
