@@ -10,7 +10,6 @@ import {
   isLinkInaccessible,
   isLinkMissing,
   isLinkModified,
-  isRemoteLink,
 } from "../utils/link-helpers";
 
 export class LinksValidator extends BaseValidator {
@@ -47,7 +46,7 @@ export class LinksValidator extends BaseValidator {
             continue;
           }
 
-          if (isLinkInaccessible(status) && isRemoteLink(link)) {
+          if (isLinkInaccessible(status)) {
             issues.push({
               message: "Link inacessível",
               page: pageName,

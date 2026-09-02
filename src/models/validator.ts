@@ -15,6 +15,7 @@ export interface GraphicInfo {
   dpi: number;
   colorSpace: string;
   pageItem: PageItem;
+  fileName?: string;
 }
 
 export interface StrokeInfo {

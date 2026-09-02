@@ -1,4 +1,4 @@
-import type { Document, Layer, Page, PageItem, Color, Spread } from "indesign";
+import type { Document, Layer, Page, PageItem, Color, Spread, Link } from "indesign";
 import { BLEED_MM } from "./constants";
 import { PageItemCallback, GraphicInfo, StrokeInfo } from "../models/validator";
 import { SPOT_COLOR_EXCEPTIONS } from "./constants";
@@ -121,7 +121,7 @@ export function walkAllPageItems(doc: Document, callback: PageItemCallback): voi
   });
 }
 
-/** Percorre apenas objetos pertencentes à página (não inclui itens de outras páginas do spread). */
+/** Percorre objetos das páginas, da página-mestra aplicada e dos master spreads. */
 export function walkDirectPageItems(doc: Document, callback: PageItemCallback): void {
   forEachPage(doc, (page, pageName) => {
     const items = page.pageItems;
@@ -138,6 +138,21 @@ export function walkDirectPageItems(doc: Document, callback: PageItemCallback): 
       // masterPageItems pode não existir em alguns hosts
     }
   });
+
+  try {
+    forEachCollectionItem<Spread>(doc.masterSpreads, (spread) => {
+      if (!spread?.isValid) return;
+      forEachCollectionItem<Page>(spread.pages, (page, index) => {
+        if (!page?.isValid) return;
+        const pageName = `Página-mestra ${page.name || index + 1}`.trim();
+        if (page.pageItems) {
+          forEachPageItem(page.pageItems, page, pageName, callback);
+        }
+      });
+    });
+  } catch {
+    // ignore
+  }
 }
 
 export function isItemOnPage(item: PageItem, page: Page): boolean {
@@ -421,25 +436,13 @@ function minPositive(values: number[] | undefined): number {
   return Math.min(...nums);
 }
 
-/** DPI efetivo após escala. actualPpi sozinho ignora imagens esticadas abaixo de 300. */
+/** PPI original do arquivo (actualPpi), sem considerar escala no layout. */
 export function getGraphicDpi(graphic: GraphicLike): number {
   try {
-    const raw = graphic.effectivePpi as unknown;
+    const raw = graphic.actualPpi as unknown;
     if (typeof raw === "number" && raw > 0) return raw;
-    const effective = minPositive(graphic.effectivePpi);
-    if (effective > 0) return effective;
-  } catch {
-    // ignore
-  }
-  try {
-    if (graphic.effectiveResolution && graphic.effectiveResolution > 0) {
-      return graphic.effectiveResolution;
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    return minPositive(graphic.actualPpi);
+    const actual = minPositive(graphic.actualPpi);
+    if (actual > 0) return actual;
   } catch {
     // ignore
   }
@@ -469,7 +472,7 @@ export function collectGraphicsFromItem(
 ): void {
   const pushGraphic = (graphic: GraphicLike): void => {
     if (!graphic?.isValid) return;
-    const key = `${pageName}:${graphicIdentity(graphic, item)}`;
+    const key = graphicIdentity(graphic, item);
     if (seen.has(key)) return;
     seen.add(key);
 
@@ -494,29 +497,24 @@ export function collectGraphicsFromItem(
       dpi: getGraphicDpi(graphic),
       colorSpace: getImageColorSpaceLabel(space),
       pageItem: item,
+      fileName: imageName,
     });
   };
 
-  try {
-    const allGraphics = (item as PageItem & { allGraphics?: unknown }).allGraphics;
-    const allCount = allGraphics ? (allGraphics as { length?: number }).length || 0 : 0;
-    if (allGraphics && allCount > 0) {
-      forEachCollectionItem<GraphicLike>(allGraphics, pushGraphic);
-      return;
-    }
-  } catch {
-    // cai no fallback graphics/images
-  }
+  const collections: unknown[] = [
+    (item as PageItem & { allGraphics?: unknown }).allGraphics,
+    item.graphics,
+    item.images,
+    (item as PageItem & { epss?: unknown }).epss,
+    (item as PageItem & { pdfs?: unknown }).pdfs,
+  ];
 
-  try {
-    forEachCollectionItem<GraphicLike>(item.graphics, pushGraphic);
-  } catch {
-    // ignore
-  }
-  try {
-    forEachCollectionItem<GraphicLike>(item.images, pushGraphic);
-  } catch {
-    // ignore
+  for (const collection of collections) {
+    try {
+      forEachCollectionItem<GraphicLike>(collection, pushGraphic);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -536,6 +534,54 @@ export function collectGraphics(doc: Document): GraphicInfo[] {
       // ignore invalid items
     }
   });
+
+  try {
+    forEachCollectionItem<Link>(doc.links, (link) => {
+      if (!link?.isValid) return;
+      const graphic = (link as Link & { parent?: GraphicLike }).parent;
+      if (!graphic?.isValid) return;
+
+      let pageItem: PageItem | null = null;
+      try {
+        pageItem = (graphic as GraphicLike & { parent?: PageItem }).parent || null;
+      } catch {
+        pageItem = null;
+      }
+
+      let pageName = "Página-mestra";
+      try {
+        const parentPage = pageItem?.parentPage;
+        if (parentPage && typeof parentPage === "object" && parentPage.name) {
+          pageName = parentPage.name;
+        }
+      } catch {
+        // ignore
+      }
+
+      const imageName = link.name || "Imagem";
+      const key = `link:${link.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      let space: unknown;
+      try {
+        space = graphic.space;
+      } catch {
+        space = null;
+      }
+
+      graphics.push({
+        pageName,
+        imageName,
+        dpi: getGraphicDpi(graphic),
+        colorSpace: getImageColorSpaceLabel(space),
+        pageItem: pageItem || (graphic as unknown as PageItem),
+        fileName: imageName,
+      });
+    });
+  } catch {
+    // painel Links pode falhar em documentos corrompidos
+  }
 
   return graphics;
 }

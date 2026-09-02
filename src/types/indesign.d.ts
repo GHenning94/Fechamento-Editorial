@@ -271,6 +271,8 @@ declare module "indesign" {
     graphics?: Graphics;
     images?: Images;
     allGraphics?: Graphics;
+    epss?: Graphics;
+    pdfs?: Graphics;
     remove?(): void;
     texts?: Texts;
     textFramePreferences?: TextFramePreferences;
@@ -454,6 +456,7 @@ declare module "indesign" {
     linkType: string;
     id: number;
     links: Links;
+    parent?: unknown;
     isValid: boolean;
   }
 
@@ -480,6 +483,8 @@ declare module "indesign" {
     paragraphs?: Paragraphs;
     characters?: Characters;
     itemLayer?: Layer;
+    contents?: string;
+    textContainers?: PageItems;
   }
 
   export interface Paragraphs {

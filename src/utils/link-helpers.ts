@@ -47,7 +47,13 @@ function resolveLinkStatusConstants(): Record<keyof typeof LINK_STATUS_VALUES, n
   }
 }
 
-export function getLinkStatus(link: Link): number {
+function statusLabel(status: unknown): string {
+  return String(status || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+export function getLinkStatus(link: Link): unknown {
   try {
     return link.status;
   } catch {
@@ -55,24 +61,45 @@ export function getLinkStatus(link: Link): number {
   }
 }
 
-export function isLinkMissing(status: number): boolean {
+export function isLinkMissing(status: unknown): boolean {
   const constants = resolveLinkStatusConstants();
-  return status === constants.LINK_MISSING;
+  if (status === constants.LINK_MISSING || status === LINK_STATUS_VALUES.LINK_MISSING) {
+    return true;
+  }
+  const label = statusLabel(status);
+  return label.includes("missing") || label.includes("ausente") || label.includes("quebrado");
 }
 
-export function isLinkModified(status: number): boolean {
+export function isLinkModified(status: unknown): boolean {
   const constants = resolveLinkStatusConstants();
-  return status === constants.LINK_OUT_OF_DATE;
+  if (status === constants.LINK_OUT_OF_DATE || status === LINK_STATUS_VALUES.LINK_OUT_OF_DATE) {
+    return true;
+  }
+  const label = statusLabel(status);
+  return (
+    label.includes("outofdate") ||
+    label.includes("modified") ||
+    label.includes("modificado") ||
+    label.includes("lodt")
+  );
 }
 
-export function isLinkInaccessible(status: number): boolean {
+export function isLinkInaccessible(status: unknown): boolean {
   const constants = resolveLinkStatusConstants();
-  return status === constants.LINK_INACCESSIBLE;
+  if (status === constants.LINK_INACCESSIBLE || status === LINK_STATUS_VALUES.LINK_INACCESSIBLE) {
+    return true;
+  }
+  const label = statusLabel(status);
+  return label.includes("inaccessible") || label.includes("inacessivel");
 }
 
-export function isLinkEmbedded(status: number): boolean {
+export function isLinkEmbedded(status: unknown): boolean {
   const constants = resolveLinkStatusConstants();
-  return status === constants.LINK_EMBEDDED;
+  if (status === constants.LINK_EMBEDDED || status === LINK_STATUS_VALUES.LINK_EMBEDDED) {
+    return true;
+  }
+  const label = statusLabel(status);
+  return label.includes("embedded") || label.includes("incorporado");
 }
 
 export function isRemoteLink(link: Link): boolean {
@@ -84,70 +111,89 @@ export function isRemoteLink(link: Link): boolean {
   }
 }
 
-function collectLinkTree(link: Link, bucket: Link[], seen: Set<number>): void {
-  if (!link || !link.isValid) return;
-
-  const linkId = link.id;
-  if (seen.has(linkId)) return;
-  seen.add(linkId);
-  bucket.push(link);
-
+function resolveLinkPageName(link: Link): string {
   try {
-    forEachCollectionItem<Link>(link.links, (child) => {
-      collectLinkTree(child, bucket, seen);
-    });
+    let current: { parent?: unknown; parentPage?: Page | number; name?: string; constructor?: { name?: string } } | null =
+      (link as Link & { parent?: unknown }).parent as {
+        parent?: unknown;
+        parentPage?: Page | number;
+        name?: string;
+        constructor?: { name?: string };
+      } | null;
+
+    for (let depth = 0; depth < 8 && current; depth++) {
+      const typeName = current.constructor?.name || "";
+      if (typeName === "MasterSpread" || typeName === "Spread") {
+        return current.name ? `Página-mestra ${current.name}` : "Página-mestra";
+      }
+
+      const parentPage = current.parentPage;
+      if (parentPage && typeof parentPage === "object" && parentPage.name) {
+        return parentPage.name;
+      }
+
+      current = (current.parent as typeof current) || null;
+    }
   } catch {
-    // ignore nested link traversal errors
+    // ignore
   }
-}
-
-function collectLinksFromContainer(
-  container: unknown,
-  pageName: string,
-  objectName: string,
-  seen: Set<number>,
-  result: PlacedLinkInfo[]
-): void {
-  forEachCollectionItem<{ itemLink: Link | null; isValid: boolean }>(container, (item) => {
-    if (!item || !item.isValid) return;
-
-    const links: Link[] = [];
-    if (item.itemLink && item.itemLink.isValid) {
-      collectLinkTree(item.itemLink, links, new Set<number>());
-    }
-
-    for (const link of links) {
-      if (seen.has(link.id)) continue;
-      seen.add(link.id);
-
-      result.push({
-        link,
-        pageName,
-        objectName: link.name || objectName,
-      });
-    }
-  });
+  return "Página-mestra";
 }
 
 /**
- * Coleta apenas links efetivamente posicionados no layout (via graphics/images),
- * alinhado ao comportamento do preflight nativo do InDesign.
+ * Coleta os mesmos vínculos do painel Links / comprovação do InDesign,
+ * inclusive os posicionados em página-mestra.
  */
 export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
   const seen = new Set<number>();
   const result: PlacedLinkInfo[] = [];
 
-  const walkItems = (container: unknown, pageName: string, parentName: string): void => {
+  const pushLink = (link: Link, pageName: string, objectName: string): void => {
+    if (!link?.isValid) return;
+    if (seen.has(link.id)) return;
+    seen.add(link.id);
+    result.push({
+      link,
+      pageName,
+      objectName: link.name || objectName,
+    });
+
+    try {
+      forEachCollectionItem<Link>(link.links, (child) => {
+        pushLink(child, pageName, child.name || objectName);
+      });
+    } catch {
+      // ignore nested
+    }
+  };
+
+  try {
+    forEachCollectionItem<Link>(doc.links, (link) => {
+      pushLink(link, resolveLinkPageName(link), link.name || "Link");
+    });
+  } catch {
+    // fallback abaixo
+  }
+
+  if (result.length > 0) {
+    return result;
+  }
+
+  const walkItems = (container: unknown, pageName: string): void => {
     forEachCollectionItem<PageItem>(container, (item) => {
       if (!item || !item.isValid) return;
-
       const objectName = getPageItemDisplayName(item);
+      const extra = item as PageItem & { epss?: unknown; pdfs?: unknown; allGraphics?: unknown };
 
-      collectLinksFromContainer(item.graphics, pageName, objectName, seen, result);
-      collectLinksFromContainer(item.images, pageName, objectName, seen, result);
+      for (const collection of [item.graphics, item.images, extra.allGraphics, extra.epss, extra.pdfs]) {
+        forEachCollectionItem<{ itemLink: Link | null; isValid: boolean }>(collection, (graphic) => {
+          if (!graphic?.isValid || !graphic.itemLink) return;
+          pushLink(graphic.itemLink, pageName, objectName);
+        });
+      }
 
       if (item.pageItems && item.pageItems.length > 0) {
-        walkItems(item.pageItems, pageName, objectName);
+        walkItems(item.pageItems, pageName);
       }
     });
   };
@@ -155,12 +201,9 @@ export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
   try {
     forEachCollectionItem<Page>(doc.pages, (page, index) => {
       if (!page || !page.isValid) return;
-
       const pageName = page.name || `Página ${index + 1}`;
-      const items = page.allPageItems || page.pageItems;
-      if (!items) return;
-
-      walkItems(items, pageName, "Objeto");
+      walkItems(page.allPageItems || page.pageItems, pageName);
+      walkItems((page as Page & { masterPageItems?: unknown }).masterPageItems, pageName);
     });
   } catch {
     return result;
@@ -177,7 +220,7 @@ export function getLinkDetails(link: Link): string {
   }
 }
 
-export function getLinkFixSuggestion(status: number, link: Link): string {
+export function getLinkFixSuggestion(status: unknown, link: Link): string {
   const path = getLinkDetails(link);
 
   if (isLinkMissing(status)) {

@@ -1,14 +1,54 @@
-import type { Document } from "indesign";
+import type { Document, PageItem, Story } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
+import { forEachCollectionItem } from "../utils/collection-helpers";
 import {
+  forEachPage,
   getPageItemDisplayName,
   walkDirectPageItems,
 } from "../utils/indesign-helpers";
 
-function isTextFrame(item: { constructor?: { name?: string } }): boolean {
-  return (item.constructor?.name || "") === "TextFrame";
+function isTruthyOverflow(value: unknown): boolean {
+  return value === true || value === 1;
+}
+
+function readOverflows(item: { overflows?: unknown; properties?: { overflows?: unknown } }): boolean {
+  try {
+    if (isTruthyOverflow(item.overflows)) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    if (isTruthyOverflow(item.properties?.overflows)) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function storyPreview(story: Story): string {
+  try {
+    const raw = String((story as Story & { contents?: string }).contents || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!raw) return "Texto";
+    return raw.length > 40 ? `${raw.slice(0, 40)}…` : raw;
+  } catch {
+    return "Texto";
+  }
+}
+
+function itemPageName(item: PageItem): string {
+  try {
+    const parentPage = item.parentPage;
+    if (parentPage && typeof parentPage === "object" && parentPage.name) {
+      return parentPage.name;
+    }
+  } catch {
+    // ignore
+  }
+  return "Documento";
 }
 
 export class OvertextValidator extends BaseValidator {
@@ -20,33 +60,73 @@ export class OvertextValidator extends BaseValidator {
       const issues: ValidationIssue[] = [];
       const seen = new Set<string>();
 
+      const pushIssue = (pageName: string, objectName: string, extraKey = ""): void => {
+        const key = `${pageName}::${objectName}::${extraKey}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        issues.push({
+          message: "Texto em excesso (overset)",
+          page: pageName,
+          object: objectName,
+          details: "A caixa de texto possui conteúdo que não cabe no quadro.",
+        });
+      };
+
+      const considerItem = (item: PageItem | null | undefined, pageName: string): void => {
+        if (!item?.isValid) return;
+        if (!readOverflows(item)) return;
+        const objectName = getPageItemDisplayName(item);
+        const bounds = (item.geometricBounds || []).join(",");
+        pushIssue(pageName, objectName, bounds);
+      };
+
       walkDirectPageItems(doc, (item, _page, pageName) => {
+        considerItem(item, pageName);
+      });
+
+      forEachPage(doc, (page, pageName) => {
         try {
-          if (!item?.isValid) return;
-          if (!isTextFrame(item)) return;
-          let overflows = false;
-          try {
-            overflows = (item as { overflows?: boolean }).overflows === true;
-          } catch {
-            return;
-          }
-          if (!overflows) return;
-
-          const objectName = getPageItemDisplayName(item);
-          const key = `${pageName}::${objectName}::${(item.geometricBounds || []).join(",")}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-
-          issues.push({
-            message: "Texto em excesso (overset)",
-            page: pageName,
-            object: objectName,
-            details: "A caixa de texto possui conteúdo que não cabe no quadro.",
+          forEachCollectionItem<PageItem>(page.textFrames, (frame) => {
+            considerItem(frame, pageName);
           });
         } catch {
-          // ignora frame inválido
+          // ignore
+        }
+        try {
+          forEachCollectionItem<PageItem>(page.allPageItems, (item) => {
+            considerItem(item, pageName);
+          });
+        } catch {
+          // ignore
         }
       });
+
+      try {
+        forEachCollectionItem<Story>(doc.stories, (story) => {
+          if (!story || !readOverflows(story)) return;
+
+          const containers = (story as Story & { textContainers?: unknown }).textContainers;
+          let reported = false;
+
+          if (containers) {
+            try {
+              forEachCollectionItem<PageItem>(containers, (frame) => {
+                if (!frame?.isValid) return;
+                considerItem(frame, itemPageName(frame));
+                reported = true;
+              });
+            } catch {
+              // ignore
+            }
+          }
+
+          if (!reported) {
+            pushIssue("Documento", `Caixa de texto (“${storyPreview(story)}”)`, "story");
+          }
+        });
+      } catch {
+        // ignore
+      }
 
       return createResult(this.id, this.name, issues, "error");
     });

@@ -14,6 +14,8 @@ export class ResolucaoValidator extends BaseValidator {
       const graphics = collectGraphics(doc);
 
       for (const graphic of graphics) {
+        const name = graphic.fileName || graphic.imageName || "";
+        if (/\.(eps|pdf|ai|svg)$/i.test(name)) continue;
         if (graphic.dpi > 0 && graphic.dpi < MIN_IMAGE_DPI) {
           issues.push({
             message: "abaixo de 300 dpi",
