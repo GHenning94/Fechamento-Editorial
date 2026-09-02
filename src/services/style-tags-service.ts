@@ -10,7 +10,7 @@ import {
 import { ensurePluginInk, ensureProcessTagColor, findDocumentBlack, findSwatchByName } from "../utils/editorial-color";
 import { pickTagOverlayColors } from "../utils/tag-overlay-colors";
 import { getActiveDocument, getInDesignApp, getInDesignModule, clearInDesignSelection } from "../utils/indesign-runtime";
-import { findNoneCharacterStyle, findNoParagraphStyle } from "../utils/text-style-context";
+import { findNoneCharacterStyle, findNoParagraphStyle, applyNoneCharacterStyle, activateNoneTextStyles } from "../utils/text-style-context";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
 
@@ -918,13 +918,7 @@ function lockTagText(
       // ignore
     }
   }
-  if (noneChar) {
-    try {
-      text.appliedCharacterStyle = noneChar;
-    } catch {
-      // ignore
-    }
-  }
+  applyNoneCharacterStyle(text, noneChar);
   try {
     text.hyphenation = false;
   } catch {
@@ -1107,6 +1101,20 @@ function placeTag(
   } catch {
     // ignore
   }
+  try {
+    frame.contents = " ";
+    const seed = getCollectionItem<Text>(frame.texts, 0);
+    if (paraStyle) {
+      try {
+        seed && (seed.appliedParagraphStyle = paraStyle);
+      } catch {
+        // ignore
+      }
+    }
+    applyNoneCharacterStyle(seed, noneChar);
+  } catch {
+    // ignore
+  }
   frame.contents = hit.name;
   lockTagText(frame, paraStyle, textColor, none, noneChar);
   applySolidFill(frame, fill);
@@ -1126,6 +1134,7 @@ export async function createMemorialStyleTags(
 
   return withPointUnitsAsync(doc, async () => {
     try {
+    activateNoneTextStyles(doc);
     clearInDesignSelection();
     throwIfAborted(signal);
     onProgress?.(10, "Localizando estilos…");
@@ -1147,6 +1156,7 @@ export async function createMemorialStyleTags(
     ensureProcessTagColor(doc, COLOR_PARA, palette.para);
     ensureProcessTagColor(doc, COLOR_CHAR, palette.char);
     const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma", "[None]", "[Nenhum]", "$ID/None"]);
+    activateNoneTextStyles(doc);
     const noneChar = findNoneCharacterStyle(doc);
     const ink = findDocumentBlack(doc);
     const paraFill = colorByName(doc, COLOR_PARA);

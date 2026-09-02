@@ -5,12 +5,14 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
+  fillsLookSame,
   geometricBoundsOverlap,
   isColoredBackgroundFill,
   isGrayFill,
+  isNoneOrPaperFill,
   isSolidPrintBlack,
   isTextFrameItem,
-  readEffectiveFillColor,
+  itemHasPlacedGraphic,
   readFillTint,
   readItemFill,
   readLocalFillColor,
@@ -25,6 +27,7 @@ const FIX_DETAILS =
 interface ColoredSnap {
   bounds: number[];
   pageName: string;
+  graphic: boolean;
 }
 
 function readBounds(item: PageItem): number[] {
@@ -75,11 +78,11 @@ function overlapArea(a: number[], b: number[]): number {
 
 function inkSitsOnColor(ink: number[], background: number[]): boolean {
   const area = overlapArea(ink, background);
-  if (area <= 0.35) return false;
+  if (area <= 0.5) return false;
   const inkW = Math.abs(Number(ink[3]) - Number(ink[1]));
   const inkH = Math.abs(Number(ink[2]) - Number(ink[0]));
-  const inkArea = Math.max(0.35, inkW * inkH);
-  if (area / inkArea < 0.45) return false;
+  const inkArea = Math.max(0.5, inkW * inkH);
+  if (area / inkArea < 0.7) return false;
   const cy = (Number(ink[0]) + Number(ink[2])) / 2;
   const cx = (Number(ink[1]) + Number(ink[3])) / 2;
   return (
@@ -121,6 +124,26 @@ function fillNameKey(fill: { name?: string } | string | null | undefined): strin
   }
 }
 
+function normalizeSnippet(value: string): string {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const FOLIO_CORE =
+  "zero|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento";
+const WRITTEN_FOLIO_RE = new RegExp(`^(${FOLIO_CORE})(\\s+e\\s+(${FOLIO_CORE}))?$`);
+
+function isWrittenFolio(snippet: string): boolean {
+  const key = normalizeSnippet(snippet);
+  if (!key || key.length > 40) return false;
+  return WRITTEN_FOLIO_RE.test(key);
+}
+
 function sampleInkFill(target: TextStyleRange | Text): {
   fill: ReturnType<typeof readLocalFillColor>;
   tint: number;
@@ -133,15 +156,14 @@ function sampleInkFill(target: TextStyleRange | Text): {
       const last = length > 1 ? getCollectionItem<Text>(chars, length - 1) : first;
       for (const character of [first, last]) {
         if (!character) continue;
-        const fill = readLocalFillColor(character) || readEffectiveFillColor(character);
+        const fill = readLocalFillColor(character);
         if (fill) return { fill, tint: readFillTint(character) };
       }
     }
   } catch {
     // cai no preenchimento do range
   }
-  const fill = readLocalFillColor(target) || readEffectiveFillColor(target);
-  return { fill, tint: readFillTint(target) };
+  return { fill: readLocalFillColor(target), tint: readFillTint(target) };
 }
 
 function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
@@ -216,10 +238,39 @@ function findParentCell(range: TextStyleRange | Text): Cell | null {
   return null;
 }
 
+function frameFillLeaksFromStyle(frame: PageItem): boolean {
+  const frameFill = readItemFill(frame);
+  if (!frameFill) return false;
+  try {
+    const text = getCollectionItem<Text>(frame.texts, 0);
+    if (!text) return false;
+    const para = (
+      text as Text & { appliedParagraphStyle?: { fillColor?: unknown; name?: string } }
+    ).appliedParagraphStyle;
+    if (para?.fillColor && fillsLookSame(frameFill, para.fillColor as never)) return true;
+    const character = (
+      text as Text & { appliedCharacterStyle?: { fillColor?: unknown; name?: string } }
+    ).appliedCharacterStyle;
+    if (character?.fillColor && fillsLookSame(frameFill, character.fillColor as never)) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 function frameIsChromaticBox(frame: PageItem | null): boolean {
   if (!frame || !isTextFrameItem(frame) || isPluginGeneratedItem(frame)) return false;
-  if (textFrameFillLeaksFromContents(frame)) return false;
-  return isColoredBackgroundFill(readItemFill(frame), readFillTint(frame));
+  if (textFrameFillLeaksFromContents(frame) || frameFillLeaksFromStyle(frame)) return false;
+  const fill = readItemFill(frame);
+  if (isNoneOrPaperFill(fill)) return false;
+  if (isPagePlate(readBounds(frame), parentPageOf(frame))) return false;
+  try {
+    const tint = readFillTint(frame);
+    if (tint <= 0.5) return false;
+  } catch {
+    // ignore
+  }
+  return isColoredBackgroundFill(fill, readFillTint(frame));
 }
 
 function snippetOf(range: TextStyleRange | Text): string {
@@ -251,20 +302,6 @@ function probeRangeEnds(range: TextStyleRange | Text): number[][] {
   return probes;
 }
 
-function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string, page: Page | null): void {
-  if (!item?.isValid || isPluginGeneratedItem(item) || isTextFrameItem(item)) return;
-  const bounds = readBounds(item);
-  if (bounds.length < 4) return;
-  if (isPageBorderFrame(item, bounds, page)) return;
-  if (isFilledShape(item) && isColoredBackgroundFill(readItemFill(item), readFillTint(item))) {
-    bucket.push({ bounds, pageName });
-    return;
-  }
-  if (isPlacedGraphic(item)) {
-    bucket.push({ bounds, pageName });
-  }
-}
-
 function readPageBounds(page: Page | null): number[] {
   if (!page) return [];
   try {
@@ -283,18 +320,36 @@ function boundsArea(bounds: number[]): number {
   return Math.abs(Number(bounds[2]) - Number(bounds[0])) * Math.abs(Number(bounds[3]) - Number(bounds[1]));
 }
 
-function isPageBorderFrame(item: PageItem, bounds: number[], page: Page | null): boolean {
+function isPagePlate(bounds: number[], page: Page | null): boolean {
   const pageArea = boundsArea(readPageBounds(page));
   const itemArea = boundsArea(bounds);
-  if (pageArea <= 0 || itemArea / pageArea < 0.7) return false;
-  if (isPlacedGraphic(item)) return false;
+  return pageArea > 0 && itemArea / pageArea >= 0.55;
+}
+
+function parentPageOf(frame: PageItem | null): Page | null {
+  if (!frame) return null;
   try {
-    const stroke = Number(item.strokeWeight);
-    if (Number.isFinite(stroke) && stroke > 0.05) return true;
+    const parentPage = frame.parentPage;
+    if (parentPage && typeof parentPage === "object") return parentPage as Page;
   } catch {
     // ignore
   }
-  return false;
+  return null;
+}
+
+function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string, page: Page | null): void {
+  if (!item?.isValid || isPluginGeneratedItem(item) || isTextFrameItem(item)) return;
+  const bounds = readBounds(item);
+  if (bounds.length < 4) return;
+  const graphic = isPlacedGraphic(item) || itemHasPlacedGraphic(item);
+  if (graphic) {
+    bucket.push({ bounds, pageName, graphic: true });
+    return;
+  }
+  if (isPagePlate(bounds, page)) return;
+  if (isFilledShape(item) && isColoredBackgroundFill(readItemFill(item), readFillTint(item))) {
+    bucket.push({ bounds, pageName, graphic: false });
+  }
 }
 
 function probeBelongsToFrame(probe: number[], frameBounds: number[]): boolean {
@@ -316,6 +371,23 @@ function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
   });
 
   return byPage;
+}
+
+function pushIssue(
+  issues: ValidationIssue[],
+  seen: Set<string>,
+  key: string,
+  page: string,
+  preview: string
+): void {
+  if (seen.has(key)) return;
+  seen.add(key);
+  issues.push({
+    message: "Cinza sobre fundo colorido sem overprint",
+    page,
+    object: preview ? `Texto (“${preview}”)` : "Texto cinza",
+    details: FIX_DETAILS,
+  });
 }
 
 export class CinzaOverprintValidator extends BaseValidator {
@@ -342,21 +414,13 @@ export class CinzaOverprintValidator extends BaseValidator {
           const run = getCollectionItem<TextStyleRange | Text>(ranges, i);
           if (!run || !targetIsGrayWithoutOverprint(run)) continue;
 
+          const preview = snippetOf(run);
+          const folio = isWrittenFolio(preview);
           const cell = findParentCell(run);
           if (cell) {
             try {
               if (isColoredBackgroundFill(cell.fillColor, readFillTint(cell))) {
-                const preview = snippetOf(run);
-                const key = `cell::${pageNameOf(firstParentFrame(run))}::${preview}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  issues.push({
-                    message: "Cinza sobre fundo colorido sem overprint",
-                    page: pageNameOf(firstParentFrame(run)),
-                    object: preview ? `Texto (“${preview}”)` : "Texto cinza",
-                    details: FIX_DETAILS,
-                  });
-                }
+                pushIssue(issues, seen, `cell::${pageNameOf(firstParentFrame(run))}::${preview}`, pageNameOf(firstParentFrame(run)), preview);
               }
             } catch {
               // ignore
@@ -367,43 +431,27 @@ export class CinzaOverprintValidator extends BaseValidator {
           const frame = firstParentFrame(run);
           if (!frame || isPluginGeneratedItem(frame)) continue;
           const pageName = pageNameOf(frame);
+          const frameBounds = readBounds(frame);
 
-          if (frameIsChromaticBox(frame)) {
-            const preview = snippetOf(run);
-            const key = `box::${pageName}::${preview}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            issues.push({
-              message: "Cinza sobre fundo colorido sem overprint",
-              page: pageName,
-              object: preview ? `Texto (“${preview}”)` : "Texto cinza",
-              details: FIX_DETAILS,
-            });
+          if (!folio && frameIsChromaticBox(frame)) {
+            pushIssue(issues, seen, `box::${pageName}::${preview}`, pageName, preview);
             continue;
           }
 
           const snaps = coloredByPage.get(pageName);
           if (!snaps?.length) continue;
-          const frameBounds = readBounds(frame);
           if (frameBounds.length < 4) continue;
           const nearby = snaps.filter((snap) => geometricBoundsOverlap(frameBounds, snap.bounds));
           if (!nearby.length) continue;
 
           const probes = probeRangeEnds(run).filter((ink) => probeBelongsToFrame(ink, frameBounds));
           if (!probes.length) continue;
-          const hits = probes.some((ink) => nearby.some((snap) => inkSitsOnColor(ink, snap.bounds)));
-          if (!hits) continue;
 
-          const preview = snippetOf(run);
-          const key = `${pageName}::${preview}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          issues.push({
-            message: "Cinza sobre fundo colorido sem overprint",
-            page: pageName,
-            object: preview ? `Texto (“${preview}”)` : "Texto cinza",
-            details: FIX_DETAILS,
-          });
+          const under = nearby.filter((snap) => probes.some((ink) => inkSitsOnColor(ink, snap.bounds)));
+          if (!under.length) continue;
+          if (folio && !under.some((snap) => snap.graphic)) continue;
+
+          pushIssue(issues, seen, `${pageName}::${preview}`, pageName, preview);
         }
       });
 

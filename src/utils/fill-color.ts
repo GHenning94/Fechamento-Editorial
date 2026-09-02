@@ -66,7 +66,8 @@ function unwrapBoolean(value: unknown): boolean | null {
 
 function normalizeTintPercent(value: number): number | null {
   if (!Number.isFinite(value) || value < 0) return null;
-  if (value > 0 && value < 1) return value * 100;
+  // UXP às vezes devolve 0–1 (1 = 100%). 1% real de tinta é irrelevante para este check.
+  if (value > 0 && value <= 1) return value * 100;
   if (value > 100.5) return null;
   return value;
 }
@@ -346,14 +347,13 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     }
   }
   if (t <= 0.5) return false;
+  if (isSolidPrintBlack(fill, t)) return false;
   if (isChromaticFill(fill, t)) return false;
 
-  if (isGrayNameKey(key)) return true;
-
   if (isBlackKey(key)) {
-    return t < 90;
+    return t < 80;
   }
-  if ((key.includes("black") || key.includes("preto")) && t < 90) {
+  if ((key.includes("black") || key.includes("preto")) && t < 80) {
     return true;
   }
   if ((key.includes("black") || key.includes("preto")) && /\d/.test(key) && !/(^|[^0-9])100([^0-9]|$)/.test(key)) {
@@ -367,7 +367,7 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     if (!values.length) values = parsed.values;
     if (!space) space = parsed.space;
   }
-  if (!values.length) return false;
+  if (!values.length) return isGrayNameKey(key);
 
   const scaled = toUnitScale(values);
   const channels = scaledChannels(scaled.values, t);
@@ -398,7 +398,7 @@ export function isSolidPrintBlack(fill: Swatch | Color | string | null | undefin
   const key = fillNameKey(fill);
   if (isNoneKey(key) || isPaperKey(key)) return false;
   const t = tint < 0 ? 100 : tint;
-  if (t < 90) return false;
+  if (t < 80) return false;
   if (isBlackKey(key)) return true;
   if ((key.includes("black") || key.includes("preto")) && !/\d/.test(key)) return true;
 
@@ -438,8 +438,8 @@ function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
   const chroma = Math.max(c, m, y) - Math.min(c, m, y);
   if (chroma > 4) return false;
   const cmy = (c + m + y) / 3;
-  if (cmy <= 4) return k > 0.5 && k < 90;
-  return k < 90;
+  if (cmy <= 4) return k > 0.5 && k < 80;
+  return k < 80;
 }
 
 function cmykChroma(c: number, m: number, y: number): number {
@@ -625,19 +625,35 @@ export function isTextFrameItem(item: PageItem | null | undefined): boolean {
 export function textFrameFillLeaksFromContents(item: PageItem): boolean {
   if (!isTextFrameItem(item)) return false;
   const frameFill = readItemFill(item);
-  if (!isColoredBackgroundFill(frameFill, readFillTint(item))) return false;
+  if (!frameFill || !isColoredBackgroundFill(frameFill, readFillTint(item))) return false;
+
+  const matchesFrame = (fill: Swatch | Color | string | null | undefined): boolean =>
+    Boolean(fill) && fillsLookSame(frameFill, fill);
 
   try {
     const chars = (item as PageItem & { characters?: unknown }).characters;
-    const length = Math.min(getCollectionLength(chars), 12);
-    for (let i = 0; i < length; i++) {
-      const character = (chars as { item?: (index: number) => { fillColor?: Swatch | Color } })?.item?.(i);
+    const length = getCollectionLength(chars);
+    const last = Math.min(length, 48);
+    for (let i = 0; i < last; i++) {
+      const character = getCollectionItem<{ fillColor?: Swatch | Color }>(chars, i);
       if (!character) continue;
-      const fill = readLocalFillColor(character);
-      if (fill && fillsLookSame(frameFill, fill)) return true;
+      if (matchesFrame(readLocalFillColor(character))) return true;
     }
   } catch {
     // ignore
   }
+
+  try {
+    const ranges = (item as PageItem & { textStyleRanges?: unknown }).textStyleRanges;
+    const length = Math.min(getCollectionLength(ranges), 24);
+    for (let i = 0; i < length; i++) {
+      const run = getCollectionItem<{ fillColor?: Swatch | Color }>(ranges, i);
+      if (!run) continue;
+      if (matchesFrame(readLocalFillColor(run))) return true;
+    }
+  } catch {
+    // ignore
+  }
+
   return false;
 }

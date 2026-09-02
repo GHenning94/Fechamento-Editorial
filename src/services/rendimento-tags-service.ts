@@ -9,7 +9,7 @@ import {
   isRendimentoLayerName,
 } from "../utils/editorial-layer";
 import { getActiveDocument, getInDesignModule, clearInDesignSelection } from "../utils/indesign-runtime";
-import { findNoneCharacterStyle, findNoParagraphStyle } from "../utils/text-style-context";
+import { findNoneCharacterStyle, findNoParagraphStyle, applyNoneCharacterStyle, activateNoneTextStyles } from "../utils/text-style-context";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
 
@@ -741,13 +741,7 @@ function lockTagText(
       // ignore
     }
   }
-  if (noneChar) {
-    try {
-      text.appliedCharacterStyle = noneChar;
-    } catch {
-      // ignore
-    }
-  }
+  applyNoneCharacterStyle(text, noneChar);
   try {
     text.hyphenation = false;
   } catch {
@@ -836,6 +830,20 @@ function placeTag(
   } catch {
     // ignore
   }
+  try {
+    frame.contents = " ";
+    const seed = getCollectionItem<Text>(frame.texts, 0);
+    if (paraStyle && seed) {
+      try {
+        seed.appliedParagraphStyle = paraStyle;
+      } catch {
+        // ignore
+      }
+    }
+    applyNoneCharacterStyle(seed, noneChar);
+  } catch {
+    // ignore
+  }
   frame.contents = label;
   lockTagText(frame, paraStyle, paper, noneChar);
 }
@@ -848,6 +856,7 @@ export async function createRendimentoTags(
 
   return withPointUnitsAsync(doc, async () => {
     try {
+    activateNoneTextStyles(doc);
     clearInDesignSelection();
     throwIfAborted(signal);
     onProgress?.(15, "Preparando layer RENDIMENTO…");
@@ -861,6 +870,7 @@ export async function createRendimentoTags(
     const fill = findDocumentBlack(doc);
     const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
     const paper = findSwatchByName(doc, ["Paper", "Papel"]);
+    activateNoneTextStyles(doc);
     const noneChar = findNoneCharacterStyle(doc);
     const paraStyle = ensureTagParagraphStyle(doc);
     if (paraStyle) styleTagParagraph(doc, paraStyle, paper);
