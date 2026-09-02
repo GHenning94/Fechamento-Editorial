@@ -19,6 +19,7 @@ export const PLUGIN_UPDATE_FILES: Array<{ path: string; binary: boolean; optiona
   { path: "changelog.json", binary: false, optional: true },
   { path: "icons/icon.png", binary: true, optional: true },
   { path: "icons/work-spinner.gif", binary: true, optional: true },
+  { path: "icons/update-download.png", binary: true, optional: true },
 ];
 
 export function githubRawUrl(branch: string, filePath: string): string {

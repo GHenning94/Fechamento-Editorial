@@ -13,11 +13,7 @@ const PANEL_HTML = `
             <div id="btn-version-info" class="panel-version-info" role="button" tabindex="0" title="O que há nesta versão">i</div>
           </div>
           <div id="btn-plugin-update" class="panel-update-btn hidden" role="button" tabindex="0" title="Atualizar plugin">
-            <span class="panel-update-icon" aria-hidden="true">
-              <span class="panel-update-shaft"></span>
-              <span class="panel-update-head"></span>
-              <span class="panel-update-tray"></span>
-            </span>
+            <img class="panel-update-img" src="icons/update-download.png" width="22" height="22" alt="" />
           </div>
         </div>
         <div id="btn-license-reset" class="license-dev-reset hidden" role="button" tabindex="0">

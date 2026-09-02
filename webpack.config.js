@@ -42,6 +42,7 @@ module.exports = (env, argv) => {
           { from: "changelog.json", to: "changelog.json", toType: "file", noErrorOnMissing: true },
           { from: "icons", to: "icons", noErrorOnMissing: true },
           { from: "src/assets/work-spinner.gif", to: "icons/work-spinner.gif" },
+          { from: "src/assets/update-download.png", to: "icons/update-download.png" },
         ],
       }),
     ],
