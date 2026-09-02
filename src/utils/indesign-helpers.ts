@@ -2,7 +2,7 @@ import type { Document, Layer, Page, PageItem, Color, Spread, Link } from "indes
 import { BLEED_MM } from "./constants";
 import { PageItemCallback, GraphicInfo, StrokeInfo } from "../models/validator";
 import { SPOT_COLOR_EXCEPTIONS } from "./constants";
-import { forEachCollectionItem } from "./collection-helpers";
+import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "./collection-helpers";
 import { getValidationScan } from "../core/validation-cache";
 import { getInDesignModule } from "./indesign-runtime";
 import {
@@ -90,27 +90,37 @@ export function forEachPage(doc: Document, callback: (page: Page, pageName: stri
   });
 }
 
+function pageItemId(item: PageItem): number | null {
+  try {
+    const id = item.id;
+    return typeof id === "number" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export function forEachPageItem(
   container: unknown,
   page: Page | null,
   pageName: string,
   callback: PageItemCallback,
   depth = 0
-): void {
-  if (depth > 8) return;
-  forEachCollectionItem<PageItem>(container, (item) => {
-    if (!item || !item.isValid) return;
-
-    callback(item, page, pageName);
-
+): boolean {
+  if (depth > 8) return true;
+  const length = getCollectionLength(container);
+  for (let i = 0; i < length; i++) {
+    const item = getCollectionItem<PageItem>(container, i);
+    if (!item?.isValid) continue;
+    if (callback(item, page, pageName) === false) return false;
     try {
-      if (item.pageItems && item.pageItems.length > 0) {
-        forEachPageItem(item.pageItems, page, pageName, callback, depth + 1);
-      }
+      const children = item.pageItems;
+      if (!getCollectionItem<PageItem>(children, 0)) continue;
+      if (!forEachPageItem(children, page, pageName, callback, depth + 1)) return false;
     } catch {
       // ignora grupo inválido
     }
-  });
+  }
+  return true;
 }
 
 export function walkAllPageItems(doc: Document, callback: PageItemCallback): void {
@@ -122,56 +132,90 @@ export function walkAllPageItems(doc: Document, callback: PageItemCallback): voi
   });
 }
 
-/** Percorre objetos das páginas, do spread, da página-mestra aplicada e dos master spreads. */
+/**
+ * Percorre cada objeto uma vez: páginas, pasteboard do spread e masters.
+ * Não rewalka masterPageItems em cada página (isso multiplicava o custo pelo número de páginas).
+ * O callback pode retornar false para interromper.
+ */
 export function walkDirectPageItems(doc: Document, callback: PageItemCallback): void {
-  forEachPage(doc, (page, pageName) => {
-    const items = page.pageItems;
-    if (items) {
-      forEachPageItem(items, page, pageName, callback);
-    }
+  const seen = new Set<number>();
+  let aborted = false;
 
+  const visit: PageItemCallback = (item, page, pageName) => {
+    if (aborted) return false;
+    const id = pageItemId(item);
+    if (id != null) {
+      if (seen.has(id)) return;
+      seen.add(id);
+    }
+    if (callback(item, page, pageName) === false) {
+      aborted = true;
+      return false;
+    }
+  };
+
+  const walkFlat = (container: unknown, page: Page | null, pageName: string): boolean => {
+    const length = getCollectionLength(container);
+    for (let i = 0; i < length; i++) {
+      if (aborted) return false;
+      const item = getCollectionItem<PageItem>(container, i);
+      if (!item?.isValid) continue;
+      if (visit(item, page, pageName) === false) return false;
+    }
+    return true;
+  };
+
+  const walkPageCollection = (page: Page, pageName: string, recursiveFallback: unknown): void => {
+    if (aborted) return;
     try {
-      const masterItems = (page as Page & { masterPageItems?: unknown }).masterPageItems;
-      if (masterItems) {
-        forEachPageItem(masterItems, page, pageName, callback);
+      const flat = page.allPageItems;
+      if (getCollectionLength(flat) > 0) {
+        if (!walkFlat(flat, page, pageName)) aborted = true;
+        return;
       }
     } catch {
-      // masterPageItems pode não existir em alguns hosts
+      // coleção plana indisponível
     }
+    if (!forEachPageItem(recursiveFallback, page, pageName, visit)) aborted = true;
+  };
+
+  forEachPage(doc, (page, pageName) => {
+    walkPageCollection(page, pageName, page.pageItems);
   });
 
-  try {
-    forEachCollectionItem<Spread>(doc.spreads, (spread) => {
-      if (!spread?.isValid) return;
-      const spreadPages = getSpreadPages(spread);
-      if (!spread.pageItems) return;
-      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
-        if (!item?.isValid) return;
-        const pageName = resolveNearestPageName(item, spreadPages);
+  if (!aborted) {
+    try {
+      forEachCollectionItem<Spread>(doc.spreads, (spread) => {
+        if (aborted || !spread?.isValid) return;
+        const spreadPages = getSpreadPages(spread);
+        if (!spread.pageItems) return;
         const page = spreadPages[0] || null;
-        callback(item, page, pageName);
-        try {
-          if (item.pageItems && item.pageItems.length > 0) {
-            forEachPageItem(item.pageItems, page, pageName, callback, 1);
+        forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
+          if (aborted || !item?.isValid) return;
+          const pageName = resolveNearestPageName(item, spreadPages);
+          if (visit(item, page, pageName) === false) return;
+          try {
+            if (!getCollectionItem<PageItem>(item.pageItems, 0)) return;
+            if (!forEachPageItem(item.pageItems, page, pageName, visit, 1)) aborted = true;
+          } catch {
+            // ignore
           }
-        } catch {
-          // ignore
-        }
+        });
       });
-    });
-  } catch {
-    // ignore
+    } catch {
+      // ignore
+    }
   }
+
+  if (aborted) return;
 
   try {
     forEachCollectionItem<Spread>(doc.masterSpreads, (spread) => {
-      if (!spread?.isValid) return;
+      if (aborted || !spread?.isValid) return;
       forEachCollectionItem<Page>(spread.pages, (page, index) => {
-        if (!page?.isValid) return;
+        if (aborted || !page?.isValid) return;
         const pageName = `Página-mestra ${page.name || index + 1}`.trim();
-        if (page.pageItems) {
-          forEachPageItem(page.pageItems, page, pageName, callback);
-        }
+        walkPageCollection(page, pageName, page.pageItems);
       });
     });
   } catch {
@@ -386,23 +430,22 @@ export function walkPasteboardItems(
       if (!item?.isValid || depth > 8) return;
       if (isOnHiddenLayer(item) || !hasMeasurableBounds(item)) return;
 
-      if (isFullyOutsideAllPages(item, spreadPages, doc)) {
-        const key = getPageItemDedupKey(item);
-        if (seen.has(key)) return;
-        seen.add(key);
-        callback(item, spreadPages, resolveNearestPageName(item, spreadPages));
-        return;
-      }
+        if (isFullyOutsideAllPages(item, spreadPages, doc)) {
+          const key = getPageItemDedupKey(item);
+          if (seen.has(key)) return;
+          seen.add(key);
+          callback(item, spreadPages, resolveNearestPageName(item, spreadPages));
+          return;
+        }
 
-      try {
-        if (item.pageItems && item.pageItems.length > 0) {
+        try {
+          if (!getCollectionItem<PageItem>(item.pageItems, 0)) return;
           forEachCollectionItem<PageItem>(item.pageItems, (child) => {
             visit(child, depth + 1);
           });
+        } catch {
+          // ignora grupo inválido
         }
-      } catch {
-        // ignora grupo inválido
-      }
     };
 
     const roots: PageItem[] = [];
@@ -633,7 +676,6 @@ export function collectGraphicsFromItem(
   };
 
   const collections: unknown[] = [
-    (item as PageItem & { allGraphics?: unknown }).allGraphics,
     item.graphics,
     item.images,
     (item as PageItem & { epss?: unknown }).epss,
@@ -749,7 +791,7 @@ export function collectStrokedItems(doc: Document): StrokeInfo[] {
       }
       strokes.push({
         pageName,
-        objectName: getPageItemDisplayName(item),
+        objectName: "",
         weight,
         pageItem: item,
       });

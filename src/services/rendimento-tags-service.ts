@@ -9,6 +9,11 @@ import {
   isRendimentoLayerName,
 } from "../utils/editorial-layer";
 import { getActiveDocument, getInDesignModule } from "../utils/indesign-runtime";
+import {
+  findNoneCharacterStyle,
+  findNoParagraphStyle,
+  withNeutralTextStyleContext,
+} from "../utils/text-style-context";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
 
@@ -616,7 +621,8 @@ function ensureTagParagraphStyle(doc: Document): ParagraphStyle | null {
     // cria abaixo
   }
   try {
-    return doc.paragraphStyles.add({ name: STYLE_NAME });
+    const base = findNoParagraphStyle(doc);
+    return doc.paragraphStyles.add(base ? { name: STYLE_NAME, basedOn: base } : { name: STYLE_NAME });
   } catch {
     return null;
   }
@@ -730,7 +736,8 @@ function assignItemLayer(item: PageItem, layer: Layer | null): void {
 function lockTagText(
   frame: PageItem,
   paraStyle: ParagraphStyle | null,
-  paper: Swatch | Color | null
+  paper: Swatch | Color | null,
+  noneChar: ReturnType<typeof findNoneCharacterStyle>
 ): void {
   const text = getCollectionItem<Text>(frame.texts, 0);
   if (!text) return;
@@ -738,6 +745,13 @@ function lockTagText(
   if (paraStyle) {
     try {
       text.appliedParagraphStyle = paraStyle;
+    } catch {
+      // ignore
+    }
+  }
+  if (noneChar) {
+    try {
+      text.appliedCharacterStyle = noneChar;
     } catch {
       // ignore
     }
@@ -784,6 +798,7 @@ function placeTag(
   none: Swatch | Color | null,
   paper: Swatch | Color | null,
   paraStyle: ParagraphStyle | null,
+  noneChar: ReturnType<typeof findNoneCharacterStyle>,
   layer: Layer | null
 ): void {
   const bounds = page.bounds;
@@ -830,7 +845,7 @@ function placeTag(
     // ignore
   }
   frame.contents = label;
-  lockTagText(frame, paraStyle, paper);
+  lockTagText(frame, paraStyle, paper, noneChar);
 }
 
 export async function createRendimentoTags(
@@ -839,7 +854,8 @@ export async function createRendimentoTags(
 ): Promise<RendimentoTagsResult> {
   const doc = getActiveDocument();
 
-  return withPointUnitsAsync(doc, async () => {
+  return withPointUnitsAsync(doc, () =>
+    withNeutralTextStyleContext(doc, async () => {
     throwIfAborted(signal);
     onProgress?.(15, "Preparando layer RENDIMENTO…");
     await yieldToHost(20);
@@ -852,6 +868,7 @@ export async function createRendimentoTags(
     const fill = findDocumentBlack(doc);
     const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
     const paper = findSwatchByName(doc, ["Paper", "Papel"]);
+    const noneChar = findNoneCharacterStyle(doc);
     const paraStyle = ensureTagParagraphStyle(doc);
     if (paraStyle) styleTagParagraph(doc, paraStyle, paper);
     ensurePluginInk(doc);
@@ -869,7 +886,7 @@ export async function createRendimentoTags(
       if (!page?.isValid) continue;
       const count = countPageCharacters(page);
       if (count <= 0) continue;
-      placeTag(page, count, fill, none, paper, paraStyle, layer);
+      placeTag(page, count, fill, none, paper, paraStyle, noneChar, layer);
       created += 1;
 
       if ((i + 1) % 4 === 0 || i === pageCount - 1) {
@@ -882,5 +899,6 @@ export async function createRendimentoTags(
 
     bringPluginTagLayersToFront(doc);
     return { layerName, pages: created };
-  });
+    })
+  );
 }

@@ -10,6 +10,7 @@ import {
 import { ensurePluginInk, ensureProcessTagColor, findDocumentBlack, findSwatchByName } from "../utils/editorial-color";
 import { pickTagOverlayColors } from "../utils/tag-overlay-colors";
 import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
+import { findNoneCharacterStyle, findNoParagraphStyle, withNeutralTextStyleContext } from "../utils/text-style-context";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
 
@@ -444,7 +445,8 @@ function ensureTagParagraphStyle(doc: Document): ParagraphStyle | null {
   }
 
   try {
-    return doc.paragraphStyles.add({ name: "EAC_TagLabel" });
+    const base = findNoParagraphStyle(doc);
+    return doc.paragraphStyles.add(base ? { name: "EAC_TagLabel", basedOn: base } : { name: "EAC_TagLabel" });
   } catch {
     return null;
   }
@@ -1034,18 +1036,6 @@ function assignItemLayer(item: PageItem, layer: Layer | null): void {
   }
 }
 
-function findNoneCharacterStyle(doc: Document): CharacterStyle | null {
-  for (const name of ["[None]", "[Nenhum]"]) {
-    try {
-      const style = doc.characterStyles.itemByName(name);
-      if (style?.isValid) return style;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
 function placeTag(
   doc: Document,
   page: Page,
@@ -1101,7 +1091,8 @@ export async function createMemorialStyleTags(
 ): Promise<StyleTagsResult> {
   const doc = getActiveDocument();
 
-  return withPointUnitsAsync(doc, async () => {
+  return withPointUnitsAsync(doc, () =>
+    withNeutralTextStyleContext(doc, async () => {
     throwIfAborted(signal);
     onProgress?.(10, "Localizando estilos…");
     await yieldToHost(20);
@@ -1182,5 +1173,6 @@ export async function createMemorialStyleTags(
       character,
       total: paragraph + character,
     };
-  });
+    })
+  );
 }

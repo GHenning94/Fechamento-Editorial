@@ -108,6 +108,10 @@ declare module "indesign" {
     scriptPreferences: ScriptPreferences;
     userName: string;
     selection: unknown;
+    textDefaults?: {
+      appliedParagraphStyle?: ParagraphStyle;
+      appliedCharacterStyle?: CharacterStyle;
+    };
     dialogs: InDesignDialogs;
     languagesWithVendors?: Languages;
     doScript?(
@@ -201,8 +205,13 @@ declare module "indesign" {
     preflightProfiles: PreflightProfiles;
     documentPreferences: DocumentPreferences;
     viewPreferences?: ViewPreferences;
+    textDefaults?: {
+      appliedParagraphStyle?: ParagraphStyle;
+      appliedCharacterStyle?: CharacterStyle;
+    };
     textFrames?: TextFrames;
     swatches?: Swatches;
+    select?(value: unknown): void;
     activeLayer?: Layer;
     save(file?: File | string): void;
     saveACopy(file: File | string): void;
@@ -258,6 +267,7 @@ declare module "indesign" {
     constructor: { name: string };
     name: string;
     label?: string;
+    id?: number;
     fillColor: Swatch | Color;
     strokeColor: Swatch | Color;
     strokeWeight: number;

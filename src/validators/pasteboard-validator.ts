@@ -5,7 +5,6 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import {
   getPageItemDedupKey,
   getPageItemDisplayName,
-  isFullyOutsideAllPages,
   walkPasteboardItems,
 } from "../utils/indesign-helpers";
 
@@ -18,22 +17,18 @@ export class PasteboardValidator extends BaseValidator {
       const issues: ValidationIssue[] = [];
       const seen = new Set<string>();
 
-      walkPasteboardItems(doc, (item, spreadPages, pageName) => {
+      walkPasteboardItems(doc, (item, _spreadPages, pageName) => {
         try {
-          const objectName = getPageItemDisplayName(item);
           const itemKey = getPageItemDedupKey(item);
           if (seen.has(itemKey)) return;
-
-          if (isFullyOutsideAllPages(item, spreadPages, doc)) {
-            seen.add(itemKey);
-            issues.push({
-              message: "Objeto totalmente fora da área da página",
-              page: pageName,
-              object: objectName,
-              details:
-                "O objeto está 100% fora da página (incluindo sangria). Objetos parcialmente dentro da página não são erro.",
-            });
-          }
+          seen.add(itemKey);
+          issues.push({
+            message: "Objeto totalmente fora da área da página",
+            page: pageName,
+            object: getPageItemDisplayName(item),
+            details:
+              "O objeto está 100% fora da página (incluindo sangria). Objetos parcialmente dentro da página não são erro.",
+          });
         } catch {
           // ignora item inválido
         }

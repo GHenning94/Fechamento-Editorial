@@ -3,7 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult } from "../models/validation-result";
 import { MIN_STROKE_WEIGHT, STROKE_WEIGHT_TOLERANCE_PT, VALIDATOR_IDS } from "../utils/constants";
 import { isPluginGeneratedItem } from "../utils/editorial-layer";
-import { collectStrokedItems } from "../utils/indesign-helpers";
+import { collectStrokedItems, getPageItemDisplayName } from "../utils/indesign-helpers";
 import { getInDesignModule } from "../utils/indesign-runtime";
 
 function unitLooksLikeMillimeters(units: unknown): boolean {
@@ -84,14 +84,15 @@ export class FiosValidator extends BaseValidator {
         const weightPt = strokeWeightInPoints(stroke.weight, doc);
         if (!isStrokeTooThin(weightPt)) continue;
 
-        const key = `${stroke.pageName}::${stroke.objectName}::${weightPt.toFixed(3)}`;
+        const objectName = getPageItemDisplayName(stroke.pageItem) || stroke.objectName || "Objeto";
+        const key = `${stroke.pageName}::${objectName}::${weightPt.toFixed(3)}`;
         if (seen.has(key)) continue;
         seen.add(key);
 
         issues.push({
           message: "abaixo de 0.3 pt",
           page: stroke.pageName,
-          object: stroke.objectName,
+          object: objectName,
           value: formatStrokePt(weightPt),
         });
       }

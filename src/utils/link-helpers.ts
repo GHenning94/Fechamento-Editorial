@@ -1,7 +1,6 @@
 import type { Document, Link, Page, PageItem } from "indesign";
-import { forEachCollectionItem } from "./collection-helpers";
+import { forEachCollectionItem, getCollectionItem } from "./collection-helpers";
 import { getInDesignModule } from "./indesign-runtime";
-import { getPageItemDisplayName } from "./indesign-helpers";
 
 export const LINK_STATUS_VALUES = {
   NORMAL: 1852797549,
@@ -179,21 +178,24 @@ export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
     return result;
   }
 
-  const walkItems = (container: unknown, pageName: string): void => {
+  const walkItems = (container: unknown, pageName: string, recurse: boolean): void => {
     forEachCollectionItem<PageItem>(container, (item) => {
       if (!item || !item.isValid) return;
-      const objectName = getPageItemDisplayName(item);
-      const extra = item as PageItem & { epss?: unknown; pdfs?: unknown; allGraphics?: unknown };
+      const extra = item as PageItem & { epss?: unknown; pdfs?: unknown };
 
-      for (const collection of [item.graphics, item.images, extra.allGraphics, extra.epss, extra.pdfs]) {
+      for (const collection of [item.graphics, item.images, extra.epss, extra.pdfs]) {
         forEachCollectionItem<{ itemLink: Link | null; isValid: boolean }>(collection, (graphic) => {
           if (!graphic?.isValid || !graphic.itemLink) return;
-          pushLink(graphic.itemLink, pageName, objectName);
+          pushLink(graphic.itemLink, pageName, graphic.itemLink.name || "Link");
         });
       }
 
-      if (item.pageItems && item.pageItems.length > 0) {
-        walkItems(item.pageItems, pageName);
+      if (!recurse) return;
+      try {
+        if (!getCollectionItem<PageItem>(item.pageItems, 0)) return;
+        walkItems(item.pageItems, pageName, true);
+      } catch {
+        // ignore
       }
     });
   };
@@ -202,8 +204,16 @@ export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
     forEachCollectionItem<Page>(doc.pages, (page, index) => {
       if (!page || !page.isValid) return;
       const pageName = page.name || `Página ${index + 1}`;
-      walkItems(page.allPageItems || page.pageItems, pageName);
-      walkItems((page as Page & { masterPageItems?: unknown }).masterPageItems, pageName);
+      try {
+        const flat = page.allPageItems;
+        if (flat) {
+          walkItems(flat, pageName, false);
+          return;
+        }
+      } catch {
+        // fallback abaixo
+      }
+      walkItems(page.pageItems, pageName, true);
     });
   } catch {
     return result;

@@ -1,4 +1,4 @@
-import type { Cell, Document, Page, PageItem, Story, Text, TextStyleRange } from "indesign";
+import type { Cell, Document, PageItem, Story, Text, TextStyleRange } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
@@ -15,7 +15,7 @@ import {
   textFillHasOverprint,
   textFrameFillLeaksFromContents,
 } from "../utils/fill-color";
-import { forEachPage } from "../utils/indesign-helpers";
+import { walkDirectPageItems } from "../utils/indesign-helpers";
 
 const FIX_DETAILS =
   "Aplique overprint no preenchimento do texto cinza. Preferência: preto 100%.";
@@ -191,21 +191,10 @@ function frameIsChromaticBox(frame: PageItem | null): boolean {
 
 function snippetOf(range: TextStyleRange | Text): string {
   try {
-    const chars = (range as Text).characters;
-    const length = Math.min(getCollectionLength(chars), 36);
-    let out = "";
-    for (let i = 0; i < length; i++) {
-      const character = chars?.item?.(i);
-      if (!character) continue;
-      try {
-        const piece = (character as { contents?: string }).contents;
-        if (typeof piece === "string") out += piece;
-      } catch {
-        // ignore
-      }
-      if (out.length >= 52) break;
-    }
-    return out.replace(/\s+/g, " ").trim().slice(0, 52);
+    const raw = String((range as { contents?: string }).contents || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return raw.slice(0, 52);
   } catch {
     return "";
   }
@@ -245,7 +234,7 @@ function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string): v
 function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
   const byPage = new Map<string, ColoredSnap[]>();
 
-  const add = (item: PageItem, pageName: string): void => {
+  walkDirectPageItems(doc, (item, _page, pageName) => {
     if (!pageName) return;
     let list = byPage.get(pageName);
     if (!list) {
@@ -253,27 +242,6 @@ function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
       byPage.set(pageName, list);
     }
     pushColored(list, item, pageName);
-    try {
-      const children = item.pageItems;
-      const n = Math.min(getCollectionLength(children), 40);
-      for (let i = 0; i < n; i++) {
-        const child = getCollectionItem<PageItem>(children, i);
-        if (child) pushColored(list, child, pageName);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  forEachPage(doc, (page: Page, pageName: string) => {
-    forEachCollectionItem<PageItem>(page.pageItems, (item) => add(item, pageName));
-    try {
-      forEachCollectionItem<PageItem>((page as Page & { masterPageItems?: unknown }).masterPageItems, (item) =>
-        add(item, pageName)
-      );
-    } catch {
-      // ignore
-    }
   });
 
   return byPage;

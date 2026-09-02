@@ -7,7 +7,7 @@ export interface IValidator {
   validate(doc: Document): ValidationResult;
 }
 
-export type PageItemCallback = (item: PageItem, page: Page | null, pageName: string) => void;
+export type PageItemCallback = (item: PageItem, page: Page | null, pageName: string) => void | boolean;
 
 export interface GraphicInfo {
   pageName: string;

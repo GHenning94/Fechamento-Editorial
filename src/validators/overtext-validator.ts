@@ -3,11 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
-import {
-  forEachPage,
-  getPageItemDisplayName,
-  walkDirectPageItems,
-} from "../utils/indesign-helpers";
+import { forEachPage, getPageItemDisplayName } from "../utils/indesign-helpers";
 
 function isTruthyOverflow(value: unknown): boolean {
   return value === true || value === 1;
@@ -80,21 +76,10 @@ export class OvertextValidator extends BaseValidator {
         pushIssue(pageName, objectName, bounds);
       };
 
-      walkDirectPageItems(doc, (item, _page, pageName) => {
-        considerItem(item, pageName);
-      });
-
       forEachPage(doc, (page, pageName) => {
         try {
           forEachCollectionItem<PageItem>(page.textFrames, (frame) => {
             considerItem(frame, pageName);
-          });
-        } catch {
-          // ignore
-        }
-        try {
-          forEachCollectionItem<PageItem>(page.allPageItems, (item) => {
-            considerItem(item, pageName);
           });
         } catch {
           // ignore

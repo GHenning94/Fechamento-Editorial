@@ -7,6 +7,7 @@ import {
   styleHasOverprintFill,
   swatchNameOf,
 } from "./color-model";
+import { getValidationScan } from "../core/validation-cache";
 import { walkDirectPageItems } from "./indesign-helpers";
 
 export function colorOverprintSatisfied(
@@ -25,27 +26,47 @@ export function guideColorUsageMissingOverprint(
   let foundUsage = false;
   let missing = false;
 
-  walkDirectPageItems(doc, (item) => {
-    if (missing) return;
-    try {
-      if (matchesName(swatchNameOf(item.fillColor))) {
+  const cached = getValidationScan()?.getColorUsage();
+  if (cached) {
+    for (const snap of cached) {
+      if (snap.fillName && matchesName(snap.fillName)) {
         foundUsage = true;
-        if (!itemHasFillOverprint(item)) missing = true;
+        if (!snap.fillOverprint) return true;
       }
-    } catch {
-      // ignore
-    }
-    try {
-      if (matchesName(swatchNameOf(item.strokeColor))) {
+      if (snap.strokeName && matchesName(snap.strokeName)) {
         foundUsage = true;
-        if (!itemHasStrokeOverprint(item)) missing = true;
+        if (!snap.strokeOverprint) return true;
       }
-    } catch {
-      // ignore
     }
-  });
-
-  if (missing) return true;
+  } else {
+    walkDirectPageItems(doc, (item) => {
+      try {
+        const fillName = swatchNameOf(item.fillColor);
+        if (fillName && matchesName(fillName)) {
+          foundUsage = true;
+          if (!itemHasFillOverprint(item)) {
+            missing = true;
+            return false;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        const strokeName = swatchNameOf(item.strokeColor);
+        if (strokeName && matchesName(strokeName)) {
+          foundUsage = true;
+          if (!itemHasStrokeOverprint(item)) {
+            missing = true;
+            return false;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    });
+    if (missing) return true;
+  }
 
   forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
     if (missing || !style?.isValid) return;
