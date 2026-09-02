@@ -223,6 +223,10 @@ function checkboxAppearanceStream(size: number, checked: boolean): string {
   ].join(" ");
 }
 
+function toggleCheckAction(hideName: string, showName: string): string {
+  return `/A << /Type /Action /S /Hide /T ${pdfString(hideName)} /H true /Next << /Type /Action /S /Hide /T ${pdfString(showName)} /H false >> >>`;
+}
+
 export function displayDocumentTitle(name: string): string {
   const trimmed = (name || "").trim();
   return trimmed.replace(/\.indd$/i, "") || "-";
@@ -450,7 +454,8 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   const commentIds = Array.from({ length: c }, () => nextId++);
   const apOffId = nextId++;
   const apYesId = nextId++;
-  const widgetIds = Array.from({ length: k }, () => nextId++);
+  const offWidgetIds = Array.from({ length: k }, () => nextId++);
+  const onWidgetIds = Array.from({ length: k }, () => nextId++);
   const acroFormId = nextId++;
   const outlineRootId = outlines.length > 0 ? nextId++ : -1;
   const assignedOutlines =
@@ -502,7 +507,7 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     annotsByPage[comments[i].pageIndex]?.push(commentIds[i]);
   }
   for (let i = 0; i < k; i++) {
-    annotsByPage[checkboxes[i].pageIndex]?.push(widgetIds[i]);
+    annotsByPage[checkboxes[i].pageIndex]?.push(offWidgetIds[i], onWidgetIds[i]);
   }
 
   for (let i = 0; i < n; i++) {
@@ -530,16 +535,24 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   for (let i = 0; i < k; i++) {
     const field = checkboxes[i];
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
-    const state = field.checked ? "/Yes" : "/Off";
-    const mkBg = field.checked ? CHECK_ON : CHECK_OFF_FILL;
-    const mkBc = field.checked ? CHECK_ON : CHECK_OFF_STROKE;
+    const offName = `Off${String(i + 1).padStart(2, "0")}`;
+    const onName = `On${String(i + 1).padStart(2, "0")}`;
+    const rect = `[${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}]`;
+    const common = `/Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /H /N /P ${destPage} 0 R /Rect ${rect} /Border [0 0 0] /BS << /W 0 /S /S >> /MK << /R 0 /BG [] /BC [] /CA () >>`;
+    // Pushbutton: o Preview troca checkbox/rádio pelo chrome nativo (quadrado cinza + visto preto)
+    // ao perder o foco. Botão sempre desenha o /AP — quadrado magenta + visto branco.
+    // Dois botões no mesmo retângulo + Hide para marcar/desmarcar.
     obj(
-      widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /Border [0 0 0] /BS << /W 0 /S /S >> /MK << /BG [${mkBg}] /BC [${mkBc}] /CA () >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
+      offWidgetIds[i],
+      `<< ${common} /T ${pdfString(offName)} /NM ${pdfString(offName)} /F ${field.checked ? 6 : 4} /AP << /N ${apOffId} 0 R >> ${toggleCheckAction(offName, onName)} >>`
+    );
+    obj(
+      onWidgetIds[i],
+      `<< ${common} /T ${pdfString(onName)} /NM ${pdfString(onName)} /F ${field.checked ? 4 : 6} /AP << /N ${apYesId} 0 R >> ${toggleCheckAction(onName, offName)} >>`
     );
   }
 
-  const fieldRefs = widgetIds.map((id) => `${id} 0 R`).join(" ");
+  const fieldRefs = [...offWidgetIds, ...onWidgetIds].map((id) => `${id} 0 R`).join(" ");
   obj(
     acroFormId,
     `<< /Fields [${fieldRefs}] /NeedAppearances false /DR << /Font << /Helv ${font1} 0 R /HeBo ${font2} 0 R >> >> >>`

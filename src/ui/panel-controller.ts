@@ -41,6 +41,7 @@ export class PanelController {
   private listWarnings: HTMLElement | null;
   private listErrors: HTMLElement | null;
   private statusMessage: HTMLElement | null;
+  private statusText: HTMLElement | null;
   private btnIgnoreAllWarnings: HTMLElement | null;
   private reportDownloadAllowed = false;
   private rawSummary: ValidationSummary | null = null;
@@ -63,6 +64,7 @@ export class PanelController {
     this.listWarnings = root.querySelector("#list-warnings");
     this.listErrors = root.querySelector("#list-errors");
     this.statusMessage = root.querySelector("#status-message");
+    this.statusText = root.querySelector("#status-message-text");
     this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
     this.bindResultExpanders();
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
@@ -134,7 +136,8 @@ export class PanelController {
       this.btnClose &&
       this.progressBar &&
       this.progressLabel &&
-      this.statusMessage
+      this.statusMessage &&
+      this.statusText
     );
   }
 
@@ -632,9 +635,12 @@ export class PanelController {
   }
 
   setStatus(message: string, type: "success" | "warning" | "error" | "info" = "info"): void {
-    if (!this.statusMessage) return;
-    this.statusMessage.textContent = message;
-    this.statusMessage.className = `status-message status-${type}`;
+    if (this.statusMessage) {
+      this.statusMessage.className = `status-message status-${type}`;
+    }
+    if (this.statusText) {
+      this.statusText.textContent = message;
+    }
   }
 
   private escape(value: string): string {
