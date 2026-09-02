@@ -125,7 +125,7 @@ export class ClosureOrchestrator {
     clearInDesignSelection();
     await yieldToHost(HEAVY_STEP_PAUSE_MS);
 
-    onProgress?.(3, totalSteps, "Exportando PDF páginas simples (sem memorial e rendimento)...");
+    onProgress?.(3, totalSteps, "Exportando PDF páginas simples...");
     await yieldToHost(120);
     const pdfArteResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Arte", () =>
       this.exportService.runPdfArte(getActiveDocument(), paths)
@@ -142,7 +142,7 @@ export class ClosureOrchestrator {
     };
 
     if (!skipEstilosPdf) {
-      onProgress?.(4, totalSteps, "Exportando PDF spreads (com memorial e rendimento)...");
+      onProgress?.(4, totalSteps, "Exportando PDF spreads...");
       await yieldToHost(120);
       pdfEstilosResult = runInDesignHeavyMutation("EDITORIAL AUTOCLOSE — PDF Estilos", () =>
         this.exportService.runPdfEstilos(getActiveDocument(), paths)

@@ -111,7 +111,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
   controller.bindHandlers({
     onChecklist: async () => {
       controller.resetProgress();
-      controller.setStatus("Executando checklist editorial...", "info");
+      controller.setStatus("Validação em andamento...", "info");
       await yieldToHost(40);
       const signal = controller.startCancellableAction();
 
@@ -145,7 +145,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
 
     onCreateStyles: async () => {
       controller.resetProgress();
-      controller.setStatus("Criando tags de estilos…", "info");
+      controller.setStatus("Criação de memorial em andamento...", "info");
       await yieldToHost(40);
       const signal = controller.startCancellableAction();
       try {
@@ -170,7 +170,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
 
     onCreateRendimento: async () => {
       controller.resetProgress();
-      controller.setStatus("Criando tags de rendimento…", "info");
+      controller.setStatus("Criação de rendimento em andamento...", "info");
       await yieldToHost(40);
       const signal = controller.startCancellableAction();
       try {
@@ -224,7 +224,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
         throw error;
       }
 
-      controller.setStatus("Gerando relatório...", "info");
+      controller.setStatus("Geração de relatório em andamento...", "info");
       const savedPath = await orchestrator.exportChecklistReport(
         reportSummary,
         filePath,
@@ -235,11 +235,10 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
 
     onClose: async (userName: string, destinationFolder: string) => {
       controller.resetProgress();
-      controller.setStatus("Iniciando fechamento...", "info");
+      controller.setStatus("Fechamento em andamento...", "info");
       return orchestrator.closeMaterial(userName, destinationFolder, (step, total, label) => {
         const percent = Math.round((step / total) * 100);
         controller.setProgress(percent, label);
-        controller.setStatus(label, "info");
       });
     },
     hasMemorialLayer: () => orchestrator.hasMemorialLayer(),
