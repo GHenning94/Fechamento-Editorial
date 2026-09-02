@@ -150,7 +150,17 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
 
 function formatIssue(summary: ValidationSummary, issue: ValidationIssue, validatorId: string): string {
   const result = (summary.results || []).find((item) => item.validatorId === validatorId);
-  const kind = result && getIssueSeverity(result, issue) === "warning" ? "Alerta" : "Erro";
+  const text = `${issue.message || ""} ${issue.value || ""}`.toLowerCase();
+  const unidentified =
+    text.includes("não identificado") ||
+    text.includes("nao identificado") ||
+    (issue.value || "").trim().toLowerCase() === "desconhecido";
+  const kind =
+    issue.severity === "warning" || unidentified
+      ? "Alerta"
+      : result && getIssueSeverity(result, issue) === "warning"
+        ? "Alerta"
+        : "Erro";
   return formatIssueLine(issue, {
     kind,
     separator: " - ",
@@ -197,10 +207,12 @@ export function mapOriginalChecklist(
     }
 
     const allRan = row.validatorIds.every((id) => ranIds.has(id));
+    const hasError = details.some((line) => line.startsWith("Erro:"));
     return {
       label: row.label,
       checked: allRan && details.length === 0,
       details,
+      reviewKind: details.length === 0 ? undefined : hasError ? "error" : "warning",
     };
   });
 }

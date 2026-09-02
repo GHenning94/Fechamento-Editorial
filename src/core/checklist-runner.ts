@@ -6,6 +6,7 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import {
   clearFileColorSpaceCache,
+  coerceFilePath,
   prefetchColorSpacesFromLinks,
 } from "../utils/file-color-space";
 import {
@@ -39,17 +40,56 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-function collectLinkColorTargets(): Array<{ id: number; name: string; filePath: string }> {
+function folderOf(path: string): string {
+  const normalized = coerceFilePath(path).replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index > 0 ? normalized.slice(0, index) : "";
+}
+
+function linkPathCandidates(link: Link, docDir: string): string[] {
+  const name = link.name || "";
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (value: unknown): void => {
+    const path = coerceFilePath(value);
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    out.push(path);
+  };
+  push(link.filePath);
+  push(link.linkResourceURI);
+  if (docDir && name) {
+    push(`${docDir}/${name}`);
+    push(`${docDir}/Links/${name}`);
+    push(`${docDir}/links/${name}`);
+  }
+  return out;
+}
+
+function collectLinkColorTargets(): Array<{ id: number; name: string; filePaths: string[] }> {
   const doc = getActiveDocument();
-  const links: Array<{ id: number; name: string; filePath: string }> = [];
+  let docDir = "";
+  try {
+    docDir = folderOf(coerceFilePath((doc as Document & { filePath?: unknown }).filePath));
+  } catch {
+    // ignore
+  }
+  if (!docDir) {
+    try {
+      docDir = folderOf(coerceFilePath((doc as Document & { fullName?: unknown }).fullName));
+    } catch {
+      // ignore
+    }
+  }
+  const links: Array<{ id: number; name: string; filePaths: string[] }> = [];
   forEachCollectionItem<Link>(doc.links, (link) => {
     if (!link?.isValid) return;
-    const filePath = link.filePath || link.linkResourceURI || "";
-    if (!filePath || filePath.toLowerCase().startsWith("http")) return;
+    const filePaths = linkPathCandidates(link, docDir);
+    if (filePaths.length === 0) return;
     links.push({
       id: link.id,
       name: link.name || "",
-      filePath,
+      filePaths,
     });
   });
   return links;

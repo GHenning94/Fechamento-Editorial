@@ -10,7 +10,7 @@ import {
   isGuiasDeletarColorName,
   normalizeColorName,
 } from "./editorial-color";
-import { resolveGraphicColorSpace } from "./file-color-space";
+import { coerceFilePath, resolveGraphicColorSpace } from "./file-color-space";
 
 export { getActiveDocument } from "./indesign-runtime";
 export { getImageColorSpaceLabel } from "./color-model";
@@ -424,6 +424,7 @@ function readGraphicSpace(graphic: GraphicLike): unknown {
   const candidate = graphic as GraphicLike & {
     imageColorSpace?: unknown;
     colorSpace?: unknown;
+    profile?: unknown;
     properties?: { space?: unknown };
   };
   try {
@@ -446,6 +447,14 @@ function readGraphicSpace(graphic: GraphicLike): unknown {
   } catch {
     // ignore
   }
+  try {
+    const profile = String(candidate.profile || "");
+    if (/cmyk|fogra|gracol|swop/i.test(profile)) return "CMYK";
+    if (/srgb|adobe rgb|display p3/i.test(profile)) return "RGB";
+    if (/gray|grey/i.test(profile)) return "Gray";
+  } catch {
+    // ignore
+  }
   return null;
 }
 
@@ -455,7 +464,7 @@ function readLinkMeta(graphic: GraphicLike): { name: string; filePath: string; l
     if (link && link.isValid) {
       return {
         name: link.name || "",
-        filePath: link.filePath || link.linkResourceURI || "",
+        filePath: coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI),
         linkId: typeof link.id === "number" ? link.id : null,
       };
     }
@@ -590,7 +599,7 @@ export function collectGraphicsFromLinks(
     if (seen.has(key)) return;
     seen.add(key);
 
-    const filePath = link.filePath || link.linkResourceURI || "";
+    const filePath = coerceFilePath(link.filePath) || coerceFilePath(link.linkResourceURI);
     graphics.push({
       pageName,
       imageName,
