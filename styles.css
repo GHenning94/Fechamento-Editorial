@@ -254,8 +254,7 @@ button::-moz-focus-inner {
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   text-align: center;
   cursor: pointer;
   user-select: none;
@@ -282,15 +281,15 @@ button::-moz-focus-inner {
 }
 
 .btn-download-report {
-  background-color: #1a3324 !important;
-  color: #d8f5e4 !important;
-  border-color: #3d8f5f !important;
+  background-color: #24382c !important;
+  color: #c8f0d6 !important;
+  border-color: #4caf7a !important;
   font-weight: 700;
 }
 
 .btn-download-report:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #21402d !important;
-  border-color: #5ecf8e !important;
+  background-color: #2d4a36 !important;
+  border-color: #6ed89a !important;
 }
 
 .btn-secondary {
@@ -304,14 +303,14 @@ button::-moz-focus-inner {
 }
 
 .btn-close-material {
-  background-color: var(--surface) !important;
-  color: var(--close-text) !important;
-  border-color: var(--close-border) !important;
+  background-color: #2f8f5a !important;
+  color: #ffffff !important;
+  border-color: #247a4a !important;
 }
 
 .btn-close-material:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #1a3324 !important;
-  border-color: var(--success) !important;
+  background-color: #38a468 !important;
+  border-color: #5ecf8e !important;
   color: #ffffff !important;
 }
 
@@ -345,14 +344,14 @@ button::-moz-focus-inner {
 }
 
 .btn-create-rendimento {
-  background-color: #1c1c20 !important;
-  color: #f2f0ec !important;
-  border-color: #4a4a54 !important;
+  background-color: #3db8a8 !important;
+  color: #102018 !important;
+  border-color: #2a8f9a !important;
 }
 
 .btn-create-rendimento:hover:not(.is-disabled):not([aria-disabled="true"]) {
-  background-color: #2c2c34 !important;
-  border-color: #6a6a6e !important;
+  background-color: #4ec9b8 !important;
+  border-color: #3aa89c !important;
 }
 
 .counters {
@@ -585,6 +584,10 @@ progress::-webkit-progress-value {
 }
 
 #list-errors {
+  padding-right: 16px;
+}
+
+#list-approved {
   padding-right: 16px;
 }
 
