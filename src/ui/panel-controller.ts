@@ -35,7 +35,7 @@ export class PanelController {
   private btnCancelChecklist: HTMLElement | null;
   private actionAbort: AbortController | null = null;
   private cancelling = false;
-  private spinnerTimer: ReturnType<typeof setInterval> | null = null;
+  private spinnerTimer: ReturnType<typeof setTimeout> | null = null;
   private spinnerTickIndex = 0;
   private removeIdleHook: (() => void) | null = null;
   private workSpinner: HTMLElement | null;
@@ -295,7 +295,6 @@ export class PanelController {
       await action();
     } catch (error) {
       if (isChecklistCancelled(error)) {
-        if (this.progressLabel) this.progressLabel.textContent = "Operação cancelada.";
         this.setStatus("Operação cancelada.", "info");
         return;
       }
@@ -355,10 +354,8 @@ export class PanelController {
     this.root.classList.add("is-cancelling");
     this.actionAbort.abort();
     setActionDisabled(this.btnCancelChecklist, true);
-    if (this.progressLabel) this.progressLabel.textContent = "Cancelando...";
     if (this.statusText) this.statusText.textContent = "Cancelando...";
     if (this.statusMessage) this.statusMessage.className = "status-message status-info";
-    void this.progressLabel?.offsetHeight;
     void this.statusMessage?.offsetHeight;
     void yieldToHost(0);
   }
@@ -374,12 +371,16 @@ export class PanelController {
     this.layoutSpinnerDots();
     this.paintSpinner();
     if (this.spinnerTimer != null) return;
-    this.spinnerTimer = setInterval(() => this.tickSpinner(), 90);
+    const loop = (): void => {
+      this.tickSpinner();
+      this.spinnerTimer = setTimeout(loop, 80);
+    };
+    this.spinnerTimer = setTimeout(loop, 80);
   }
 
   private stopSpinnerAnimation(): void {
     if (this.spinnerTimer != null) {
-      clearInterval(this.spinnerTimer);
+      clearTimeout(this.spinnerTimer);
       this.spinnerTimer = null;
     }
     this.spinnerTickIndex = 0;
@@ -390,7 +391,6 @@ export class PanelController {
     if (!el) return;
     const size = 16;
     const radius = 6;
-    const dot = 3;
     const cx = size / 2;
     const cy = size / 2;
     const kids = el.children;
@@ -398,14 +398,15 @@ export class PanelController {
       const angle = ((i * 30 - 90) * Math.PI) / 180;
       const node = kids[i] as HTMLElement;
       node.style.position = "absolute";
-      node.style.left = `${(cx + radius * Math.cos(angle) - dot / 2).toFixed(1)}px`;
-      node.style.top = `${(cy + radius * Math.sin(angle) - dot / 2).toFixed(1)}px`;
-      node.style.width = `${dot}px`;
-      node.style.height = `${dot}px`;
+      node.style.left = `${(cx + radius * Math.cos(angle) - 2).toFixed(1)}px`;
+      node.style.top = `${(cy + radius * Math.sin(angle) - 2).toFixed(1)}px`;
+      node.style.width = "4px";
+      node.style.height = "4px";
       node.style.margin = "0";
       node.style.padding = "0";
-      node.style.borderRadius = "50%";
-      node.style.backgroundColor = "#f0ebe4";
+      node.style.fontSize = "5px";
+      node.style.lineHeight = "4px";
+      node.style.color = "#f0ebe4";
     }
   }
 
@@ -415,7 +416,14 @@ export class PanelController {
     const kids = el.children;
     for (let i = 0; i < kids.length; i++) {
       const dist = (i - this.spinnerTickIndex + 12) % 12;
-      (kids[i] as HTMLElement).style.opacity = String(Math.max(0.18, 1 - dist * 0.07));
+      const node = kids[i] as HTMLElement;
+      if (dist > 4) {
+        node.textContent = "";
+      } else {
+        node.textContent = "•";
+        const shades = ["#f7f4ee", "#cfcbc3", "#9c9891", "#6f6b65", "#4a4a54"];
+        node.style.color = shades[dist];
+      }
     }
   }
 
@@ -446,10 +454,6 @@ export class PanelController {
     this.tickSpinner();
     if (this.progressBar) this.progressBar.value = percent;
     if (!this.progressLabel) return;
-    if (this.cancelling) {
-      this.progressLabel.textContent = "Cancelando...";
-      return;
-    }
     this.progressLabel.textContent = label;
   }
 
