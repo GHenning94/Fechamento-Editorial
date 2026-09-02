@@ -105,7 +105,7 @@ export function extractStyleTrunk(name: string): string | null {
 
 export function hasParagraphStyleTrunkFormat(name: string): boolean {
   const trimmed = name.trim();
-  if (!trimmed || containsInvalidSpaces(trimmed)) return false;
+  if (!trimmed) return false;
   return extractStyleTrunk(trimmed) !== null;
 }
 
@@ -173,7 +173,6 @@ export function isParagraphStyleNomenclatureSkipped(name: string): boolean {
 }
 
 export function styleMatchesTrunk(styleName: string, trunk: string): boolean {
-  if (containsInvalidSpaces(styleName)) return false;
   const styleTrunk = extractStyleTrunk(styleName);
   const palTrunk = extractStyleTrunk(trunk) || trunk;
   if (!styleTrunk) return false;
@@ -181,9 +180,7 @@ export function styleMatchesTrunk(styleName: string, trunk: string): boolean {
 }
 
 export function findParagraphStyleTrunk(styleName: string): string | null {
-  const trimmed = styleName.trim();
-  if (containsInvalidSpaces(trimmed)) return null;
-  const styleTrunk = extractStyleTrunk(trimmed);
+  const styleTrunk = extractStyleTrunk(styleName.trim());
   if (!styleTrunk) return null;
   const key = normalizeTrunkKey(styleTrunk);
   return PALETTE_SHORT_TRUNKS.find((item) => normalizeTrunkKey(item) === key) || null;

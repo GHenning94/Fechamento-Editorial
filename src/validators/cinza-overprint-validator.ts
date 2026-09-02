@@ -10,6 +10,7 @@ import {
   isChromaticFill,
   isColoredBackgroundFill,
   isGrayFill,
+  isTextFrameItem,
   itemHasPlacedGraphic,
   readFillTint,
   readItemFill,
@@ -292,6 +293,38 @@ function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
   return "";
 }
 
+function isFilledShape(item: PageItem): boolean {
+  try {
+    const typeName = item.constructor?.name || "";
+    return /rectangle|oval|polygon|graphicline/i.test(typeName);
+  } catch {
+    return false;
+  }
+}
+
+function frameHasChromaticText(frame: PageItem): boolean {
+  if (!isTextFrameItem(frame)) return false;
+  try {
+    const chars = (frame as PageItem & { characters?: unknown }).characters;
+    const length = Math.min(getCollectionLength(chars), 40);
+    for (let i = 0; i < length; i++) {
+      const character = (chars as { item?: (index: number) => Text })?.item?.(i);
+      if (!character) continue;
+      try {
+        const contents = (character as { contents?: string }).contents;
+        if (typeof contents === "string" && contents.trim() === "") continue;
+      } catch {
+        // segue
+      }
+      const fill = readLocalFillColor(character);
+      if (fill && isChromaticFill(fill, readFillTint(character))) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 function isLikelyIcon(bounds: number[]): boolean {
   if (!bounds || bounds.length < 4) return false;
   const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
@@ -312,7 +345,13 @@ function grayTextSitsOnColoredBackground(
   const frameTint = readFillTint(frame);
   const frameMatchesText = samples.some((sample) => sample.fill && fillsLookSame(frameFill, sample.fill));
   const leakedFill = textFrameFillLeaksFromContents(frame);
-  if (isColoredBackgroundFill(frameFill, frameTint) && !frameMatchesText && !leakedFill) {
+  const mixedChromatic = frameHasChromaticText(frame);
+  if (
+    isColoredBackgroundFill(frameFill, frameTint) &&
+    !frameMatchesText &&
+    !leakedFill &&
+    !mixedChromatic
+  ) {
     return true;
   }
 
@@ -323,8 +362,9 @@ function grayTextSitsOnColoredBackground(
     if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
+    if (isTextFrameItem(other.item) && !other.hasGraphic) continue;
     if (isLikelyIcon(other.bounds)) continue;
-    if (pageName && other.pageName && other.pageName !== pageName) continue;
+    if (!pageName || !other.pageName || other.pageName !== pageName) continue;
     if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 
@@ -344,12 +384,13 @@ export class CinzaOverprintValidator extends BaseValidator {
         if (!item?.isValid) return;
         const fill = readItemFill(item);
         const leaked = textFrameFillLeaksFromContents(item);
+        const shape = isFilledShape(item);
         snaps.push({
           item,
           pageName,
           bounds: readBounds(item),
           utility: isUtilityItem(item),
-          coloredFill: !leaked && isColoredBackgroundFill(fill, readFillTint(item)),
+          coloredFill: (shape || (!isTextFrameItem(item) && !leaked)) && isColoredBackgroundFill(fill, readFillTint(item)),
           hasGraphic: itemHasPlacedGraphic(item),
         });
       });
