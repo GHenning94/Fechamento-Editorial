@@ -1,6 +1,6 @@
 {
   "1.0.0": {
-    "title": "Ícone download correção",
-    "notes": "Correção no formato circular do ícone."
+    "title": "Correção atualização + tags",
+    "notes": "Corrigido erro em que as tags do memorial eram aplicadas fora da página + erro de atualização em que era buscado e aplicado versão antiga."
   }
 }
