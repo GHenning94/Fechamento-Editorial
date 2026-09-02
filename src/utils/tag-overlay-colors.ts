@@ -1,8 +1,7 @@
-import type { Color, Document, Page, PageItem, Swatch } from "indesign";
-import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "./collection-helpers";
-import { getImageColorSpaceLabel } from "./color-model";
+import type { Color, Document, Swatch } from "indesign";
+import { forEachCollectionItem } from "./collection-helpers";
 import { findCorProfColor, isCorProfColorName, normalizeColorName } from "./editorial-color";
-import { isPluginUtilityLayerName } from "./editorial-layer";
+import { getImageColorSpaceLabel } from "./color-model";
 
 export interface TagOverlayPair {
   para: number[];
@@ -11,11 +10,10 @@ export interface TagOverlayPair {
 
 type Rgb = [number, number, number];
 
-/** Pares claros originais — texto preto, leitura estável. */
 const FALLBACK_PARA = [0, 28, 52, 0];
 const FALLBACK_CHAR = [52, 18, 0, 0];
 
-/** Candidatas claras (luminância alta) para sempre usar texto preto. */
+/** Fundos claros, sem magenta/rosa (CorProf). Texto das tags é sempre preto. */
 const CANDIDATES: number[][] = [
   [0, 28, 52, 0],
   [52, 18, 0, 0],
@@ -24,17 +22,7 @@ const CANDIDATES: number[][] = [
   [50, 0, 30, 0],
   [70, 8, 0, 0],
   [0, 0, 85, 0],
-  [0, 62, 42, 0],
-  [32, 32, 0, 0],
-  [45, 0, 55, 0],
-  [15, 0, 70, 0],
-  [60, 0, 8, 0],
 ];
-
-const MAX_SWATCHES = 120;
-const MAX_PAGE_SAMPLES = 180;
-const MAX_PAGES = 12;
-const MAX_ITEMS_PER_PAGE = 50;
 
 function cmykToRgb(cmyk: number[]): Rgb {
   const c = Math.min(1, Math.max(0, (Number(cmyk[0]) || 0) / 100));
@@ -55,137 +43,36 @@ function rgbDist(a: Rgb, b: Rgb): number {
   return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-function skipSwatchName(name: string): boolean {
-  if (!name || name.startsWith("EAC_")) return true;
-  const key = normalizeColorName(name)
-    .replace(/^\[|\]$/g, "")
-    .replace(/^\$id\//, "");
-  if (
-    key === "none" ||
-    key === "nenhum" ||
-    key === "nenhuma" ||
-    key === "paper" ||
-    key === "papel" ||
-    key === "black" ||
-    key === "preto" ||
-    key === "registration" ||
-    key === "registro" ||
-    key === "cmyk" ||
-    key === "rgb"
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function readColorValues(fill: Color | Swatch | null | undefined): number[] {
-  try {
-    const values = (fill as Color | null)?.colorValue;
-    if (Array.isArray(values)) {
-      return values.map((item) => Number(item)).filter((value) => Number.isFinite(value));
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    const base = (fill as { baseColor?: Color } | null)?.baseColor;
-    const values = base?.colorValue;
-    if (Array.isArray(values)) {
-      return values.map((item) => Number(item)).filter((value) => Number.isFinite(value));
-    }
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-function readSpaceLabel(fill: Color | Swatch | null | undefined): string {
-  try {
-    const space = (fill as Color | null)?.space;
-    if (space != null) return getImageColorSpaceLabel(space);
-  } catch {
-    // ignore
-  }
-  return "";
+function isMagentaFamily(cmyk: number[]): boolean {
+  const c = Number(cmyk[0]) || 0;
+  const m = Number(cmyk[1]) || 0;
+  const y = Number(cmyk[2]) || 0;
+  const k = Number(cmyk[3]) || 0;
+  return m >= 40 && c <= 35 && y <= 48 && k < 25;
 }
 
 function fillToRgb(fill: Color | Swatch | null | undefined): Rgb | null {
   if (!fill) return null;
-  const values = readColorValues(fill);
-  if (!values.length) return null;
-  const space = readSpaceLabel(fill);
-
-  if (space === "RGB" && values.length >= 3) {
-    const scale = values[0] > 1.5 || values[1] > 1.5 || values[2] > 1.5 ? 255 : 1;
-    return [
-      Math.min(1, Math.max(0, values[0] / scale)),
-      Math.min(1, Math.max(0, values[1] / scale)),
-      Math.min(1, Math.max(0, values[2] / scale)),
-    ];
-  }
-
-  if (values.length >= 4) return cmykToRgb(values);
-  if (values.length >= 3 && space !== "LAB") {
-    const scale = values[0] > 1.5 || values[1] > 1.5 || values[2] > 1.5 ? 255 : 1;
-    return [
-      Math.min(1, Math.max(0, values[0] / scale)),
-      Math.min(1, Math.max(0, values[1] / scale)),
-      Math.min(1, Math.max(0, values[2] / scale)),
-    ];
+  try {
+    const values = (fill as Color).colorValue;
+    if (!Array.isArray(values) || !values.length) return null;
+    const nums = values.map((item) => Number(item)).filter((value) => Number.isFinite(value));
+    if (nums.length >= 4) return cmykToRgb(nums);
+    if (nums.length >= 3) {
+      const space = getImageColorSpaceLabel((fill as Color).space);
+      if (space === "RGB" || nums.length === 3) {
+        const scale = nums[0] > 1.5 || nums[1] > 1.5 || nums[2] > 1.5 ? 255 : 1;
+        return [
+          Math.min(1, Math.max(0, nums[0] / scale)),
+          Math.min(1, Math.max(0, nums[1] / scale)),
+          Math.min(1, Math.max(0, nums[2] / scale)),
+        ];
+      }
+    }
+  } catch {
+    // ignore
   }
   return null;
-}
-
-function pushRgb(bucket: Rgb[], rgb: Rgb | null): void {
-  if (!rgb) return;
-  if (rgbDist(rgb, [1, 1, 1]) < 0.08) return;
-  if (rgbDist(rgb, [0, 0, 0]) < 0.08) return;
-  bucket.push(rgb);
-}
-
-function collectSwatchColors(doc: Document, bucket: Rgb[]): void {
-  let count = 0;
-  forEachCollectionItem<Color>(doc.colors, (color) => {
-    if (count >= MAX_SWATCHES || !color?.isValid) return;
-    let name = "";
-    try {
-      name = color.name || "";
-    } catch {
-      name = "";
-    }
-    if (skipSwatchName(name) && !isCorProfColorName(name)) return;
-    pushRgb(bucket, fillToRgb(color));
-    count += 1;
-  });
-}
-
-function collectItemFill(item: PageItem, bucket: Rgb[]): void {
-  try {
-    const layer = item.itemLayer;
-    if (layer?.isValid && isPluginUtilityLayerName(layer.name || "")) return;
-  } catch {
-    // ignore
-  }
-  try {
-    pushRgb(bucket, fillToRgb(item.fillColor as Color | Swatch));
-  } catch {
-    // ignore
-  }
-  try {
-    pushRgb(bucket, fillToRgb(item.strokeColor as Color | Swatch));
-  } catch {
-    // ignore
-  }
-}
-
-function collectPageColors(page: Page | null, bucket: Rgb[]): void {
-  if (!page?.isValid || bucket.length >= MAX_PAGE_SAMPLES) return;
-  let seen = 0;
-  forEachCollectionItem<PageItem>(page.pageItems, (item) => {
-    if (!item?.isValid || seen >= MAX_ITEMS_PER_PAGE || bucket.length >= MAX_PAGE_SAMPLES) return;
-    collectItemFill(item, bucket);
-    seen += 1;
-  });
 }
 
 function minDistToOccupied(rgb: Rgb, occupied: Rgb[]): number {
@@ -202,6 +89,7 @@ function pickBest(candidates: number[][], occupied: Rgb[], avoid: Rgb | null): n
   let best = candidates[0] || FALLBACK_PARA;
   let bestScore = -1;
   for (const cmyk of candidates) {
+    if (isMagentaFamily(cmyk)) continue;
     const rgb = cmykToRgb(cmyk);
     let score = minDistToOccupied(rgb, occupied);
     if (avoid) score = Math.min(score, rgbDist(rgb, avoid) * 1.15);
@@ -214,20 +102,30 @@ function pickBest(candidates: number[][], occupied: Rgb[], avoid: Rgb | null): n
 }
 
 export function pickTagOverlayColors(doc: Document): TagOverlayPair {
-  const occupied: Rgb[] = [];
-  occupied.push(cmykToRgb([0, 100, 0, 0]));
-  occupied.push(cmykToRgb([15, 100, 0, 0]));
-
+  const occupied: Rgb[] = [cmykToRgb([0, 100, 0, 0]), cmykToRgb([15, 100, 0, 0])];
   const corProf = findCorProfColor(doc);
-  if (corProf?.color) pushRgb(occupied, fillToRgb(corProf.color));
-
-  collectSwatchColors(doc, occupied);
-
-  const pageCount = getCollectionLength(doc.pages);
-  const step = Math.max(1, Math.floor(pageCount / MAX_PAGES));
-  for (let i = 0; i < pageCount && occupied.length < MAX_PAGE_SAMPLES; i += step) {
-    collectPageColors(getCollectionItem<Page>(doc.pages, i), occupied);
+  if (corProf?.color) {
+    const rgb = fillToRgb(corProf.color);
+    if (rgb) occupied.push(rgb);
   }
+
+  let count = 0;
+  forEachCollectionItem<Color>(doc.colors, (color) => {
+    if (count >= 40 || !color?.isValid) return;
+    let name = "";
+    try {
+      name = color.name || "";
+    } catch {
+      name = "";
+    }
+    if (!name || name.startsWith("EAC_")) return;
+    const key = normalizeColorName(name).replace(/^\[|\]$/g, "");
+    if (key === "none" || key === "paper" || key === "papel" || key === "black" || key === "preto") return;
+    if (!isCorProfColorName(name) && (key === "nenhum" || key === "nenhuma")) return;
+    const rgb = fillToRgb(color);
+    if (rgb) occupied.push(rgb);
+    count += 1;
+  });
 
   const para = pickBest(CANDIDATES, occupied, null);
   const char = pickBest(
@@ -236,7 +134,7 @@ export function pickTagOverlayColors(doc: Document): TagOverlayPair {
     cmykToRgb(para)
   );
 
-  if (rgbDist(cmykToRgb(para), cmykToRgb(char)) < 0.28) {
+  if (isMagentaFamily(para) || isMagentaFamily(char) || rgbDist(cmykToRgb(para), cmykToRgb(char)) < 0.22) {
     return { para: FALLBACK_PARA.slice(), char: FALLBACK_CHAR.slice() };
   }
 

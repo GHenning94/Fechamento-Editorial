@@ -209,10 +209,17 @@ export function ensureProcessTagColor(doc: Document, name: string, cmyk: number[
     try {
       color.colorValue = cmyk;
     } catch {
-      // ignore
+      try {
+        color.remove();
+        color = null;
+      } catch {
+        // ainda em uso
+      }
     }
-    setColorOverprint(color, false);
-    return color;
+    if (color) {
+      setColorOverprint(color, false);
+      return color;
+    }
   }
 
   try {

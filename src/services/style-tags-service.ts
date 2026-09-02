@@ -428,6 +428,11 @@ function applySolidFill(item: PageItem, fill: Color | Swatch | null): void {
   } catch {
     // ignore
   }
+  try {
+    (item as PageItem & { overprintFill?: boolean }).overprintFill = false;
+  } catch {
+    // ignore
+  }
 }
 
 function ensureTagParagraphStyle(doc: Document): ParagraphStyle | null {
@@ -864,9 +869,9 @@ function applyRoundedCorners(item: PageItem): void {
 function lockTagText(
   frame: PageItem,
   paraStyle: ParagraphStyle | null,
-  doc: Document,
   textColor: Swatch | Color | null,
-  none: Swatch | Color | null
+  none: Swatch | Color | null,
+  noneChar: CharacterStyle | null
 ): void {
   const text = getCollectionItem<Text>(frame.texts, 0);
   if (!text) return;
@@ -878,28 +883,6 @@ function lockTagText(
       // ignore
     }
   }
-  try {
-    (text as Text & { clearOverrides?: () => void }).clearOverrides?.();
-  } catch {
-    // ignore
-  }
-
-  const noneChar =
-    (() => {
-      try {
-        const style = doc.characterStyles.itemByName("[None]");
-        if (style?.isValid) return style;
-      } catch {
-        // ignore
-      }
-      try {
-        const style = doc.characterStyles.itemByName("[Nenhum]");
-        if (style?.isValid) return style;
-      } catch {
-        // ignore
-      }
-      return null;
-    })();
   if (noneChar) {
     try {
       text.appliedCharacterStyle = noneChar;
@@ -907,7 +890,6 @@ function lockTagText(
       // ignore
     }
   }
-
   try {
     text.hyphenation = false;
   } catch {
@@ -952,47 +934,6 @@ function lockTagText(
     } catch {
       // ignore
     }
-  }
-  try {
-    (text as Text & { strokeOverprint?: boolean }).strokeOverprint = false;
-  } catch {
-    // ignore
-  }
-
-  try {
-    const chars = text.characters;
-    const length = Math.min(getCollectionLength(chars), 200);
-    for (let i = 0; i < length; i++) {
-      const character = chars?.item?.(i);
-      if (!character) continue;
-      if (noneChar) {
-        try {
-          (character as Text & { appliedCharacterStyle?: CharacterStyle }).appliedCharacterStyle = noneChar;
-        } catch {
-          // ignore
-        }
-      }
-      applyCalibriRegular(character);
-      if (textColor) {
-        try {
-          character.fillColor = textColor;
-        } catch {
-          // ignore
-        }
-      }
-      try {
-        (character as Text & { fillTint?: number }).fillTint = 100;
-      } catch {
-        // ignore
-      }
-      try {
-        character.fillOverprint = false;
-      } catch {
-        // ignore
-      }
-    }
-  } catch {
-    // ignore
   }
 }
 
@@ -1093,6 +1034,18 @@ function assignItemLayer(item: PageItem, layer: Layer | null): void {
   }
 }
 
+function findNoneCharacterStyle(doc: Document): CharacterStyle | null {
+  for (const name of ["[None]", "[Nenhum]"]) {
+    try {
+      const style = doc.characterStyles.itemByName(name);
+      if (style?.isValid) return style;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 function placeTag(
   doc: Document,
   page: Page,
@@ -1102,6 +1055,7 @@ function placeTag(
   textColor: Swatch | Color | null,
   none: Swatch | Color | null,
   paraStyle: ParagraphStyle | null,
+  noneChar: CharacterStyle | null,
   pageBounds: number[] | null,
   layer: Layer | null
 ): void {
@@ -1112,8 +1066,14 @@ function placeTag(
   frame.label = TAG_LABEL;
   frame.name = `EAC_TAG_${hit.kind === "character" ? "C" : "P"}_${hit.name}`.slice(0, 80);
   applyNoneObjectStyle(doc, frame);
+  if (paraStyle) {
+    try {
+      (frame as PageItem & { appliedParagraphStyle?: ParagraphStyle }).appliedParagraphStyle = paraStyle;
+    } catch {
+      // ignore
+    }
+  }
   assignItemLayer(frame, layer);
-  applySolidFill(frame, fill);
   applyNoStroke(frame, none);
   forceOpaqueNormal(frame);
   applyRoundedCorners(frame);
@@ -1125,7 +1085,10 @@ function placeTag(
     // ignore
   }
   frame.contents = hit.name;
-  lockTagText(frame, paraStyle, doc, textColor, none);
+  lockTagText(frame, paraStyle, textColor, none, noneChar);
+  applySolidFill(frame, fill);
+  applyNoStroke(frame, none);
+  forceOpaqueNormal(frame);
   fitTagFrame(frame, pageBounds);
   applySolidFill(frame, fill);
   applyNoStroke(frame, none);
@@ -1159,6 +1122,7 @@ export async function createMemorialStyleTags(
     ensureProcessTagColor(doc, COLOR_PARA, palette.para);
     ensureProcessTagColor(doc, COLOR_CHAR, palette.char);
     const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma", "[None]", "[Nenhum]", "$ID/None"]);
+    const noneChar = findNoneCharacterStyle(doc);
     const ink = findDocumentBlack(doc);
     const paraFill = colorByName(doc, COLOR_PARA);
     const charFill = colorByName(doc, COLOR_CHAR);
@@ -1194,6 +1158,7 @@ export async function createMemorialStyleTags(
         ink,
         none,
         paraStyle,
+        noneChar,
         pageBounds,
         layer
       );

@@ -1,34 +1,28 @@
-import type { Cell, Document, PageItem, Story, Text, TextStyleRange } from "indesign";
+import type { Cell, Document, Page, PageItem, Story, Text, TextStyleRange } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
-import { forEachCollectionItem, getCollectionLength } from "../utils/collection-helpers";
+import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
   geometricBoundsOverlap,
   isColoredBackgroundFill,
   isGrayFill,
   isTextFrameItem,
-  itemHasPlacedGraphic,
-  readEffectiveFillColor,
   readFillTint,
   readItemFill,
   readLocalFillColor,
   textFillHasOverprint,
   textFrameFillLeaksFromContents,
 } from "../utils/fill-color";
-import { collectGraphics, walkDirectPageItems } from "../utils/indesign-helpers";
+import { forEachPage } from "../utils/indesign-helpers";
 
 const FIX_DETAILS =
   "Aplique overprint no preenchimento do texto cinza. Preferência: preto 100%.";
 
-interface ItemSnap {
-  item: PageItem;
-  pageName: string;
+interface ColoredSnap {
   bounds: number[];
-  utility: boolean;
-  coloredFill: boolean;
-  hasGraphic: boolean;
+  pageName: string;
 }
 
 function readBounds(item: PageItem): number[] {
@@ -36,14 +30,6 @@ function readBounds(item: PageItem): number[] {
     const bounds = item.geometricBounds;
     if (Array.isArray(bounds) && bounds.length >= 4) {
       return bounds.map((value) => Number(value));
-    }
-  } catch {
-    // tenta visibleBounds
-  }
-  try {
-    const visible = (item as PageItem & { visibleBounds?: number[] }).visibleBounds;
-    if (Array.isArray(visible) && visible.length >= 4) {
-      return visible.map((value) => Number(value));
     }
   } catch {
     // ignore
@@ -61,17 +47,6 @@ function readNumber(getter: () => unknown): number | null {
   return null;
 }
 
-function unionBounds(a: number[], b: number[]): number[] {
-  if (!a.length) return b.slice();
-  if (!b.length) return a.slice();
-  return [
-    Math.min(Number(a[0]), Number(b[0])),
-    Math.min(Number(a[1]), Number(b[1])),
-    Math.max(Number(a[2]), Number(b[2])),
-    Math.max(Number(a[3]), Number(b[3])),
-  ];
-}
-
 function probeGlyph(target: Text | null | undefined): number[] {
   if (!target) return [];
   const left = readNumber(() => target.horizontalOffset);
@@ -86,44 +61,6 @@ function probeGlyph(target: Text | null | undefined): number[] {
   return [top, Math.min(left, right), bottom, Math.max(left, right)];
 }
 
-function characterLooksEmpty(character: Text | null | undefined): boolean {
-  if (!character) return true;
-  try {
-    const contents = (character as { contents?: string }).contents;
-    if (typeof contents === "string") return contents.trim() === "";
-  } catch {
-    // UXP às vezes não expõe contents
-  }
-  return false;
-}
-
-function readSpanInkBounds(span: Text | TextStyleRange): number[] {
-  const text = span as Text;
-  let union: number[] = [];
-  try {
-    const chars = text.characters;
-    const length = getCollectionLength(chars);
-    if (length > 0) {
-      const indexes =
-        length <= 24
-          ? Array.from({ length }, (_, index) => index)
-          : [0, 1, Math.floor(length / 4), Math.floor(length / 2), length - 2, length - 1];
-      const seen = new Set<number>();
-      for (const index of indexes) {
-        if (index < 0 || index >= length || seen.has(index)) continue;
-        seen.add(index);
-        const character = chars?.item?.(index) as Text | null;
-        if (characterLooksEmpty(character)) continue;
-        union = unionBounds(union, probeGlyph(character));
-      }
-      if (union.length >= 4) return union;
-    }
-  } catch {
-    // fallback no próprio trecho
-  }
-  return probeGlyph(text);
-}
-
 function overlapArea(a: number[], b: number[]): number {
   if (!a || a.length < 4 || !b || b.length < 4) return 0;
   const top = Math.max(Number(a[0]), Number(b[0]));
@@ -132,11 +69,6 @@ function overlapArea(a: number[], b: number[]): number {
   const right = Math.min(Number(a[3]), Number(b[3]));
   if (bottom <= top || right <= left) return 0;
   return (bottom - top) * (right - left);
-}
-
-function boundsContainPoint(bounds: number[], y: number, x: number): boolean {
-  if (!bounds || bounds.length < 4) return false;
-  return y >= Number(bounds[0]) && y <= Number(bounds[2]) && x >= Number(bounds[1]) && x <= Number(bounds[3]);
 }
 
 function inkSitsOnColor(ink: number[], background: number[]): boolean {
@@ -148,115 +80,78 @@ function inkSitsOnColor(ink: number[], background: number[]): boolean {
   if (area / inkArea < 0.45) return false;
   const cy = (Number(ink[0]) + Number(ink[2])) / 2;
   const cx = (Number(ink[1]) + Number(ink[3])) / 2;
-  return boundsContainPoint(background, cy, cx);
+  return (
+    cy >= Number(background[0]) &&
+    cy <= Number(background[2]) &&
+    cx >= Number(background[1]) &&
+    cx <= Number(background[3])
+  );
 }
 
-function forEachCollectionRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
-  const length = getCollectionLength(collection);
-  if (length > 0) {
-    forEachCollectionItem<TextStyleRange | Text>(collection, (run) => {
-      if (run) onRun(run);
-    });
-    return;
-  }
-
+function typeNameOf(item: PageItem): string {
   try {
-    const coll = collection as { item?: (index: number) => TextStyleRange | Text };
-    if (typeof coll.item !== "function") return;
-    for (let i = 0; i < 20000; i++) {
-      let run: TextStyleRange | Text | null = null;
-      try {
-        run = coll.item(i);
-      } catch {
-        break;
-      }
-      if (!run) break;
-      try {
-        if ((run as { isValid?: boolean }).isValid === false) break;
-      } catch {
-        break;
-      }
-      onRun(run);
-    }
+    return item.constructor?.name || "";
   } catch {
-    // ignore
+    return "";
   }
 }
 
-function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
+function isFilledShape(item: PageItem): boolean {
+  return /rectangle|oval|polygon/i.test(typeNameOf(item));
+}
+
+function isPlacedGraphic(item: PageItem): boolean {
+  return /image|eps|pdf|pict|wmf|importedpage/i.test(typeNameOf(item));
+}
+
+function fillNameKey(fill: { name?: string } | string | null | undefined): string {
   try {
-    const contents = (range as { contents?: string }).contents;
-    if (typeof contents === "string") return contents.trim() === "";
+    const name = typeof fill === "string" ? fill : fill?.name || "";
+    return name
+      .trim()
+      .replace(/^\$id\//i, "")
+      .replace(/^\[|\]$/g, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase();
   } catch {
-    // UXP muitas vezes não expõe contents
+    return "";
   }
-  return false;
-}
-
-function snippetOf(range: TextStyleRange | Text): string {
-  try {
-    const contents = String((range as { contents?: string }).contents || "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (contents) return contents.slice(0, 52);
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
-function fillOf(target: TextStyleRange | Text): ReturnType<typeof readLocalFillColor> {
-  return readLocalFillColor(target) || readEffectiveFillColor(target);
 }
 
 function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
-  if (rangeLooksEmpty(target)) return false;
-  const fill = fillOf(target);
+  const fill = readLocalFillColor(target);
   if (!fill) return false;
-  const tint = readFillTint(target);
+  const tintRaw = readFillTint(target);
+  const tint = tintRaw < 0 ? 100 : tintRaw;
+  const key = fillNameKey(fill);
+  if (!key || key === "none" || key === "nenhum" || key === "nenhuma" || key === "paper" || key === "papel") {
+    return false;
+  }
+  if ((key === "black" || key === "preto") && tint >= 99.5) return false;
   if (!isGrayFill(fill, tint)) return false;
   return !textFillHasOverprint(target);
 }
 
-function collectParentFrames(range: TextStyleRange | Text): PageItem[] {
-  const frames: PageItem[] = [];
-  const seen = new Set<PageItem>();
-  const push = (item: PageItem | null | undefined): void => {
-    if (!item) return;
-    try {
-      if (item.isValid === false) return;
-    } catch {
-      return;
-    }
-    if (seen.has(item)) return;
-    seen.add(item);
-    frames.push(item);
-  };
-
+function firstParentFrame(range: TextStyleRange | Text): PageItem | null {
   try {
-    forEachCollectionRun((range as Text).parentTextFrames, (item) => push(item as PageItem));
+    const frames = (range as Text).parentTextFrames;
+    const item = getCollectionItem<PageItem>(frames, 0);
+    if (item?.isValid) return item;
   } catch {
     // ignore
   }
-
   try {
-    const containers = (range as Text & { parentTextFrames?: unknown }).parentTextFrames;
-    if (Array.isArray(containers)) {
-      for (const item of containers) push(item as PageItem);
-    }
+    const frames = (range as Text & { parentTextFrames?: unknown }).parentTextFrames;
+    if (Array.isArray(frames) && frames[0]) return frames[0] as PageItem;
   } catch {
     // ignore
   }
-
-  return frames;
+  return null;
 }
 
-function boundsClose(a: number[], b: number[]): boolean {
-  if (!a || a.length < 4 || !b || b.length < 4) return false;
-  return a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 0.5);
-}
-
-function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
+function pageNameOf(frame: PageItem | null): string {
+  if (!frame) return "";
   try {
     const parentPage = frame.parentPage;
     if (parentPage && typeof parentPage === "object" && parentPage.name) {
@@ -265,40 +160,17 @@ function resolveFramePageName(frame: PageItem, snaps: ItemSnap[]): string {
   } catch {
     // ignore
   }
-
-  const bounds = readBounds(frame);
-  const byIdentity = snaps.find((item) => item.item === frame);
-  if (byIdentity?.pageName) return byIdentity.pageName;
-
-  const byBounds = snaps.find((item) => item.pageName && boundsClose(item.bounds, bounds));
-  if (byBounds?.pageName) return byBounds.pageName;
-
-  if (bounds.length >= 4) {
-    const overlapping = snaps.find(
-      (item) => item.pageName && (item.coloredFill || item.hasGraphic) && geometricBoundsOverlap(bounds, item.bounds)
-    );
-    if (overlapping?.pageName) return overlapping.pageName;
-  }
-
   return "";
-}
-
-function isFilledShape(item: PageItem): boolean {
-  try {
-    const typeName = item.constructor?.name || "";
-    return /rectangle|oval|polygon|graphicline/i.test(typeName);
-  } catch {
-    return false;
-  }
 }
 
 function findParentCell(range: TextStyleRange | Text): Cell | null {
   let current: unknown = range;
-  for (let depth = 0; depth < 12; depth++) {
+  for (let depth = 0; depth < 8; depth++) {
     if (!current || typeof current !== "object") return null;
     try {
-      const typeName = (current as { constructor?: { name?: string } }).constructor?.name || "";
-      if (/^cell$/i.test(typeName)) return current as Cell;
+      if (/^cell$/i.test((current as { constructor?: { name?: string } }).constructor?.name || "")) {
+        return current as Cell;
+      }
     } catch {
       return null;
     }
@@ -311,93 +183,100 @@ function findParentCell(range: TextStyleRange | Text): Cell | null {
   return null;
 }
 
-function cellIsChromaticBackground(cell: Cell | null): boolean {
-  if (!cell) return false;
-  try {
-    return isColoredBackgroundFill(cell.fillColor, readFillTint(cell));
-  } catch {
-    return false;
-  }
-}
-
-function frameIsChromaticBox(frame: PageItem): boolean {
-  if (!isTextFrameItem(frame)) return false;
-  if (isPluginGeneratedItem(frame)) return false;
+function frameIsChromaticBox(frame: PageItem | null): boolean {
+  if (!frame || !isTextFrameItem(frame) || isPluginGeneratedItem(frame)) return false;
   if (textFrameFillLeaksFromContents(frame)) return false;
-  const fill = readItemFill(frame);
-  return isColoredBackgroundFill(fill, readFillTint(frame));
+  return isColoredBackgroundFill(readItemFill(frame), readFillTint(frame));
 }
 
-function forEachLineInk(
-  range: TextStyleRange | Text,
-  onLine: (ink: number[], sample: Text) => void
-): void {
+function snippetOf(range: TextStyleRange | Text): string {
   try {
-    const lines = (range as Text & { lines?: unknown }).lines;
-    const count = getCollectionLength(lines);
-    if (count > 0) {
-      let used = false;
-      forEachCollectionItem<Text>(lines, (line) => {
-        if (!line || rangeLooksEmpty(line)) return;
-        const ink = readSpanInkBounds(line);
-        if (ink.length < 4) return;
-        used = true;
-        onLine(ink, line);
-      });
-      if (used) return;
+    const chars = (range as Text).characters;
+    const length = Math.min(getCollectionLength(chars), 36);
+    let out = "";
+    for (let i = 0; i < length; i++) {
+      const character = chars?.item?.(i);
+      if (!character) continue;
+      try {
+        const piece = (character as { contents?: string }).contents;
+        if (typeof piece === "string") out += piece;
+      } catch {
+        // ignore
+      }
+      if (out.length >= 52) break;
     }
+    return out.replace(/\s+/g, " ").trim().slice(0, 52);
   } catch {
-    // agrupa por baseline
+    return "";
   }
+}
 
+function probeRangeEnds(range: TextStyleRange | Text): number[][] {
+  const probes: number[][] = [];
   try {
     const chars = (range as Text).characters;
     const length = getCollectionLength(chars);
-    let group: Text[] = [];
-    let baselineKey: number | null = null;
-
-    const flush = (): void => {
-      if (!group.length) return;
-      let ink: number[] = [];
-      for (const glyph of group) ink = unionBounds(ink, probeGlyph(glyph));
-      if (ink.length >= 4) onLine(ink, group[0]);
-      group = [];
-    };
-
-    for (let i = 0; i < length; i++) {
-      const character = chars?.item?.(i) as Text | null;
-      if (!character || characterLooksEmpty(character)) continue;
-      const baseline = readNumber(() => character.baseline);
-      if (baseline == null) continue;
-      const key = Math.round(baseline);
-      if (baselineKey != null && Math.abs(key - baselineKey) > 2) flush();
-      baselineKey = key;
-      group.push(character);
-    }
-    flush();
+    if (length <= 0) return probes;
+    const first = getCollectionItem<Text>(chars, 0);
+    const last = getCollectionItem<Text>(chars, length - 1);
+    const a = probeGlyph(first);
+    const b = length > 1 ? probeGlyph(last) : [];
+    if (a.length >= 4) probes.push(a);
+    if (b.length >= 4) probes.push(b);
   } catch {
-    // sem geometria de glifo — não denuncia o bloco inteiro
+    // ignore
+  }
+  return probes;
+}
+
+function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string): void {
+  if (!item?.isValid || isPluginGeneratedItem(item) || isTextFrameItem(item)) return;
+  const bounds = readBounds(item);
+  if (bounds.length < 4) return;
+  if (isFilledShape(item) && isColoredBackgroundFill(readItemFill(item), readFillTint(item))) {
+    bucket.push({ bounds, pageName });
+    return;
+  }
+  if (isPlacedGraphic(item)) {
+    bucket.push({ bounds, pageName });
   }
 }
 
-function grayInkSitsOnColoredElement(
-  ink: number[],
-  frames: PageItem[],
-  snaps: ItemSnap[],
-  pageName: string
-): boolean {
-  if (ink.length < 4) return false;
+function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
+  const byPage = new Map<string, ColoredSnap[]>();
 
-  for (const other of snaps) {
-    if (other.utility) continue;
-    if (!other.coloredFill && !other.hasGraphic) continue;
-    if (isTextFrameItem(other.item) && !other.hasGraphic) continue;
-    if (frames.some((frame) => other.item === frame)) continue;
-    if (pageName && other.pageName && other.pageName !== pageName) continue;
-    if (inkSitsOnColor(ink, other.bounds)) return true;
-  }
+  const add = (item: PageItem, pageName: string): void => {
+    if (!pageName) return;
+    let list = byPage.get(pageName);
+    if (!list) {
+      list = [];
+      byPage.set(pageName, list);
+    }
+    pushColored(list, item, pageName);
+    try {
+      const children = item.pageItems;
+      const n = Math.min(getCollectionLength(children), 40);
+      for (let i = 0; i < n; i++) {
+        const child = getCollectionItem<PageItem>(children, i);
+        if (child) pushColored(list, child, pageName);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
-  return false;
+  forEachPage(doc, (page: Page, pageName: string) => {
+    forEachCollectionItem<PageItem>(page.pageItems, (item) => add(item, pageName));
+    try {
+      forEachCollectionItem<PageItem>((page as Page & { masterPageItems?: unknown }).masterPageItems, (item) =>
+        add(item, pageName)
+      );
+    } catch {
+      // ignore
+    }
+  });
+
+  return byPage;
 }
 
 export class CinzaOverprintValidator extends BaseValidator {
@@ -407,57 +286,8 @@ export class CinzaOverprintValidator extends BaseValidator {
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
-      const snaps: ItemSnap[] = [];
-
-      walkDirectPageItems(doc, (item, _page, pageName) => {
-        if (!item?.isValid) return;
-        const fill = readItemFill(item);
-        const leaked = textFrameFillLeaksFromContents(item);
-        const shape = isFilledShape(item);
-        snaps.push({
-          item,
-          pageName,
-          bounds: readBounds(item),
-          utility: isPluginGeneratedItem(item),
-          coloredFill: (shape || (!isTextFrameItem(item) && !leaked)) && isColoredBackgroundFill(fill, readFillTint(item)),
-          hasGraphic: itemHasPlacedGraphic(item),
-        });
-      });
-
-      try {
-        for (const graphic of collectGraphics(doc)) {
-          const pageItem = graphic.pageItem;
-          if (!pageItem?.isValid) continue;
-          const bounds = readBounds(pageItem);
-          if (bounds.length < 4) continue;
-          snaps.push({
-            item: pageItem,
-            pageName: graphic.pageName,
-            bounds,
-            utility: isPluginGeneratedItem(pageItem),
-            coloredFill: false,
-            hasGraphic: true,
-          });
-        }
-      } catch {
-        // collectGraphics pode falhar em documentos corrompidos
-      }
-
+      const coloredByPage = collectColoredByPage(doc);
       const seen = new Set<string>();
-
-      const reportSpan = (span: Text, pageName: string): void => {
-        const preview = snippetOf(span);
-        const ink = readSpanInkBounds(span);
-        const key = `${pageName}::${preview}::${ink.map((value) => value.toFixed(1)).join(",")}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        issues.push({
-          message: "Cinza sobre fundo colorido sem overprint",
-          page: pageName,
-          object: preview ? `Texto (“${preview}”)` : "Texto cinza",
-          details: FIX_DETAILS,
-        });
-      };
 
       forEachCollectionItem<Story>(doc.stories, (story) => {
         if (!story?.isValid) return;
@@ -467,32 +297,74 @@ export class CinzaOverprintValidator extends BaseValidator {
           // ignore
         }
 
-        forEachCollectionRun(story.textStyleRanges, (run) => {
-          if (!targetIsGrayWithoutOverprint(run)) return;
-          const frames = collectParentFrames(run).filter((frame) => !isPluginGeneratedItem(frame));
-          if (!frames.length && !findParentCell(run)) return;
+        const ranges = story.textStyleRanges;
+        const rangeCount = getCollectionLength(ranges);
+        for (let i = 0; i < rangeCount; i++) {
+          const run = getCollectionItem<TextStyleRange | Text>(ranges, i);
+          if (!run || !targetIsGrayWithoutOverprint(run)) continue;
 
-          let pageName = "";
-          for (const frame of frames) {
-            pageName = resolveFramePageName(frame, snaps);
-            if (pageName) break;
-          }
-
-          if (frames.some((frame) => frameIsChromaticBox(frame)) || cellIsChromaticBackground(findParentCell(run))) {
-            reportSpan(run as Text, pageName);
-            return;
-          }
-
-          forEachLineInk(run, (ink, span) => {
-            if (!targetIsGrayWithoutOverprint(span)) return;
-            const spanFrames = collectParentFrames(span);
-            const parents = spanFrames.length ? spanFrames : frames;
-            const spanPage = parents.reduce((found, frame) => found || resolveFramePageName(frame, snaps), pageName);
-            if (grayInkSitsOnColoredElement(ink, parents, snaps, spanPage)) {
-              reportSpan(span, spanPage);
+          const cell = findParentCell(run);
+          if (cell) {
+            try {
+              if (isColoredBackgroundFill(cell.fillColor, readFillTint(cell))) {
+                const preview = snippetOf(run);
+                const key = `cell::${pageNameOf(firstParentFrame(run))}::${preview}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  issues.push({
+                    message: "Cinza sobre fundo colorido sem overprint",
+                    page: pageNameOf(firstParentFrame(run)),
+                    object: preview ? `Texto (“${preview}”)` : "Texto cinza",
+                    details: FIX_DETAILS,
+                  });
+                }
+              }
+            } catch {
+              // ignore
             }
+            continue;
+          }
+
+          const frame = firstParentFrame(run);
+          if (!frame || isPluginGeneratedItem(frame)) continue;
+          const pageName = pageNameOf(frame);
+
+          if (frameIsChromaticBox(frame)) {
+            const preview = snippetOf(run);
+            const key = `box::${pageName}::${preview}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            issues.push({
+              message: "Cinza sobre fundo colorido sem overprint",
+              page: pageName,
+              object: preview ? `Texto (“${preview}”)` : "Texto cinza",
+              details: FIX_DETAILS,
+            });
+            continue;
+          }
+
+          const snaps = coloredByPage.get(pageName);
+          if (!snaps?.length) continue;
+          const frameBounds = readBounds(frame);
+          if (frameBounds.length < 4) continue;
+          const nearby = snaps.filter((snap) => geometricBoundsOverlap(frameBounds, snap.bounds));
+          if (!nearby.length) continue;
+
+          const probes = probeRangeEnds(run);
+          const hits = probes.some((ink) => nearby.some((snap) => inkSitsOnColor(ink, snap.bounds)));
+          if (!hits) continue;
+
+          const preview = snippetOf(run);
+          const key = `${pageName}::${preview}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          issues.push({
+            message: "Cinza sobre fundo colorido sem overprint",
+            page: pageName,
+            object: preview ? `Texto (“${preview}”)` : "Texto cinza",
+            details: FIX_DETAILS,
           });
-        });
+        }
       });
 
       return createResult(this.id, this.name, issues, "error");
