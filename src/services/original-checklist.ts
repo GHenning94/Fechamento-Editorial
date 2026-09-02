@@ -75,7 +75,7 @@ const ORIGINAL_ROWS: OriginalRowSpec[] = [
   {
     id: "swatches",
     label:
-      "Swatches - Aplicar nomenclatura padrão (CorX, CorProf, FACA, VERNIZ, PANTONE), verificar se todos estão em CMYK (converter e/ou apagar cores RGB e outras não utilizadas. Cor spot apenas CorProf e FACA)",
+      "Swatches - Aplicar nomenclatura padrão (Cor_texto ou CorX, CorProf, FACA, VERNIZ, PANTONE), verificar se todos estão em CMYK (converter e/ou apagar cores RGB e outras não utilizadas. Cor spot apenas CorProf e FACA)",
     validatorIds: [V.CORES],
   },
   {

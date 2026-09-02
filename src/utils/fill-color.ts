@@ -135,6 +135,33 @@ export function readEffectiveFillTint(target: {
   return 100;
 }
 
+export function readLocalFillColor(target: {
+  fillColor?: Swatch | Color | string;
+  properties?: { fillColor?: Swatch | Color | string };
+} | null | undefined): Swatch | Color | string | null {
+  if (!target) return null;
+
+  const tryFill = (source: unknown): Swatch | Color | string | null => {
+    if (source == null) return null;
+    if (typeof source === "string") return source.trim() ? source : null;
+    return source as Swatch | Color;
+  };
+
+  try {
+    const fill = tryFill(target.fillColor);
+    if (fill) return fill;
+  } catch {
+    // ignore
+  }
+  try {
+    const fill = tryFill(target.properties?.fillColor);
+    if (fill) return fill;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function readEffectiveFillColor(target: {
   fillColor?: Swatch | Color | string;
   properties?: { fillColor?: Swatch | Color | string };
@@ -319,6 +346,7 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
     }
   }
   if (t <= 0.5) return false;
+  if (isChromaticFill(fill, t)) return false;
 
   if (isGrayNameKey(key)) return true;
 
@@ -382,6 +410,51 @@ function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
   const cmy = (c + m + y) / 3;
   if (cmy <= 4) return k > 0.5 && k < 99.5;
   return k < 99.5;
+}
+
+function cmykChroma(c: number, m: number, y: number): number {
+  return Math.max(c, m, y) - Math.min(c, m, y);
+}
+
+function resolveCmykChannels(
+  fill: Swatch | Color | string | null | undefined,
+  tint: number
+): number[] | null {
+  let values = typeof fill === "string" ? [] : readColorValues(fill);
+  let space = typeof fill === "string" ? "" : readSpaceLabel(fill);
+  const parsed = parseUnnamedColor(typeof fill === "string" ? fill : swatchNameOf(fill));
+  if (parsed) {
+    if (!values.length) values = parsed.values;
+    if (!space) space = parsed.space;
+  }
+  if (!values.length) return null;
+  const t = tint < 0 ? 100 : tint;
+  const scaled = toUnitScale(values);
+  const channels = scaledChannels(scaled.values, t);
+  return channels.length ? channels : null;
+}
+
+/** Cor com croma (não é cinza de impressão). C45 M45 Y0 K34 entra aqui. */
+export function isChromaticFill(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
+  if (fill == null) return false;
+  const key = fillNameKey(fill);
+  if (isNoneKey(key) || isPaperKey(key)) return false;
+
+  const channels = resolveCmykChannels(fill, tint);
+  if (!channels) return false;
+  const space = typeof fill === "string" ? "" : readSpaceLabel(fill);
+
+  if (channels.length >= 4 && (space === "CMYK" || space === "Desconhecido" || !space)) {
+    return cmykChroma(channels[0], channels[1], channels[2]) > 4;
+  }
+  if (space === "RGB" || (channels.length === 3 && space !== "Gray")) {
+    const values = typeof fill === "string" ? [] : readColorValues(fill);
+    if (values.length >= 3) {
+      const rgbScale = toRgb255(values, tint < 0 ? 100 : tint);
+      return Math.max(rgbScale[0], rgbScale[1], rgbScale[2]) - Math.min(rgbScale[0], rgbScale[1], rgbScale[2]) > 12;
+    }
+  }
+  return false;
 }
 
 export function fillsLookSame(

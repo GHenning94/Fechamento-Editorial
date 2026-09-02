@@ -370,6 +370,7 @@ declare module "indesign" {
     parentColorGroup?: ColorGroup | null;
     colorValue?: number[];
     isValid: boolean;
+    remove(): void;
   }
 
   export interface ColorGroups {

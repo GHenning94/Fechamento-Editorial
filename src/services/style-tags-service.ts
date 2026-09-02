@@ -2,6 +2,7 @@ import type { CharacterStyle, Color, Document, Layer, Page, PageItem, ParagraphS
 import { ACCEPTED_LANGUAGES, LAYER_MEMORIAL_DESCRITIVO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { findEditorialLayer, isEditorialLayerName, isRendimentoLayerName } from "../utils/editorial-layer";
+import { ensurePluginInk, findPluginInk, findSwatchByName } from "../utils/editorial-color";
 import { getActiveDocument, getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { yieldToHost } from "../utils/yield-to-host";
 import { throwIfAborted } from "../core/checklist-runner";
@@ -278,24 +279,6 @@ async function withPointUnitsAsync<T>(doc: Document, fn: () => Promise<T>): Prom
   }
 }
 
-function swatchByName(doc: Document, names: string[]): Swatch | Color | null {
-  for (const name of names) {
-    try {
-      const swatch = doc.swatches?.itemByName(name);
-      if (swatch?.isValid) return swatch;
-    } catch {
-      // ignore
-    }
-    try {
-      const color = doc.colors.itemByName(name);
-      if (color?.isValid) return color;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
 function ensureProcessColor(doc: Document, name: string, cmyk: number[]): void {
   const { ColorModel, ColorSpace } = getInDesignModule() as {
     ColorModel?: { PROCESS?: number };
@@ -361,8 +344,8 @@ function applyCalibriRegular(target: { appliedFont?: unknown; fontStyle?: string
 }
 
 function styleTagParagraph(style: ParagraphStyle, doc: Document): void {
-  const ink = colorByName(doc, "EAC_TAG_INK") || swatchByName(doc, ["Black", "Preto"]);
-  const none = swatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
+  const ink = findPluginInk(doc);
+  const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
   applyCalibriRegular(style);
   try {
     (style as ParagraphStyle & { pointSize?: number }).pointSize = 12;
@@ -730,7 +713,7 @@ function lockTagText(frame: PageItem, paraStyle: ParagraphStyle | null, doc: Doc
   } catch {
     // ignore
   }
-  const ink = colorByName(doc, "EAC_TAG_INK") || swatchByName(doc, ["Black", "Preto"]);
+  const ink = findPluginInk(doc);
   if (ink) {
     try {
       text.fillColor = ink;
@@ -837,12 +820,12 @@ export async function createMemorialStyleTags(
     throwIfAborted(signal);
     const layerName = ensureMemorialLayer(doc);
     deletePreviousTags(doc);
-    ensureProcessColor(doc, "EAC_TAG_INK", [0, 0, 0, 100]);
     ensureProcessColor(doc, COLOR_PARA, PARA_CMYK);
     ensureProcessColor(doc, COLOR_CHAR, CHAR_CMYK);
     const paraStyle = ensureTagParagraphStyle(doc);
     if (paraStyle) styleTagParagraph(paraStyle, doc);
-    const none = swatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
+    ensurePluginInk(doc);
+    const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
     const paraFill = colorByName(doc, COLOR_PARA);
     const charFill = colorByName(doc, COLOR_CHAR);
 

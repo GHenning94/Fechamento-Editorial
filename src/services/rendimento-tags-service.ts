@@ -1,6 +1,7 @@
 import type { Color, Document, Layer, Page, PageItem, ParagraphStyle, Swatch, Text } from "indesign";
 import { LAYER_RENDIMENTO } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
+import { ensurePluginInk, findDocumentBlack, findSwatchByName } from "../utils/editorial-color";
 import {
   findRendimentoLayer,
   isEditorialLayerName,
@@ -12,7 +13,6 @@ import { throwIfAborted } from "../core/checklist-runner";
 
 const TAG_LABEL = "eac-rendimento-tag";
 const STYLE_NAME = "EAC_RendimentoLabel";
-const COLOR_FILL = "EAC_RENDIMENTO_FILL";
 const TAG_HEIGHT = 28;
 const TAG_INSET_X = 10;
 const TAG_POINT_SIZE = 15;
@@ -488,60 +488,6 @@ async function withPointUnitsAsync<T>(doc: Document, fn: () => Promise<T>): Prom
   }
 }
 
-function swatchByName(doc: Document, names: string[]): Swatch | Color | null {
-  for (const name of names) {
-    try {
-      const swatch = doc.swatches?.itemByName(name);
-      if (swatch?.isValid) return swatch;
-    } catch {
-      // ignore
-    }
-    try {
-      const color = doc.colors.itemByName(name);
-      if (color?.isValid) return color;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
-function colorByName(doc: Document, name: string): Color | null {
-  try {
-    const color = doc.colors.itemByName(name);
-    return color?.isValid ? color : null;
-  } catch {
-    return null;
-  }
-}
-
-function ensureProcessColor(doc: Document, name: string, cmyk: number[]): void {
-  const { ColorModel, ColorSpace } = getInDesignModule() as {
-    ColorModel?: { PROCESS?: number };
-    ColorSpace?: { CMYK?: number };
-  };
-  if (ColorModel?.PROCESS == null || ColorSpace?.CMYK == null) return;
-
-  let exists = false;
-  try {
-    exists = Boolean(doc.colors.itemByName(name)?.isValid);
-  } catch {
-    exists = false;
-  }
-  if (exists) return;
-
-  try {
-    doc.colors.add({
-      name,
-      model: ColorModel.PROCESS,
-      space: ColorSpace.CMYK,
-      colorValue: cmyk,
-    });
-  } catch {
-    // ignore
-  }
-}
-
 function unlockLayer(layer: Layer): void {
   try {
     layer.visible = true;
@@ -885,12 +831,12 @@ export async function createRendimentoTags(
     const layerName = ensureRendimentoLayer(doc);
     const layer = layerByExactName(doc, layerName) || findRendimentoLayer(doc);
     deletePreviousTags(doc);
-    ensureProcessColor(doc, COLOR_FILL, [0, 0, 0, 100]);
-    const fill = colorByName(doc, COLOR_FILL) || swatchByName(doc, ["Black", "Preto"]);
-    const none = swatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
-    const paper = swatchByName(doc, ["Paper", "Papel"]);
+    const fill = findDocumentBlack(doc);
+    const none = findSwatchByName(doc, ["None", "Nenhum", "Nenhuma"]);
+    const paper = findSwatchByName(doc, ["Paper", "Papel"]);
     const paraStyle = ensureTagParagraphStyle(doc);
     if (paraStyle) styleTagParagraph(paraStyle, paper);
+    ensurePluginInk(doc);
 
     onProgress?.(40, "Contando caracteres…");
     await yieldToHost(20);

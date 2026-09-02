@@ -23,6 +23,10 @@ const BUILT_IN_SWATCH_NAMES = new Set([
   "amarelo",
 ]);
 
+/** Padrão: começa com "Cor_" ou "Cor" (ex.: Cor_texto, CorAzul). */
+const COR_PREFIX = "Cor";
+const COR_NOMENCLATURE_EXAMPLES = "Cor_texto, CorAzul, Cor1";
+
 function normalizeBuiltInSwatchName(name: string): string {
   return (name || "")
     .trim()
@@ -55,27 +59,38 @@ function isWordImportColor(name: string): boolean {
   return normalizeBuiltInSwatchName(name).startsWith("word");
 }
 
-const COR_PREFIX = "Cor";
-const COR_NOMENCLATURE_EXAMPLES = "CorAzul, Cor1, CorCMYK";
-
-/** Cores das tags do memorial descritivo (EAC_TAG_PARAGRAFO, EAC_TAG_CARACTERE, EAC_TAG_INK). */
-function isMemorialTagColor(name: string): boolean {
+function isPluginTagColor(name: string): boolean {
   return (name || "").toUpperCase().startsWith("EAC_");
+}
+
+function isSpotOrSpecialName(name: string): boolean {
+  if (isSpotExceptionColor(name)) return true;
+  const key = normalizeBuiltInSwatchName(name);
+  if (key === "faca" || key === "verniz") return true;
+  if (key.startsWith("pantone")) return true;
+  return false;
+}
+
+function hasStandardColorName(name: string): boolean {
+  const trimmed = (name || "").trim();
+  return trimmed.startsWith(COR_PREFIX) && trimmed.length > COR_PREFIX.length;
 }
 
 function isRootColorGroupName(name: string): boolean {
   const trimmed = (name || "").trim();
   if (!trimmed) return true;
-  return /^\[.*\]$/.test(trimmed);
+  if (/^\[.*\]$/.test(trimmed)) return true;
+  return /^(root|raiz|ungrouped|sem grupo)/i.test(trimmed);
 }
 
-function collectFolderColorNames(doc: Document): Set<string> {
+function collectUserFolderColorNames(doc: Document): Set<string> {
   const names = new Set<string>();
   const groups = doc.colorGroups;
   if (!groups) return names;
 
-  forEachCollectionItem<ColorGroup>(groups, (group) => {
+  forEachCollectionItem<ColorGroup>(groups, (group, index) => {
     if (!group || !group.isValid) return;
+    if (index === 0) return;
     if (isRootColorGroupName(group.name || "")) return;
 
     forEachCollectionItem<ColorGroupSwatch>(group.colorGroupSwatches, (entry) => {
@@ -93,25 +108,18 @@ function collectFolderColorNames(doc: Document): Set<string> {
   return names;
 }
 
-function isColorInNamedFolder(color: Color, folderNames: Set<string>): boolean {
+function isColorInUserFolder(color: Color, folderNames: Set<string>): boolean {
   const name = (color.name || "").trim();
-  if (name && folderNames.has(name)) return true;
-
-  try {
-    const group = color.parentColorGroup;
-    if (group && group.isValid && !isRootColorGroupName(group.name || "")) {
-      return true;
-    }
-  } catch {
-    // parentColorGroup pode falhar em alguns hosts
-  }
-
-  return false;
+  return Boolean(name && folderNames.has(name));
 }
 
-function isProcessColorSwatch(item: Swatch | Color): item is Color {
-  const color = item as Color;
-  return color.model != null || typeof color.space === "number";
+function isGradientOrMixedInk(item: Swatch | Color): boolean {
+  try {
+    const typeName = (item as { constructor?: { name?: string } }).constructor?.name || "";
+    return /gradient|mixedink/i.test(typeName);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -124,8 +132,8 @@ function eachVisibleColorSwatch(doc: Document, callback: (color: Color) => void)
   const source = doc.swatches ?? doc.colors;
   forEachCollectionItem<Swatch | Color>(source, (item) => {
     if (!item || !item.isValid) return;
-    if (!isProcessColorSwatch(item)) return;
-    callback(item);
+    if (isGradientOrMixedInk(item)) return;
+    callback(item as Color);
   });
 }
 
@@ -136,31 +144,35 @@ export class CoresValidator extends BaseValidator {
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
-      const folderColorNames = collectFolderColorNames(doc);
+      const folderColorNames = collectUserFolderColorNames(doc);
 
       eachVisibleColorSwatch(doc, (color) => {
-        const name = (color.name || "").trim();
-        if (
-          isBuiltInSwatch(name) ||
-          isUnnamedColor(name) ||
-          isWordImportColor(name) ||
-          isSpotExceptionColor(name) ||
-          isMemorialTagColor(name)
-        ) {
-          return;
-        }
+        try {
+          const name = (color.name || "").trim();
+          if (
+            isBuiltInSwatch(name) ||
+            isUnnamedColor(name) ||
+            isWordImportColor(name) ||
+            isSpotOrSpecialName(name) ||
+            isPluginTagColor(name)
+          ) {
+            return;
+          }
 
-        if (isColorInNamedFolder(color, folderColorNames)) {
-          return;
-        }
+          if (isColorInUserFolder(color, folderColorNames)) {
+            return;
+          }
 
-        if (!name.startsWith(COR_PREFIX)) {
-          issues.push({
-            message: "Nomenclatura inválida",
-            object: name,
-            details: `O nome da cor deve começar com "Cor" (exatamente assim). Exemplos corretos: ${COR_NOMENCLATURE_EXAMPLES}.`,
-            severity: "error",
-          });
+          if (!hasStandardColorName(name)) {
+            issues.push({
+              message: "Nomenclatura inválida",
+              object: name,
+              details: `O nome da cor deve começar com "Cor" ou "Cor_" seguido de qualquer texto. Exemplos corretos: ${COR_NOMENCLATURE_EXAMPLES}.`,
+              severity: "error",
+            });
+          }
+        } catch {
+          // amostra ilegível
         }
       });
 

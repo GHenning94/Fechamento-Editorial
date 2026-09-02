@@ -1,6 +1,8 @@
-import type { Color, Document } from "indesign";
+import type { Color, Document, Swatch } from "indesign";
 import { COLOR_CORPROF, COLOR_GUIAS_DELETAR } from "./constants";
-import { forEachCollectionItem } from "./collection-helpers";
+import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "./collection-helpers";
+
+const PLUGIN_BLACK_ALIASES = ["EAC_INK", "EAC_TAG_INK", "EAC_RENDIMENTO_FILL"] as const;
 
 export interface EditorialColorMatch {
   color: Color;
@@ -87,4 +89,77 @@ export function isGuiasDeletarColorName(name: string): boolean {
 export function isCorProfColorName(name: string): boolean {
   const key = normalizeColorName(name);
   return key === normalizeColorName(COLOR_CORPROF) || CORPROF_COLOR_KEYS.has(key);
+}
+
+export function findSwatchByName(doc: Document, names: string[]): Swatch | Color | null {
+  for (const name of names) {
+    try {
+      const swatch = doc.swatches?.itemByName(name);
+      if (swatch?.isValid) return swatch;
+    } catch {
+      // ignore
+    }
+    try {
+      const color = doc.colors.itemByName(name);
+      if (color?.isValid) return color;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function isBuiltInBlackName(name: string): boolean {
+  const key = (name || "")
+    .trim()
+    .replace(/^\$id\//i, "")
+    .replace(/^\[|\]$/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
+  return key === "black" || key === "preto";
+}
+
+export function findDocumentBlack(doc: Document): Swatch | Color | null {
+  const named = findSwatchByName(doc, ["Black", "Preto", "[Black]", "[Preto]", "$ID/Black", "$ID/Preto"]);
+  if (named) return named;
+
+  const source = doc.swatches ?? doc.colors;
+  const length = getCollectionLength(source);
+  for (let i = 0; i < length; i++) {
+    const item = getCollectionItem<Swatch | Color>(source, i);
+    if (!item?.isValid) continue;
+    try {
+      if (isBuiltInBlackName(item.name || "")) return item;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function tryRemoveColor(color: Color): void {
+  try {
+    color.remove();
+  } catch {
+    // ainda em uso
+  }
+}
+
+function discardPluginBlackSwatches(doc: Document): void {
+  for (const name of PLUGIN_BLACK_ALIASES) {
+    const extra = colorByExactName(doc, name);
+    if (extra) tryRemoveColor(extra);
+  }
+}
+
+/** Usa o [Preto] do documento. Não cria amostra de preto. */
+export function ensurePluginInk(doc: Document): Swatch | Color | null {
+  const black = findDocumentBlack(doc);
+  discardPluginBlackSwatches(doc);
+  return black;
+}
+
+export function findPluginInk(doc: Document): Swatch | Color | null {
+  return findDocumentBlack(doc);
 }

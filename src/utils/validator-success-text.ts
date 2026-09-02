@@ -6,7 +6,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.LAYERS_NOMENCLATURA]:
     "As layers de memorial, rendimento e guias estão com a nomenclatura correta.",
   [VALIDATOR_IDS.CORES]:
-    "As amostras de cor estão em CMYK, com nomenclatura padrão. Spot apenas nas exceções permitidas.",
+    "As amostras de cor estão com nomenclatura Cor ou Cor_. Spot apenas nas exceções permitidas.",
   [VALIDATOR_IDS.ESTILOS_PADRAO_PROFESSOR]:
     "Os estilos padrão de professor existem e estão com os atributos corretos para o segmento.",
   [VALIDATOR_IDS.ESTILOS_PADRAO_CREDITO]:

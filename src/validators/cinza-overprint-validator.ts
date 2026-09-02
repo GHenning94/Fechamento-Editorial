@@ -7,13 +7,13 @@ import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editor
 import {
   fillsLookSame,
   geometricBoundsOverlap,
+  isChromaticFill,
   isColoredBackgroundFill,
   isGrayFill,
   itemHasPlacedGraphic,
-  readEffectiveFillColor,
-  readEffectiveFillTint,
   readFillTint,
   readItemFill,
+  readLocalFillColor,
   textFillHasOverprint,
 } from "../utils/fill-color";
 import { collectGraphics, getPageItemDisplayName, walkDirectPageItems } from "../utils/indesign-helpers";
@@ -64,7 +64,7 @@ function readNumber(getter: () => unknown): number | null {
   return null;
 }
 
-function readTextInkBounds(range: TextStyleRange | Text, frame: PageItem): number[] {
+function readTextInkBounds(range: TextStyleRange | Text): number[] {
   const text = range as Text;
   const left = readNumber(() => text.horizontalOffset);
   const right = readNumber(() => text.endHorizontalOffset);
@@ -81,22 +81,24 @@ function readTextInkBounds(range: TextStyleRange | Text, frame: PageItem): numbe
   }
 
   try {
-    const first = text.characters?.item?.(0);
-    const length = getCollectionLength(text.characters);
-    const last = length > 0 ? text.characters?.item?.(length - 1) : first;
+    const chars = text.characters;
+    const length = getCollectionLength(chars);
+    if (length <= 0) return [];
+    const first = chars?.item?.(0);
+    const last = chars?.item?.(length - 1);
     const x1 = readNumber(() => (first as Text)?.horizontalOffset);
-    const x2 = readNumber(() => (last as Text)?.horizontalOffset);
+    const x2 = readNumber(() => (last as Text)?.endHorizontalOffset) ?? readNumber(() => (last as Text)?.horizontalOffset);
     const y = readNumber(() => (first as Text)?.baseline);
     const size = readNumber(() => (first as Text)?.pointSize) || pointSize;
     if (x1 != null && y != null) {
-      const rightEdge = x2 != null && x2 >= x1 ? x2 + size * 0.5 : x1 + size;
-      return [y - size, x1, y + size * 0.3, rightEdge];
+      const rightEdge = x2 != null && Math.abs(x2 - x1) > 0.2 ? Math.max(x1, x2) : x1 + size * Math.min(length, 24) * 0.5;
+      return [y - size, Math.min(x1, rightEdge), y + size * 0.35, Math.max(x1, rightEdge)];
     }
   } catch {
-    // fallback no quadro
+    // sem fallback no quadro inteiro — isso gerava falso positivo
   }
 
-  return readBounds(frame);
+  return [];
 }
 
 function overlapArea(a: number[], b: number[]): number {
@@ -109,13 +111,21 @@ function overlapArea(a: number[], b: number[]): number {
   return (bottom - top) * (right - left);
 }
 
+function boundsContainPoint(bounds: number[], y: number, x: number): boolean {
+  if (!bounds || bounds.length < 4) return false;
+  return y >= Number(bounds[0]) && y <= Number(bounds[2]) && x >= Number(bounds[1]) && x <= Number(bounds[3]);
+}
+
 function inkSitsOnColor(ink: number[], background: number[]): boolean {
   const area = overlapArea(ink, background);
   if (area <= 0.5) return false;
   const inkW = Math.abs(Number(ink[3]) - Number(ink[1]));
   const inkH = Math.abs(Number(ink[2]) - Number(ink[0]));
   const inkArea = Math.max(0.5, inkW * inkH);
-  return area / inkArea >= 0.35;
+  if (area / inkArea < 0.5) return false;
+  const cy = (Number(ink[0]) + Number(ink[2])) / 2;
+  const cx = (Number(ink[1]) + Number(ink[3])) / 2;
+  return boundsContainPoint(background, cy, cx);
 }
 
 function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text) => void): void {
@@ -153,7 +163,7 @@ function forEachTextRun(collection: unknown, onRun: (run: TextStyleRange | Text)
 function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   try {
     const contents = (range as { contents?: string }).contents;
-    if (typeof contents === "string" && contents.length > 0) {
+    if (typeof contents === "string") {
       return contents.trim() === "";
     }
   } catch {
@@ -162,25 +172,45 @@ function rangeLooksEmpty(range: TextStyleRange | Text): boolean {
   return false;
 }
 
+function sampleLocalFills(range: TextStyleRange | Text): Array<{ fill: ReturnType<typeof readLocalFillColor>; tint: number }> {
+  const samples: Array<{ fill: ReturnType<typeof readLocalFillColor>; tint: number }> = [];
+  const seen = new Set<string>();
+  const push = (fill: ReturnType<typeof readLocalFillColor>, tint: number): void => {
+    if (!fill) return;
+    const key = `${String((fill as { name?: string }).name || fill)}::${tint}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    samples.push({ fill, tint });
+  };
+
+  try {
+    const chars = (range as Text).characters;
+    const length = Math.min(getCollectionLength(chars), 16);
+    for (let i = 0; i < length; i++) {
+      const character = chars?.item?.(i);
+      if (!character) continue;
+      push(readLocalFillColor(character), readFillTint(character));
+    }
+  } catch {
+    // ignore
+  }
+
+  push(readLocalFillColor(range), readFillTint(range));
+  return samples;
+}
+
 function rangeIsGrayWithoutOverprint(range: TextStyleRange | Text): boolean {
   if (rangeLooksEmpty(range)) return false;
 
   try {
-    let fill = readEffectiveFillColor(range);
-    let tint = readEffectiveFillTint(range);
-    try {
-      const first = (range as Text).characters?.item?.(0);
-      if (first) {
-        const charFill = readEffectiveFillColor(first);
-        if (charFill) {
-          fill = charFill;
-          tint = readEffectiveFillTint(first);
-        }
-      }
-    } catch {
-      // usa o preenchimento do trecho
+    const samples = sampleLocalFills(range);
+    if (!samples.length) return false;
+    if (samples.some((sample) => sample.fill && isChromaticFill(sample.fill, sample.tint))) {
+      return false;
     }
-    if (!isGrayFill(fill, tint)) return false;
+    if (!samples.some((sample) => sample.fill && isGrayFill(sample.fill, sample.tint))) {
+      return false;
+    }
     return !textFillHasOverprint(range);
   } catch {
     return false;
@@ -256,36 +286,34 @@ function isLikelyIcon(bounds: number[]): boolean {
   if (!bounds || bounds.length < 4) return false;
   const width = Math.abs(Number(bounds[3]) - Number(bounds[1]));
   const height = Math.abs(Number(bounds[2]) - Number(bounds[0]));
-  return width < 28 && height < 28;
+  return width < 36 && height < 36;
 }
 
 function grayTextSitsOnColoredBackground(
   range: TextStyleRange | Text,
   frame: PageItem,
-  snaps: ItemSnap[]
+  snaps: ItemSnap[],
+  pageName: string
 ): boolean {
   if (isUtilityItem(frame)) return false;
 
-  const textFill = readEffectiveFillColor(range);
+  const samples = sampleLocalFills(range);
   const frameFill = readItemFill(frame);
   const frameTint = readFillTint(frame);
-  if (
-    isColoredBackgroundFill(frameFill, frameTint) &&
-    !fillsLookSame(frameFill, textFill)
-  ) {
+  const frameMatchesText = samples.some((sample) => sample.fill && fillsLookSame(frameFill, sample.fill));
+  if (isColoredBackgroundFill(frameFill, frameTint) && !frameMatchesText) {
     return true;
   }
 
-  const frameBounds = readBounds(frame);
-  const ink = readTextInkBounds(range, frame);
+  const ink = readTextInkBounds(range);
   if (ink.length < 4) return false;
-  if (boundsClose(ink, frameBounds)) return false;
 
   for (const other of snaps) {
     if (other.item === frame) continue;
     if (other.utility) continue;
     if (!other.coloredFill && !other.hasGraphic) continue;
     if (isLikelyIcon(other.bounds)) continue;
+    if (pageName && other.pageName && other.pageName !== pageName) continue;
     if (inkSitsOnColor(ink, other.bounds)) return true;
   }
 
@@ -364,7 +392,8 @@ export class CinzaOverprintValidator extends BaseValidator {
           const frames = collectParentFrames(run);
           if (frames.length === 0) return;
           for (const frame of frames) {
-            if (grayTextSitsOnColoredBackground(run, frame, snaps)) {
+            const pageName = resolveFramePageName(frame, snaps);
+            if (grayTextSitsOnColoredBackground(run, frame, snaps, pageName)) {
               reportFrame(frame);
             }
           }
@@ -372,11 +401,6 @@ export class CinzaOverprintValidator extends BaseValidator {
 
         try {
           forEachTextRun(story.textStyleRanges, consider);
-        } catch {
-          // ignore
-        }
-        try {
-          forEachTextRun(story.paragraphs, consider);
         } catch {
           // ignore
         }
