@@ -3,8 +3,8 @@ import { getCollectionItem, getCollectionLength, forEachCollectionItem } from ".
 import { getImageColorSpaceLabel, swatchNameOf } from "./color-model";
 
 const VALUE_EPS = 1.25;
-/** Preto sólido de impressão. 80% preto é cinza e precisa de overprint sobre cor. */
-export const SOLID_PRINT_BLACK_TINT = 90;
+/** Preto 100%. Qualquer tint/K abaixo disso é cinza de arte. */
+export const SOLID_PRINT_BLACK_TINT = 99.5;
 
 function approx(a: number, b: number, eps = VALUE_EPS): boolean {
   return Math.abs(a - b) <= eps;
@@ -42,10 +42,6 @@ function isPaperKey(key: string): boolean {
 
 function isBlackKey(key: string): boolean {
   return key === "black" || key === "preto";
-}
-
-function isGrayNameKey(key: string): boolean {
-  return key.includes("cinza") || key.includes("gray") || key.includes("grey");
 }
 
 function unwrapNumber(value: unknown): number | null {
@@ -323,9 +319,27 @@ function toUnitScale(values: number[]): { scale: "percent" | "unit"; values: num
   return { scale: "percent", values };
 }
 
+function resolveTint(fill: Swatch | Color | string | null | undefined, tint: number): number {
+  let t = tint < 0 ? 100 : tint;
+  if (typeof fill === "string") return t;
+  try {
+    const typeName = (fill as { constructor?: { name?: string } }).constructor?.name || "";
+    if (typeName === "Tint") {
+      const swatchTint = unwrapNumber((fill as { tintValue?: number }).tintValue);
+      if (swatchTint != null) {
+        const normalized = normalizeTintPercent(swatchTint);
+        if (normalized != null) t = (t * normalized) / 100;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return t;
+}
+
 /**
- * Cinza de impressão: Black com tint, K-only, CMY neutro (C≈M≈Y) ou RGB acromático.
- * C45 M45 Y0 K34 (cor de apoio) não é cinza — o croma entre canais é alto.
+ * Cinza de arte: [Preto]/[Black] com tint < 100%, ou amostra C=M=Y=0 e K < 100%.
+ * Cor de apoio (C/M/Y > 0) não entra.
  */
 export function isGrayFill(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
   if (fill == null) return false;
@@ -333,64 +347,17 @@ export function isGrayFill(fill: Swatch | Color | string | null | undefined, tin
   const key = fillNameKey(fill);
   if (isNoneKey(key) || isPaperKey(key)) return false;
 
-  let t = tint < 0 ? 100 : tint;
-  if (typeof fill !== "string") {
-    try {
-      const typeName = (fill as { constructor?: { name?: string } }).constructor?.name || "";
-      if (typeName === "Tint") {
-        const swatchTint = unwrapNumber((fill as { tintValue?: number }).tintValue);
-        if (swatchTint != null) {
-          const normalized = normalizeTintPercent(swatchTint);
-          if (normalized != null) t = (t * normalized) / 100;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const t = resolveTint(fill, tint);
   if (t <= 0.5) return false;
-  if (isSolidPrintBlack(fill, t)) return false;
-  if (isChromaticFill(fill, t)) return false;
 
-  if (isBlackKey(key)) {
+  if (isBlackKey(key) || ((key.includes("black") || key.includes("preto")) && !/\d/.test(key))) {
     return t < SOLID_PRINT_BLACK_TINT;
   }
-  if ((key.includes("black") || key.includes("preto")) && t < SOLID_PRINT_BLACK_TINT) {
-    return true;
-  }
-  if ((key.includes("black") || key.includes("preto")) && /\d/.test(key) && !/(^|[^0-9])100([^0-9]|$)/.test(key)) {
-    return true;
-  }
 
-  let values = typeof fill === "string" ? [] : readColorValues(fill);
-  let space = typeof fill === "string" ? "" : readSpaceLabel(fill);
-  const parsed = parseUnnamedColor(typeof fill === "string" ? fill : swatchNameOf(fill));
-  if (parsed) {
-    if (!values.length) values = parsed.values;
-    if (!space) space = parsed.space;
-  }
-  if (!values.length) return isGrayNameKey(key);
-
-  const scaled = toUnitScale(values);
-  const channels = scaledChannels(scaled.values, t);
-
-  if ((space === "CMYK" || (!space && channels.length >= 4)) && channels.length >= 4) {
+  const channels = resolveCmykChannels(fill, t);
+  if (channels && channels.length >= 4) {
     return isCmykPrintGray(channels[0], channels[1], channels[2], channels[3]);
   }
-
-  if (space === "RGB" && channels.length >= 3) {
-    const rgbScale = toRgb255(values, t);
-    const chroma = Math.max(rgbScale[0], rgbScale[1], rgbScale[2]) - Math.min(rgbScale[0], rgbScale[1], rgbScale[2]);
-    if (chroma > 12) return false;
-    const tone = (rgbScale[0] + rgbScale[1] + rgbScale[2]) / 3;
-    return tone > 18 && tone < 230;
-  }
-
-  if (space === "Gray" && channels.length >= 1) {
-    const gray = channels[0];
-    return gray > 8 && gray < 90;
-  }
-
   return false;
 }
 
@@ -437,11 +404,8 @@ function toRgb255(values: number[], tint: number): number[] {
 }
 
 function isCmykPrintGray(c: number, m: number, y: number, k: number): boolean {
-  const chroma = Math.max(c, m, y) - Math.min(c, m, y);
-  if (chroma > 4) return false;
-  const cmy = (c + m + y) / 3;
-  if (cmy <= 4) return k > 0.5 && k < SOLID_PRINT_BLACK_TINT;
-  return k < SOLID_PRINT_BLACK_TINT;
+  if (c > 4 || m > 4 || y > 4) return false;
+  return k > 0.5 && k < SOLID_PRINT_BLACK_TINT;
 }
 
 function cmykChroma(c: number, m: number, y: number): number {
@@ -507,11 +471,12 @@ export function fillsLookSame(
   return false;
 }
 
+/** Qualquer tinta visível: não é [Nenhum], [Papel] nem branco. */
 export function isColoredBackgroundFill(fill: Swatch | Color | string | null | undefined, tint = 100): boolean {
+  if (tint <= 0.5) return false;
   if (isNoneOrPaperFill(fill)) return false;
   if (isWhiteFill(fill, tint)) return false;
-  if (isGrayFill(fill, tint)) return false;
-  return isChromaticFill(fill, tint);
+  return true;
 }
 
 export function itemHasPlacedGraphic(item: PageItem, depth = 0): boolean {

@@ -5,14 +5,10 @@ import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
 import {
-  fillsLookSame,
   geometricBoundsOverlap,
   isColoredBackgroundFill,
   isGrayFill,
-  isNoneOrPaperFill,
-  isSolidPrintBlack,
   isTextFrameItem,
-  itemHasPlacedGraphic,
   readEffectiveFillTint,
   readFillTint,
   readItemFill,
@@ -27,8 +23,6 @@ const FIX_DETAILS =
 
 interface ColoredSnap {
   bounds: number[];
-  pageName: string;
-  graphic: boolean;
   itemId: number | null;
 }
 
@@ -54,18 +48,22 @@ function readNumber(getter: () => unknown): number | null {
   return null;
 }
 
-function probeGlyph(target: Text | null | undefined): number[] {
-  if (!target) return [];
-  const left = readNumber(() => target.horizontalOffset);
-  const baseline = readNumber(() => target.baseline);
-  if (left == null || baseline == null) return [];
-  const size = readNumber(() => target.pointSize) || 12;
-  const rawRight = readNumber(() => target.endHorizontalOffset);
-  const right = rawRight != null && rawRight > left ? rawRight : left + size * 0.55;
-  const top = baseline - (readNumber(() => target.ascent) ?? size * 0.8);
-  const bottom = baseline + (readNumber(() => target.descent) ?? size * 0.25);
-  if (bottom <= top) return [];
-  return [top, Math.min(left, right), bottom, Math.max(left, right)];
+function itemIdOf(item: PageItem | null): number | null {
+  if (!item) return null;
+  try {
+    const id = item.id;
+    return typeof id === "number" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function typeNameOf(item: PageItem): string {
+  try {
+    return item.constructor?.name || "";
+  } catch {
+    return "";
+  }
 }
 
 function overlapArea(a: number[], b: number[]): number {
@@ -95,55 +93,36 @@ function inkSitsOnColor(ink: number[], background: number[]): boolean {
   );
 }
 
-function typeNameOf(item: PageItem): string {
+function probeGlyph(target: Text | null | undefined): number[] {
+  if (!target) return [];
+  const left = readNumber(() => target.horizontalOffset);
+  const baseline = readNumber(() => target.baseline);
+  if (left == null || baseline == null) return [];
+  const size = readNumber(() => target.pointSize) || 12;
+  const rawRight = readNumber(() => target.endHorizontalOffset);
+  const right = rawRight != null && rawRight > left ? rawRight : left + size * 0.55;
+  const top = baseline - (readNumber(() => target.ascent) ?? size * 0.8);
+  const bottom = baseline + (readNumber(() => target.descent) ?? size * 0.25);
+  if (bottom <= top) return [];
+  return [top, Math.min(left, right), bottom, Math.max(left, right)];
+}
+
+function probeRangeEnds(range: TextStyleRange | Text): number[][] {
+  const probes: number[][] = [];
   try {
-    return item.constructor?.name || "";
+    const chars = (range as Text).characters;
+    const length = getCollectionLength(chars);
+    if (length <= 0) return probes;
+    const first = getCollectionItem<Text>(chars, 0);
+    const last = length > 1 ? getCollectionItem<Text>(chars, length - 1) : first;
+    const a = probeGlyph(first);
+    const b = length > 1 ? probeGlyph(last) : [];
+    if (a.length >= 4) probes.push(a);
+    if (b.length >= 4) probes.push(b);
   } catch {
-    return "";
+    // ignore
   }
-}
-
-function isFilledShape(item: PageItem): boolean {
-  return /rectangle|oval|polygon/i.test(typeNameOf(item));
-}
-
-function isPlacedGraphic(item: PageItem): boolean {
-  return /image|eps|pdf|pict|wmf|importedpage/i.test(typeNameOf(item));
-}
-
-function fillNameKey(fill: { name?: string } | string | null | undefined): string {
-  try {
-    const name = typeof fill === "string" ? fill : fill?.name || "";
-    return name
-      .trim()
-      .replace(/^\$id\//i, "")
-      .replace(/^\[|\]$/g, "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function normalizeSnippet(value: string): string {
-  return (value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[^a-z\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const FOLIO_CORE =
-  "zero|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento";
-const WRITTEN_FOLIO_RE = new RegExp(`^(${FOLIO_CORE})(\\s+e\\s+(${FOLIO_CORE}))?$`);
-
-function isWrittenFolio(snippet: string): boolean {
-  const key = normalizeSnippet(snippet);
-  if (!key || key.length > 40) return false;
-  return WRITTEN_FOLIO_RE.test(key);
+  return probes;
 }
 
 function sampleInkFill(target: TextStyleRange | Text): {
@@ -163,26 +142,19 @@ function sampleInkFill(target: TextStyleRange | Text): {
       }
     }
   } catch {
-    // cai no preenchimento do range
+    // ignore
   }
   return { fill: readLocalFillColor(target), tint: readEffectiveFillTint(target) };
 }
 
 function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
   const sampled = sampleInkFill(target);
-  const fill = sampled.fill;
-  if (!fill) return false;
+  if (!sampled.fill) return false;
   const tint = sampled.tint < 0 ? 100 : sampled.tint;
-  const key = fillNameKey(fill);
-  if (!key || key === "none" || key === "nenhum" || key === "nenhuma" || key === "paper" || key === "papel") {
-    return false;
-  }
-  if (isSolidPrintBlack(fill, tint)) return false;
-  if (!isGrayFill(fill, tint)) return false;
+  if (!isGrayFill(sampled.fill, tint)) return false;
   if (textFillHasOverprint(target)) return false;
   try {
-    const chars = (target as Text).characters;
-    const first = getCollectionItem<Text>(chars, 0);
+    const first = getCollectionItem<Text>((target as Text).characters, 0);
     if (first && textFillHasOverprint(first)) return false;
   } catch {
     // ignore
@@ -192,8 +164,7 @@ function targetIsGrayWithoutOverprint(target: TextStyleRange | Text): boolean {
 
 function firstParentFrame(range: TextStyleRange | Text): PageItem | null {
   try {
-    const frames = (range as Text).parentTextFrames;
-    const item = getCollectionItem<PageItem>(frames, 0);
+    const item = getCollectionItem<PageItem>((range as Text).parentTextFrames, 0);
     if (item?.isValid) return item;
   } catch {
     // ignore
@@ -240,34 +211,6 @@ function findParentCell(range: TextStyleRange | Text): Cell | null {
   return null;
 }
 
-function frameFillLeaksFromStyle(frame: PageItem): boolean {
-  const frameFill = readItemFill(frame);
-  if (!frameFill) return false;
-  try {
-    const text = getCollectionItem<Text>(frame.texts, 0);
-    if (!text) return false;
-    const textFill = readLocalFillColor(text);
-    if (textFill && fillsLookSame(frameFill, textFill)) return true;
-  } catch {
-    // ignore
-  }
-  return false;
-}
-
-function frameIsChromaticBox(frame: PageItem | null): boolean {
-  if (!frame || !isTextFrameItem(frame) || isPluginGeneratedItem(frame)) return false;
-  if (textFrameFillLeaksFromContents(frame) || frameFillLeaksFromStyle(frame)) return false;
-  const fill = readItemFill(frame);
-  if (isNoneOrPaperFill(fill)) return false;
-  try {
-    const tint = readFillTint(frame);
-    if (tint <= 0.5) return false;
-  } catch {
-    // ignore
-  }
-  return isColoredBackgroundFill(fill, readFillTint(frame));
-}
-
 function snippetOf(range: TextStyleRange | Text): string {
   try {
     const raw = String((range as { contents?: string }).contents || "")
@@ -279,64 +222,37 @@ function snippetOf(range: TextStyleRange | Text): string {
   }
 }
 
-function probeRangeEnds(range: TextStyleRange | Text): number[][] {
-  const probes: number[][] = [];
-  try {
-    const chars = (range as Text).characters;
-    const length = getCollectionLength(chars);
-    if (length <= 0) return probes;
-    const first = getCollectionItem<Text>(chars, 0);
-    const last = getCollectionItem<Text>(chars, length - 1);
-    const a = probeGlyph(first);
-    const b = length > 1 ? probeGlyph(last) : [];
-    if (a.length >= 4) probes.push(a);
-    if (b.length >= 4) probes.push(b);
-  } catch {
-    // ignore
-  }
-  return probes;
+function itemHasRealColorFill(item: PageItem): boolean {
+  const fill = readItemFill(item);
+  const tint = readFillTint(item);
+  if (!isColoredBackgroundFill(fill, tint)) return false;
+  if (isTextFrameItem(item) && textFrameFillLeaksFromContents(item)) return false;
+  return true;
 }
 
-function itemIdOf(item: PageItem | null): number | null {
-  if (!item) return null;
-  try {
-    const id = item.id;
-    return typeof id === "number" ? id : null;
-  } catch {
-    return null;
-  }
+function isPlacedGraphic(item: PageItem): boolean {
+  return /image|eps|pdf|pict|wmf|importedpage/i.test(typeNameOf(item));
 }
 
-function pushColored(bucket: ColoredSnap[], item: PageItem, pageName: string): void {
+function isFilledShape(item: PageItem): boolean {
+  return /rectangle|oval|polygon/i.test(typeNameOf(item));
+}
+
+function pushColored(bucket: ColoredSnap[], item: PageItem): void {
   if (!item?.isValid || isPluginGeneratedItem(item)) return;
   const bounds = readBounds(item);
   if (bounds.length < 4) return;
-
-  if (isTextFrameItem(item)) {
-    if (frameIsChromaticBox(item)) {
-      bucket.push({ bounds, pageName, graphic: false, itemId: itemIdOf(item) });
-    }
+  if (isPlacedGraphic(item)) {
+    bucket.push({ bounds, itemId: itemIdOf(item) });
     return;
   }
-
-  const graphic = isPlacedGraphic(item) || itemHasPlacedGraphic(item);
-  if (graphic) {
-    bucket.push({ bounds, pageName, graphic: true, itemId: itemIdOf(item) });
-    return;
-  }
-  if (isFilledShape(item) && isColoredBackgroundFill(readItemFill(item), readFillTint(item))) {
-    bucket.push({ bounds, pageName, graphic: false, itemId: itemIdOf(item) });
-  }
-}
-
-function probeBelongsToFrame(probe: number[], frameBounds: number[]): boolean {
-  if (probe.length < 4 || frameBounds.length < 4) return false;
-  return overlapArea(probe, frameBounds) > 0 && inkSitsOnColor(probe, frameBounds);
+  if (!isFilledShape(item) && !isTextFrameItem(item)) return;
+  if (!itemHasRealColorFill(item)) return;
+  bucket.push({ bounds, itemId: itemIdOf(item) });
 }
 
 function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
   const byPage = new Map<string, ColoredSnap[]>();
-
   walkDirectPageItems(doc, (item, _page, pageName) => {
     if (!pageName) return;
     let list = byPage.get(pageName);
@@ -344,9 +260,8 @@ function collectColoredByPage(doc: Document): Map<string, ColoredSnap[]> {
       list = [];
       byPage.set(pageName, list);
     }
-    pushColored(list, item, pageName);
+    pushColored(list, item);
   });
-
   return byPage;
 }
 
@@ -392,12 +307,14 @@ export class CinzaOverprintValidator extends BaseValidator {
           if (!run || !targetIsGrayWithoutOverprint(run)) continue;
 
           const preview = snippetOf(run);
-          const folio = isWrittenFolio(preview);
+          if (!preview) continue;
+
           const cell = findParentCell(run);
           if (cell) {
             try {
               if (isColoredBackgroundFill(cell.fillColor, readFillTint(cell))) {
-                pushIssue(issues, seen, `cell::${pageNameOf(firstParentFrame(run))}::${preview}`, pageNameOf(firstParentFrame(run)), preview);
+                const pageName = pageNameOf(firstParentFrame(run));
+                pushIssue(issues, seen, `cell::${pageName}::${preview}`, pageName, preview);
               }
             } catch {
               // ignore
@@ -408,27 +325,25 @@ export class CinzaOverprintValidator extends BaseValidator {
           const frame = firstParentFrame(run);
           if (!frame || isPluginGeneratedItem(frame)) continue;
           const pageName = pageNameOf(frame);
-          const frameBounds = readBounds(frame);
 
-          if (!folio && frameIsChromaticBox(frame)) {
+          if (itemHasRealColorFill(frame)) {
             pushIssue(issues, seen, `box::${pageName}::${preview}`, pageName, preview);
             continue;
           }
 
           const snaps = coloredByPage.get(pageName);
           if (!snaps?.length) continue;
+          const frameBounds = readBounds(frame);
           if (frameBounds.length < 4) continue;
+          const frameId = itemIdOf(frame);
           const nearby = snaps.filter(
-            (snap) => snap.itemId !== itemIdOf(frame) && geometricBoundsOverlap(frameBounds, snap.bounds)
+            (snap) => snap.itemId !== frameId && geometricBoundsOverlap(frameBounds, snap.bounds)
           );
           if (!nearby.length) continue;
 
-          const probes = probeRangeEnds(run).filter((ink) => probeBelongsToFrame(ink, frameBounds));
+          const probes = probeRangeEnds(run);
           if (!probes.length) continue;
-
-          const under = nearby.filter((snap) => probes.some((ink) => inkSitsOnColor(ink, snap.bounds)));
-          if (!under.length) continue;
-          if (folio && !under.some((snap) => snap.graphic)) continue;
+          if (!probes.some((ink) => nearby.some((snap) => inkSitsOnColor(ink, snap.bounds)))) continue;
 
           pushIssue(issues, seen, `${pageName}::${preview}`, pageName, preview);
         }
