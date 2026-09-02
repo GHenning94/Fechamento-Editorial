@@ -1125,6 +1125,7 @@ export async function createMemorialStyleTags(
   const doc = getActiveDocument();
 
   return withPointUnitsAsync(doc, async () => {
+    try {
     clearInDesignSelection();
     throwIfAborted(signal);
     onProgress?.(10, "Localizando estilos…");
@@ -1206,5 +1207,8 @@ export async function createMemorialStyleTags(
       character,
       total: paragraph + character,
     };
+    } finally {
+      clearInDesignSelection();
+    }
   });
 }

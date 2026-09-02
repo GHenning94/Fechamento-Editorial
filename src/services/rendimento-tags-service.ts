@@ -847,6 +847,7 @@ export async function createRendimentoTags(
   const doc = getActiveDocument();
 
   return withPointUnitsAsync(doc, async () => {
+    try {
     clearInDesignSelection();
     throwIfAborted(signal);
     onProgress?.(15, "Preparando layer RENDIMENTO…");
@@ -891,5 +892,8 @@ export async function createRendimentoTags(
 
     bringPluginTagLayersToFront(doc);
     return { layerName, pages: created };
+    } finally {
+      clearInDesignSelection();
+    }
   });
 }

@@ -130,14 +130,36 @@ export function getActiveDocument(): Document {
   return doc;
 }
 
-/** Limpa seleção para evitar artefatos visuais / handles residuais após scripts. */
+/** Limpa seleção de objetos (handles) e cursor de texto. */
 export function clearInDesignSelection(): void {
+  const app = getInDesignApp() as Application & {
+    select?: (value: unknown) => void;
+    selection?: unknown;
+  };
+  const { NothingEnum } = getInDesignModule() as {
+    NothingEnum?: { NOTHING?: unknown; nothing?: unknown };
+  };
+  const nothing = NothingEnum?.NOTHING ?? NothingEnum?.nothing ?? 1851876446;
+
+  const selectNothing = (target: { select?: (value: unknown) => void } | null | undefined): void => {
+    if (!target || typeof target.select !== "function") return;
+    target.select(nothing);
+  };
+
   try {
-    const app = getInDesignApp() as Application & { select?: (value: unknown) => void };
-    const { NothingEnum } = getInDesignModule() as { NothingEnum?: { NOTHING?: unknown } };
-    if (NothingEnum && "NOTHING" in NothingEnum && typeof app.select === "function") {
-      app.select(NothingEnum.NOTHING);
-    }
+    selectNothing(app);
+  } catch {
+    // ignore
+  }
+
+  try {
+    selectNothing(app.activeDocument as Document & { select?: (value: unknown) => void });
+  } catch {
+    // ignore
+  }
+
+  try {
+    app.selection = [];
   } catch {
     // ignore
   }
