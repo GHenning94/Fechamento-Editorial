@@ -841,9 +841,19 @@ progress::-webkit-progress-value {
   box-sizing: border-box;
 }
 
-.issue-ignore {
+.issue-line-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   flex-shrink: 0;
+  gap: 4px;
   margin-left: 8px;
+}
+
+.issue-ignore,
+.issue-goto {
+  flex-shrink: 0;
+  margin-left: 0;
   padding: 2px 6px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
@@ -857,7 +867,8 @@ progress::-webkit-progress-value {
   white-space: nowrap;
 }
 
-.issue-ignore:hover {
+.issue-ignore:hover,
+.issue-goto:hover {
   color: var(--text);
   border-color: var(--accent);
   background-color: #2a241c;
