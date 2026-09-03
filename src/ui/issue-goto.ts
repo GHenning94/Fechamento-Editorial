@@ -1,6 +1,6 @@
 export function bindIssueGoTo(
   root: HTMLElement,
-  onGoTo: (itemId: number) => void
+  onGoTo: (itemId: number, pageName?: string) => void
 ): void {
   const marked = root as HTMLElement & { __issueGoToBound?: boolean };
   if (marked.__issueGoToBound) return;
@@ -30,7 +30,8 @@ export function bindIssueGoTo(
     event.stopPropagation();
     const itemId = Number(button.getAttribute("data-goto-id"));
     if (!Number.isFinite(itemId) || itemId <= 0) return;
-    onGoTo(itemId);
+    const pageName = button.getAttribute("data-goto-page") || undefined;
+    onGoTo(itemId, pageName);
   };
 
   root.addEventListener("click", activate);

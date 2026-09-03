@@ -30,7 +30,7 @@ export interface ResultDetailOptions {
   html: string;
   onIgnore?: (key: string) => void;
   onIgnoreAll?: () => void;
-  onGoTo?: (itemId: number) => void;
+  onGoTo?: (itemId: number, pageName?: string) => void;
 }
 
 const DIALOG_WIDTH = 700;
@@ -56,7 +56,7 @@ interface OpenDetail {
   titleEl: HTMLElement;
   onIgnore?: (key: string) => void;
   onIgnoreAll?: () => void;
-  onGoTo?: (itemId: number) => void;
+  onGoTo?: (itemId: number, pageName?: string) => void;
 }
 
 const openDetails = new Map<ResultDetailKind, OpenDetail>();
@@ -65,7 +65,7 @@ function paintList(
   listEl: HTMLElement,
   html: string,
   onIgnore?: (key: string) => void,
-  onGoTo?: (itemId: number) => void
+  onGoTo?: (itemId: number, pageName?: string) => void
 ): void {
   const y = listEl.scrollTop;
   listEl.innerHTML = html || '<li class="empty-item">Nenhum item</li>';
@@ -81,7 +81,7 @@ export function updateOpenResultsDetailDialogs(
   handlers?: {
     onIgnore?: (key: string) => void;
     onIgnoreAll?: () => void;
-    onGoTo?: (itemId: number) => void;
+    onGoTo?: (itemId: number, pageName?: string) => void;
   }
 ): void {
   (Object.keys(contents) as ResultDetailKind[]).forEach((kind) => {

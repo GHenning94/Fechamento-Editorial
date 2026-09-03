@@ -73,8 +73,12 @@ export class PanelController {
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
       if (list) boostElementWheelScroll(list);
     });
-    if (this.listWarnings) bindIssueGoTo(this.listWarnings, (itemId) => this.goToIssueItem(itemId));
-    if (this.listErrors) bindIssueGoTo(this.listErrors, (itemId) => this.goToIssueItem(itemId));
+    if (this.listWarnings) {
+      bindIssueGoTo(this.listWarnings, (itemId, pageName) => this.goToIssueItem(itemId, pageName));
+    }
+    if (this.listErrors) {
+      bindIssueGoTo(this.listErrors, (itemId, pageName) => this.goToIssueItem(itemId, pageName));
+    }
     if (this.btnIgnoreAllWarnings) {
       onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
     }
@@ -136,7 +140,7 @@ export class PanelController {
             }
           : undefined,
       onIgnoreAll: kind === "warning" ? () => this.ignoreAllWarnings() : undefined,
-      onGoTo: kind === "approved" ? undefined : (itemId) => this.goToIssueItem(itemId),
+      onGoTo: kind === "approved" ? undefined : (itemId, pageName) => this.goToIssueItem(itemId, pageName),
     });
   }
 
@@ -447,14 +451,14 @@ export class PanelController {
           this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
         },
         onIgnoreAll: () => this.ignoreAllWarnings(),
-        onGoTo: (itemId) => this.goToIssueItem(itemId),
+        onGoTo: (itemId, pageName) => this.goToIssueItem(itemId, pageName),
       }
     );
   }
 
-  private goToIssueItem(itemId: number): void {
+  private goToIssueItem(itemId: number, pageName?: string): void {
     try {
-      const found = revealPageItemById(itemId);
+      const found = revealPageItemById(itemId, pageName);
       this.setStatus(
         found ? "Item selecionado no InDesign." : "Não foi possível localizar o item. Ele pode ter sido removido.",
         found ? "success" : "warning"
@@ -653,9 +657,10 @@ export class PanelController {
               withIgnore && severity === "warning"
                 ? `<span class="issue-ignore" data-ignore-key="${this.escape(ignoreKey)}" role="button" tabindex="0">Ignorar</span>`
                 : "";
+            const pageAttr = issue.page ? ` data-goto-page="${this.escape(issue.page)}"` : "";
             const gotoBtn =
               typeof issue.itemId === "number" && issue.itemId > 0
-                ? `<span class="issue-goto" data-goto-id="${issue.itemId}" role="button" tabindex="0" title="Selecionar no InDesign">Ir até o item</span>`
+                ? `<span class="issue-goto" data-goto-id="${issue.itemId}"${pageAttr} role="button" tabindex="0" title="Selecionar no InDesign">Ir até o item</span>`
                 : "";
             const actions =
               gotoBtn || ignoreBtn ? `<div class="issue-line-actions">${gotoBtn}${ignoreBtn}</div>` : "";
