@@ -21,7 +21,7 @@ import {
 import { walkDirectPageItems } from "../utils/indesign-helpers";
 
 const FIX_DETAILS =
-  "Aplique overprint no preenchimento do texto cinza. Preferência: preto 100%.";
+  "Valide manualmente: se o cinza estiver sobre fundo colorido, aplique overprint. Preferência: preto 100%.";
 
 interface FillSnap {
   bounds: number[];
@@ -353,6 +353,7 @@ function pushIssue(
     page,
     object: preview ? `Texto (“${preview}”)` : "Texto cinza",
     details: FIX_DETAILS,
+    severity: "warning",
   });
 }
 
@@ -410,7 +411,7 @@ export class CinzaOverprintValidator extends BaseValidator {
         }
       });
 
-      return createResult(this.id, this.name, issues, "error");
+      return createResult(this.id, this.name, issues, "warning");
     });
   }
 }

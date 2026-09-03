@@ -28,7 +28,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.ESTILOS_PASTAS]:
     "Não há pastas nos estilos de parágrafo nem nos de caractere.",
   [VALIDATOR_IDS.CINZA_OVERPRINT]:
-    "Textos em cinza sobre fundo colorido estão com overprint.",
+    "Não há textos em cinza para revisar overprint sobre fundo colorido.",
   [VALIDATOR_IDS.FONTES]:
     "Todas as fontes em uso estão instaladas e sem substituição.",
   [VALIDATOR_IDS.FONTES_DUPLICADAS]:
