@@ -846,14 +846,12 @@ progress::-webkit-progress-value {
   flex-direction: row;
   align-items: center;
   flex-shrink: 0;
-  gap: 4px;
   margin-left: 8px;
 }
 
 .issue-ignore,
 .issue-goto {
   flex-shrink: 0;
-  margin-left: 0;
   padding: 2px 6px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
@@ -865,6 +863,10 @@ progress::-webkit-progress-value {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+}
+
+.issue-goto + .issue-ignore {
+  margin-left: 8px;
 }
 
 .issue-ignore:hover,
