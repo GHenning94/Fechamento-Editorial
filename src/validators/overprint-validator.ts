@@ -9,6 +9,7 @@ import {
 } from "../utils/color-model";
 import { isGuiasDeletarColorName } from "../utils/editorial-color";
 import { getPageItemDisplayName, isGuideColor, walkDirectPageItems } from "../utils/indesign-helpers";
+import { readPageItemId } from "../utils/page-item-reveal";
 import { getValidationScan } from "../core/validation-cache";
 
 export class OverprintValidator extends BaseValidator {
@@ -24,7 +25,8 @@ export class OverprintValidator extends BaseValidator {
         pageName: string,
         objectName: string,
         kind: "Fill" | "Stroke",
-        colorName: string
+        colorName: string,
+        item?: PageItem | null
       ): void => {
         if (isGuiasDeletarColorName(colorName)) {
           guiasMissingOverprint = true;
@@ -35,6 +37,7 @@ export class OverprintValidator extends BaseValidator {
           page: pageName,
           object: objectName || "Objeto",
           details: `Cor aplicada: ${colorName}`,
+          itemId: readPageItemId(item),
         });
       };
 
@@ -47,10 +50,10 @@ export class OverprintValidator extends BaseValidator {
       if (cached) {
         for (const snap of cached) {
           if (snap.fillName && isGuideColor(snap.fillName) && !snap.fillOverprint) {
-            report(snap.pageName, objectLabel(snap.item, snap.objectName), "Fill", snap.fillName);
+            report(snap.pageName, objectLabel(snap.item, snap.objectName), "Fill", snap.fillName, snap.item);
           }
           if (snap.strokeName && isGuideColor(snap.strokeName) && !snap.strokeOverprint) {
-            report(snap.pageName, objectLabel(snap.item, snap.objectName), "Stroke", snap.strokeName);
+            report(snap.pageName, objectLabel(snap.item, snap.objectName), "Stroke", snap.strokeName, snap.item);
           }
         }
       } else {
@@ -58,7 +61,7 @@ export class OverprintValidator extends BaseValidator {
           try {
             const fillName = swatchNameOf(item.fillColor);
             if (isGuideColor(fillName) && !itemHasFillOverprint(item)) {
-              report(pageName, getPageItemDisplayName(item), "Fill", fillName);
+              report(pageName, getPageItemDisplayName(item), "Fill", fillName, item);
             }
           } catch {
             // ignore
@@ -66,7 +69,7 @@ export class OverprintValidator extends BaseValidator {
           try {
             const strokeName = swatchNameOf(item.strokeColor);
             if (isGuideColor(strokeName) && !itemHasStrokeOverprint(item)) {
-              report(pageName, getPageItemDisplayName(item), "Stroke", strokeName);
+              report(pageName, getPageItemDisplayName(item), "Stroke", strokeName, item);
             }
           } catch {
             // ignore

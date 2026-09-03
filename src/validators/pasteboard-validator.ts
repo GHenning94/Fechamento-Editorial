@@ -7,6 +7,7 @@ import {
   getPageItemDisplayName,
   walkPasteboardItems,
 } from "../utils/indesign-helpers";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 export class PasteboardValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.PASTEBOARD;
@@ -28,6 +29,7 @@ export class PasteboardValidator extends BaseValidator {
             object: getPageItemDisplayName(item),
             details:
               "O objeto está 100% fora da página (incluindo sangria). Objetos parcialmente dentro da página não são erro.",
+            itemId: readPageItemId(item),
           });
         } catch {
           // ignora item inválido

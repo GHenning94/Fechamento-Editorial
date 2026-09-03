@@ -1,6 +1,7 @@
 import { onActionActivate } from "./action-control";
 import { boostElementWheelScroll } from "./fast-scroll";
 import { bindResultGroupToggles } from "./result-group-toggle";
+import { bindIssueGoTo } from "./issue-goto";
 
 type UxpDialog = HTMLDialogElement & {
   uxpShowModal?(options: {
@@ -29,6 +30,7 @@ export interface ResultDetailOptions {
   html: string;
   onIgnore?: (key: string) => void;
   onIgnoreAll?: () => void;
+  onGoTo?: (itemId: number) => void;
 }
 
 const DIALOG_WIDTH = 700;
@@ -54,16 +56,23 @@ interface OpenDetail {
   titleEl: HTMLElement;
   onIgnore?: (key: string) => void;
   onIgnoreAll?: () => void;
+  onGoTo?: (itemId: number) => void;
 }
 
 const openDetails = new Map<ResultDetailKind, OpenDetail>();
 
-function paintList(listEl: HTMLElement, html: string, onIgnore?: (key: string) => void): void {
+function paintList(
+  listEl: HTMLElement,
+  html: string,
+  onIgnore?: (key: string) => void,
+  onGoTo?: (itemId: number) => void
+): void {
   const y = listEl.scrollTop;
   listEl.innerHTML = html || '<li class="empty-item">Nenhum item</li>';
   ensureScrollSpacer(listEl);
   bindResultGroupToggles(listEl);
   if (onIgnore) bindIgnoreHandlers(listEl, onIgnore);
+  if (onGoTo) bindIssueGoTo(listEl, onGoTo);
   listEl.scrollTop = y;
 }
 
@@ -72,6 +81,7 @@ export function updateOpenResultsDetailDialogs(
   handlers?: {
     onIgnore?: (key: string) => void;
     onIgnoreAll?: () => void;
+    onGoTo?: (itemId: number) => void;
   }
 ): void {
   (Object.keys(contents) as ResultDetailKind[]).forEach((kind) => {
@@ -79,7 +89,8 @@ export function updateOpenResultsDetailDialogs(
     if (!open) return;
     if (handlers?.onIgnore) open.onIgnore = handlers.onIgnore;
     if (handlers?.onIgnoreAll) open.onIgnoreAll = handlers.onIgnoreAll;
-    paintList(open.listEl, contents[kind] || "", open.onIgnore);
+    if (handlers?.onGoTo) open.onGoTo = handlers.onGoTo;
+    paintList(open.listEl, contents[kind] || "", open.onIgnore, open.onGoTo);
   });
 }
 
@@ -244,8 +255,9 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   if (existing) {
     existing.onIgnore = options.onIgnore;
     existing.onIgnoreAll = options.onIgnoreAll;
+    existing.onGoTo = options.onGoTo;
     existing.titleEl.textContent = options.title;
-    paintList(existing.listEl, options.html, existing.onIgnore);
+    paintList(existing.listEl, options.html, existing.onIgnore, existing.onGoTo);
     return;
   }
 
@@ -303,6 +315,9 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   if (options.onIgnore) {
     bindIgnoreHandlers(listEl, options.onIgnore);
   }
+  if (options.onGoTo) {
+    bindIssueGoTo(listEl, options.onGoTo);
+  }
 
   bindResultGroupToggles(listEl);
 
@@ -312,6 +327,7 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
     titleEl,
     onIgnore: options.onIgnore,
     onIgnoreAll: options.onIgnoreAll,
+    onGoTo: options.onGoTo,
   });
 
   let closed = false;

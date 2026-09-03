@@ -6,7 +6,8 @@ export interface ValidationIssue {
   page?: string;
   object?: string;
   value?: string;
-  /** Quando definido, classifica o item independentemente da severidade do validador. */
+  /** ID do PageItem no InDesign. Se existir, a UI mostra “Ir até o item”. */
+  itemId?: number;
   severity?: ValidationSeverity;
 }
 

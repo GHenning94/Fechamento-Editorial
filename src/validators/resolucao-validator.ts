@@ -3,6 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult } from "../models/validation-result";
 import { MIN_IMAGE_DPI, VALIDATOR_IDS } from "../utils/constants";
 import { collectGraphics } from "../utils/indesign-helpers";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 export class ResolucaoValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.RESOLUCAO;
@@ -22,6 +23,7 @@ export class ResolucaoValidator extends BaseValidator {
             page: graphic.pageName,
             object: graphic.imageName,
             value: `${Math.round(graphic.dpi)} dpi`,
+            itemId: readPageItemId(graphic.pageItem),
           });
         }
       }

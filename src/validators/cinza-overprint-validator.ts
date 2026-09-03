@@ -4,6 +4,7 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem, getCollectionItem, getCollectionLength } from "../utils/collection-helpers";
 import { isPluginGeneratedItem, isPluginUtilityLayerName } from "../utils/editorial-layer";
+import { readPageItemId } from "../utils/page-item-reveal";
 import {
   fillsLookSame,
   isColoredBackgroundFill,
@@ -344,7 +345,8 @@ function pushIssue(
   seen: Set<string>,
   key: string,
   page: string,
-  preview: string
+  preview: string,
+  item?: { id?: number } | null
 ): void {
   if (seen.has(key)) return;
   seen.add(key);
@@ -354,6 +356,7 @@ function pushIssue(
     object: preview ? `Texto (“${preview}”)` : "Texto cinza",
     details: FIX_DETAILS,
     severity: "warning",
+    itemId: readPageItemId(item),
   });
 }
 
@@ -389,7 +392,7 @@ export class CinzaOverprintValidator extends BaseValidator {
             try {
               if (isColoredBackgroundFill(cell.fillColor, readFillTint(cell))) {
                 const pageName = pageNameOf(firstParentFrame(run));
-                pushIssue(issues, seen, `cell::${pageName}::${preview}`, pageName, preview);
+                pushIssue(issues, seen, `cell::${pageName}::${preview}`, pageName, preview, firstParentFrame(run));
               }
             } catch {
               // ignore
@@ -407,7 +410,7 @@ export class CinzaOverprintValidator extends BaseValidator {
           if (!probes.length) continue;
           if (!glyphSitsOnColor(probes, snaps)) continue;
 
-          pushIssue(issues, seen, `${pageName}::${preview}`, pageName, preview);
+          pushIssue(issues, seen, `${pageName}::${preview}`, pageName, preview, frame);
         }
       });
 

@@ -4,6 +4,7 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { forEachCollectionItem } from "../utils/collection-helpers";
 import { forEachPage, getPageItemDisplayName } from "../utils/indesign-helpers";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 function isTruthyOverflow(value: unknown): boolean {
   return value === true || value === 1;
@@ -56,7 +57,7 @@ export class OvertextValidator extends BaseValidator {
       const issues: ValidationIssue[] = [];
       const seen = new Set<string>();
 
-      const pushIssue = (pageName: string, objectName: string, extraKey = ""): void => {
+      const pushIssue = (pageName: string, objectName: string, extraKey = "", item?: PageItem | null): void => {
         const key = `${pageName}::${objectName}::${extraKey}`;
         if (seen.has(key)) return;
         seen.add(key);
@@ -65,6 +66,7 @@ export class OvertextValidator extends BaseValidator {
           page: pageName,
           object: objectName,
           details: "A caixa de texto possui conteúdo que não cabe no quadro.",
+          itemId: readPageItemId(item),
         });
       };
 
@@ -73,7 +75,7 @@ export class OvertextValidator extends BaseValidator {
         if (!readOverflows(item)) return;
         const objectName = getPageItemDisplayName(item);
         const bounds = (item.geometricBounds || []).join(",");
-        pushIssue(pageName, objectName, bounds);
+        pushIssue(pageName, objectName, bounds, item);
       };
 
       forEachPage(doc, (page, pageName) => {

@@ -21,6 +21,8 @@ import { tryExpandPanelToHostHeight } from "./panel-expand";
 import { formatIssueLine } from "../utils/issue-text";
 import { getValidatorSuccessText } from "../utils/validator-success-text";
 import { boostElementWheelScroll } from "./fast-scroll";
+import { bindIssueGoTo } from "./issue-goto";
+import { revealPageItemById } from "../utils/page-item-reveal";
 
 export type ProgressHandler = (percent: number, label: string) => void;
 
@@ -71,6 +73,8 @@ export class PanelController {
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
       if (list) boostElementWheelScroll(list);
     });
+    if (this.listWarnings) bindIssueGoTo(this.listWarnings, (itemId) => this.goToIssueItem(itemId));
+    if (this.listErrors) bindIssueGoTo(this.listErrors, (itemId) => this.goToIssueItem(itemId));
     if (this.btnIgnoreAllWarnings) {
       onActionActivate(this.btnIgnoreAllWarnings, () => this.ignoreAllWarnings());
     }
@@ -132,6 +136,7 @@ export class PanelController {
             }
           : undefined,
       onIgnoreAll: kind === "warning" ? () => this.ignoreAllWarnings() : undefined,
+      onGoTo: kind === "approved" ? undefined : (itemId) => this.goToIssueItem(itemId),
     });
   }
 
@@ -442,8 +447,22 @@ export class PanelController {
           this.setStatus("Aviso ignorado. Ele não sairá no relatório.", "info");
         },
         onIgnoreAll: () => this.ignoreAllWarnings(),
+        onGoTo: (itemId) => this.goToIssueItem(itemId),
       }
     );
+  }
+
+  private goToIssueItem(itemId: number): void {
+    try {
+      const found = revealPageItemById(itemId);
+      this.setStatus(
+        found ? "Item selecionado no InDesign." : "Não foi possível localizar o item. Ele pode ter sido removido.",
+        found ? "success" : "warning"
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setStatus(message, "error");
+    }
   }
 
   private ignoreAllWarnings(): void {
@@ -634,8 +653,14 @@ export class PanelController {
               withIgnore && severity === "warning"
                 ? `<span class="issue-ignore" data-ignore-key="${this.escape(ignoreKey)}" role="button" tabindex="0">Ignorar</span>`
                 : "";
+            const gotoBtn =
+              typeof issue.itemId === "number" && issue.itemId > 0
+                ? `<span class="issue-goto" data-goto-id="${issue.itemId}" role="button" tabindex="0" title="Selecionar no InDesign">Ir até o item</span>`
+                : "";
+            const actions =
+              gotoBtn || ignoreBtn ? `<div class="issue-line-actions">${gotoBtn}${ignoreBtn}</div>` : "";
 
-            let line = `<div class="issue-line-row"><div class="issue-line">${this.escape(partsLine)}</div>${ignoreBtn}</div>`;
+            let line = `<div class="issue-line-row"><div class="issue-line">${this.escape(partsLine)}</div>${actions}</div>`;
             if (issue.details) {
               line += `<div class="issue-detail">${this.escape(issue.details)}</div>`;
             }

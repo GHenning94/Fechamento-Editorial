@@ -23,7 +23,7 @@ export class LinksValidator extends BaseValidator {
       try {
         const placedLinks = collectPlacedLinks(doc);
 
-        for (const { link, pageName, objectName } of placedLinks) {
+        for (const { link, pageName, objectName, itemId } of placedLinks) {
           const status = getLinkStatus(link);
 
           if (isLinkMissing(status)) {
@@ -32,6 +32,7 @@ export class LinksValidator extends BaseValidator {
               page: pageName,
               object: objectName,
               details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
+              itemId: itemId,
             });
             continue;
           }
@@ -42,6 +43,7 @@ export class LinksValidator extends BaseValidator {
               page: pageName,
               object: objectName,
               details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
+              itemId,
             });
             continue;
           }
@@ -52,6 +54,7 @@ export class LinksValidator extends BaseValidator {
               page: pageName,
               object: objectName,
               details: `${getLinkDetails(link)} - ${getLinkFixSuggestion(status, link)}`,
+              itemId,
             });
           }
         }

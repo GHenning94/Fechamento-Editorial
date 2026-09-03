@@ -3,6 +3,7 @@ import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
 import { collectGraphics } from "../utils/indesign-helpers";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 export class ImagensColorspaceValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.IMAGENS_COLORSPACE;
@@ -28,6 +29,7 @@ export class ImagensColorspaceValidator extends BaseValidator {
           object: graphic.imageName,
           value: graphic.colorSpace,
           severity: "error",
+          itemId: readPageItemId(graphic.pageItem),
         });
       }
 

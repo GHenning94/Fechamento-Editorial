@@ -1,6 +1,7 @@
 import type { Document, Link, Page, PageItem } from "indesign";
 import { forEachCollectionItem, getCollectionItem } from "./collection-helpers";
 import { getInDesignModule } from "./indesign-runtime";
+import { readLinkPageItemId } from "./page-item-reveal";
 
 export const LINK_STATUS_VALUES = {
   NORMAL: 1852797549,
@@ -14,6 +15,7 @@ export interface PlacedLinkInfo {
   link: Link;
   pageName: string;
   objectName: string;
+  itemId?: number;
 }
 
 function resolveLinkStatusConstants(): Record<keyof typeof LINK_STATUS_VALUES, number> {
@@ -155,6 +157,7 @@ export function collectPlacedLinks(doc: Document): PlacedLinkInfo[] {
       link,
       pageName,
       objectName: link.name || objectName,
+      itemId: readLinkPageItemId(link),
     });
 
     try {

@@ -108,6 +108,12 @@ declare module "indesign" {
     scriptPreferences: ScriptPreferences;
     userName: string;
     selection: unknown;
+    activeWindow?: {
+      activePage?: Page;
+      zoom?: (to: unknown) => void;
+      select?: (value: unknown) => void;
+    };
+    select?(value: unknown, options?: unknown): void;
     textDefaults?: {
       appliedParagraphStyle?: ParagraphStyle;
       appliedCharacterStyle?: CharacterStyle;
@@ -198,6 +204,7 @@ declare module "indesign" {
     links: Links;
     fonts: Fonts;
     pages: Pages;
+    pageItems?: PageItems;
     stories: Stories;
     spreads: Spreads;
     masterSpreads?: Spreads;
@@ -260,6 +267,7 @@ declare module "indesign" {
   export interface PageItems {
     length: number;
     item(index: number): PageItem;
+    itemByID?(id: number): PageItem;
     everyItem?(): { remove(): void };
   }
 
@@ -292,6 +300,7 @@ declare module "indesign" {
     epss?: Graphics;
     pdfs?: Graphics;
     remove?(): void;
+    select?(value?: unknown): void;
     texts?: Texts;
     bringToFront?: () => void;
     textFramePreferences?: TextFramePreferences;

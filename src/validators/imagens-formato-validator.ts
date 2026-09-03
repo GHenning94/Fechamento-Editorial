@@ -15,7 +15,7 @@ export class ImagensFormatoValidator extends BaseValidator {
       const seen = new Set<string>();
 
       try {
-        for (const { link, pageName, objectName } of collectPlacedLinks(doc)) {
+        for (const { link, pageName, objectName, itemId } of collectPlacedLinks(doc)) {
           const name = link.name || objectName || "";
           const path = getLinkDetails(link);
           const linkType = (() => {
@@ -38,6 +38,7 @@ export class ImagensFormatoValidator extends BaseValidator {
             page: pageName,
             object: name || objectName,
             details: GRAPHIC_FORMAT_FIX,
+            itemId,
           });
         }
       } catch {

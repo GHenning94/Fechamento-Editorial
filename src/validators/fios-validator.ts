@@ -5,6 +5,7 @@ import { MIN_STROKE_WEIGHT, STROKE_WEIGHT_TOLERANCE_PT, VALIDATOR_IDS } from "..
 import { isPluginGeneratedItem } from "../utils/editorial-layer";
 import { collectStrokedItems, getPageItemDisplayName } from "../utils/indesign-helpers";
 import { getInDesignModule } from "../utils/indesign-runtime";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 function unitLooksLikeMillimeters(units: unknown): boolean {
   try {
@@ -94,6 +95,7 @@ export class FiosValidator extends BaseValidator {
           page: stroke.pageName,
           object: objectName,
           value: formatStrokePt(weightPt),
+          itemId: readPageItemId(stroke.pageItem),
         });
       }
 
