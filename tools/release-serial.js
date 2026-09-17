@@ -2,7 +2,7 @@
 "use strict";
 
 const serial = process.argv.slice(2).join(" ").trim();
-const baseUrl = (process.env.LICENSE_ACTIVATION_URL || "https://fechamento-editorial-dkhbcbi2v.vercel.app").replace(/\/$/, "");
+const baseUrl = (process.env.LICENSE_ACTIVATION_URL || "https://fechamento-editorial.vercel.app").replace(/\/$/, "");
 const secret = process.env.LICENSE_ADMIN_SECRET?.trim();
 
 if (!serial) {

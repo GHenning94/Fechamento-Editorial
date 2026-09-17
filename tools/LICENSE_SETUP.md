@@ -48,7 +48,8 @@ Pode ser Vercel. Não use o Render gratuito: ele dorme e a ativação falha.
    Clique **Save**.
 7. **Settings → Deployment Protection**: em Production, **Require Log In** desligado (você já fez).
 8. No GitHub Desktop: commit, **Push**. Espere um deploy **novo** e **verde** na `main`. Não redeploy das linhas vermelhas.
-9. Aba anônima: `https://fechamento-editorial-dkhbcbi2v.vercel.app/health` — texto `"ok": true`.
+9. Aba anônima: `https://fechamento-editorial.vercel.app/health` — texto `"ok": true`.
+   Não use endereços com código aleatório no meio (`…-dkhbcbi2v…`): esses ficam presos no deploy que falhou.
 
 Você **não** liga isso no dia a dia. Fica no ar sozinho, sem “acordar” site.
 

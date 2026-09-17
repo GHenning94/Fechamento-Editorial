@@ -3,6 +3,7 @@
   "installCommand": "echo skipped",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "public",
+  "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" != \"main\" ]",
   "git": {
     "deploymentEnabled": {
       "main": true,
