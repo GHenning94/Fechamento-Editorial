@@ -3,7 +3,7 @@ import { ExportFormat, UserInteractionLevels } from "indesign";
 import { LAYER_MEMORIAL_DESCRITIVO, PDF_PRESET_FALLBACK_NAMES, PDF_PRESET_NAME } from "../utils/constants";
 import { joinPath } from "../utils/file-system";
 import { getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
-import { findEditorialLayer, findRendimentoLayer } from "../utils/editorial-layer";
+import { findEditorialLayer, findGuiasLayer, findRendimentoLayer } from "../utils/editorial-layer";
 import { toPdfExportTarget } from "../utils/pdf-export-path";
 import { withPresetSpreadSettings, PdfSpreadSettings } from "../utils/pdf-preset-session";
 
@@ -178,8 +178,8 @@ function forceAllPagesRange(doc: Document): void {
 
 /**
  * Dois PDFs por fechamento:
- * - arte: páginas simples, memorial e rendimento ocultos
- * - _ESTILOS: spreads, memorial e rendimento visíveis
+ * - arte: páginas simples, memorial, rendimento e GUIAS_DELETAR ocultos
+ * - _ESTILOS: spreads, memorial, rendimento e GUIAS_DELETAR visíveis
  */
 function exportPdf(
   doc: Document,
@@ -214,11 +214,13 @@ export function exportPdfArte(
 
   const memorial = snapshotLayer(findEditorialLayer(doc));
   const rendimento = snapshotLayer(findRendimentoLayer(doc));
+  const guias = snapshotLayer(findGuiasLayer(doc));
   const artePath = joinPath(packageRoot, `${docBaseName}.pdf`);
 
   try {
     setLayerVisible(memorial, false);
     setLayerVisible(rendimento, false);
+    setLayerVisible(guias, false);
     exportPdf(doc, preset, artePath, { exportReaderSpreads: false });
     return {
       presetMissing: false,
@@ -237,6 +239,7 @@ export function exportPdfArte(
   } finally {
     restoreLayer(memorial);
     restoreLayer(rendimento);
+    restoreLayer(guias);
   }
 }
 
@@ -257,11 +260,13 @@ export function exportPdfEstilos(
 
   const memorial = snapshotLayer(findEditorialLayer(doc));
   const rendimento = snapshotLayer(findRendimentoLayer(doc));
+  const guias = snapshotLayer(findGuiasLayer(doc));
   const estilosPath = joinPath(packageRoot, `${docBaseName}_ESTILOS.pdf`);
 
   try {
     setLayerVisible(memorial, true);
     setLayerVisible(rendimento, true);
+    setLayerVisible(guias, true);
     exportPdf(doc, preset, estilosPath, { exportReaderSpreads: true });
     if (!memorial) {
       warnings.push(
@@ -285,6 +290,7 @@ export function exportPdfEstilos(
   } finally {
     restoreLayer(memorial);
     restoreLayer(rendimento);
+    restoreLayer(guias);
   }
 }
 

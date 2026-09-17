@@ -1,5 +1,5 @@
 import type { Document, Layer, PageItem } from "indesign";
-import { LAYER_MEMORIAL_DESCRITIVO, LAYER_RENDIMENTO } from "./constants";
+import { LAYER_GUIAS_DELETAR, LAYER_MEMORIAL_DESCRITIVO, LAYER_RENDIMENTO } from "./constants";
 import { forEachCollectionItem, getCollectionItem } from "./collection-helpers";
 import { getInDesignModule } from "./indesign-runtime";
 
@@ -109,6 +109,25 @@ export function findRendimentoLayer(doc: Document): Layer | null {
       return;
     }
     if (!alias && isRendimentoLayerName(layer.name)) {
+      alias = layer;
+    }
+  });
+
+  return exact || alias;
+}
+
+/** Localiza a layer de guias sem depender de visibilidade ou caixa. */
+export function findGuiasLayer(doc: Document): Layer | null {
+  let exact: Layer | null = null;
+  let alias: Layer | null = null;
+
+  forEachCollectionItem<Layer>(doc.layers, (layer) => {
+    if (!layer?.isValid) return;
+    if (layer.name === LAYER_GUIAS_DELETAR) {
+      exact = layer;
+      return;
+    }
+    if (!alias && isGuiasLayerName(layer.name)) {
       alias = layer;
     }
   });
