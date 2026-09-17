@@ -2,7 +2,7 @@ import type { Color, Document, ParagraphStyle } from "indesign";
 import { forEachCollectionItem } from "./collection-helpers";
 import { readColorOverprintFill, styleHasOverprintFill, swatchNameOf } from "./color-model";
 import { getValidationScan } from "../core/validation-cache";
-import { readGuideColorUse } from "./guide-color-usage";
+import { readGuideColorUse, collectGuideTextColorUseFromItem } from "./guide-color-usage";
 import { walkDirectPageItems } from "./indesign-helpers";
 
 export function colorOverprintSatisfied(
@@ -35,29 +35,34 @@ export function guideColorUsageMissingOverprint(
     }
   } else {
     walkDirectPageItems(doc, (item) => {
-      const use = readGuideColorUse(item, matchesName);
-      if (!use) return;
-      try {
-        if (use.fillName && matchesName(use.fillName)) {
-          foundUsage = true;
-          if (!use.fillOverprint) {
-            missing = true;
-            return false;
+      const uses = [
+        readGuideColorUse(item, matchesName),
+        ...collectGuideTextColorUseFromItem(item, matchesName),
+      ];
+      for (const use of uses) {
+        if (!use) continue;
+        try {
+          if (use.fillName && matchesName(use.fillName)) {
+            foundUsage = true;
+            if (!use.fillOverprint) {
+              missing = true;
+              return false;
+            }
           }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-      try {
-        if (use.strokeName && matchesName(use.strokeName)) {
-          foundUsage = true;
-          if (!use.strokeOverprint) {
-            missing = true;
-            return false;
+        try {
+          if (use.strokeName && matchesName(use.strokeName)) {
+            foundUsage = true;
+            if (!use.strokeOverprint) {
+              missing = true;
+              return false;
+            }
           }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
     });
     if (missing) return true;

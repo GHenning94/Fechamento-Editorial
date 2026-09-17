@@ -209,49 +209,54 @@ export function readColorOverprintFill(color: Color): boolean | null {
   ]);
 }
 
-export function itemHasFillOverprint(item: PageItem): boolean {
-  const target = item as PageItem & {
+export function readFillOverprintState(target: {
+  overprintFill?: unknown;
+  fillOverprint?: unknown;
+  properties?: { overprintFill?: unknown; fillOverprint?: unknown };
+} | null | undefined): boolean | null {
+  if (!target) return null;
+  const host = target as {
     overprintFill?: unknown;
-    properties?: { fillOverprint?: unknown; overprintFill?: unknown };
-  };
-  return (
-    firstBooleanFlag([
-      () => item.fillOverprint,
-      () => target.overprintFill,
-      () => target.properties?.fillOverprint,
-      () => target.properties?.overprintFill,
-    ]) === true
-  );
-}
-
-export function itemHasStrokeOverprint(item: PageItem): boolean {
-  const target = item as PageItem & {
-    overprintStroke?: unknown;
-    properties?: { strokeOverprint?: unknown; overprintStroke?: unknown };
-  };
-  return (
-    firstBooleanFlag([
-      () => item.strokeOverprint,
-      () => target.overprintStroke,
-      () => target.properties?.strokeOverprint,
-      () => target.properties?.overprintStroke,
-    ]) === true
-  );
-}
-
-export function styleHasOverprintFill(style: ParagraphStyle): boolean {
-  const target = style as ParagraphStyle & {
     fillOverprint?: unknown;
     properties?: { overprintFill?: unknown; fillOverprint?: unknown };
   };
-  return (
-    firstBooleanFlag([
-      () => style.overprintFill,
-      () => target.fillOverprint,
-      () => target.properties?.overprintFill,
-      () => target.properties?.fillOverprint,
-    ]) === true
-  );
+  return firstBooleanFlag([
+    () => host.fillOverprint,
+    () => host.overprintFill,
+    () => host.properties?.fillOverprint,
+    () => host.properties?.overprintFill,
+  ]);
+}
+
+export function readStrokeOverprintState(target: {
+  overprintStroke?: unknown;
+  strokeOverprint?: unknown;
+  properties?: { overprintStroke?: unknown; strokeOverprint?: unknown };
+} | null | undefined): boolean | null {
+  if (!target) return null;
+  const host = target as {
+    overprintStroke?: unknown;
+    strokeOverprint?: unknown;
+    properties?: { overprintStroke?: unknown; strokeOverprint?: unknown };
+  };
+  return firstBooleanFlag([
+    () => host.strokeOverprint,
+    () => host.overprintStroke,
+    () => host.properties?.strokeOverprint,
+    () => host.properties?.overprintStroke,
+  ]);
+}
+
+export function itemHasFillOverprint(item: PageItem): boolean {
+  return readFillOverprintState(item) === true;
+}
+
+export function itemHasStrokeOverprint(item: PageItem): boolean {
+  return readStrokeOverprintState(item) === true;
+}
+
+export function styleHasOverprintFill(style: ParagraphStyle): boolean {
+  return readFillOverprintState(style) === true;
 }
 
 export function pageItemTypeName(item: PageItem): string {

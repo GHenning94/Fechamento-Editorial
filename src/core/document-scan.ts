@@ -8,7 +8,8 @@ import {
 import { isCorProfColorName, isGuiasDeletarColorName } from "../utils/editorial-color";
 import { isPluginGeneratedItem } from "../utils/editorial-layer";
 import { isNoneSwatchName, swatchNameOf } from "../utils/color-model";
-import { readGuideColorUse } from "../utils/guide-color-usage";
+import { collectGuideTextColorUseFromItem, readGuideColorUse } from "../utils/guide-color-usage";
+import { readPageItemId } from "../utils/page-item-reveal";
 
 export interface ColorUseSnap {
   item: PageItem;
@@ -22,6 +23,22 @@ export interface ColorUseSnap {
 
 function isGuideSwatch(name: string): boolean {
   return Boolean(name) && (isCorProfColorName(name) || isGuiasDeletarColorName(name));
+}
+
+function mergeColorUsage(usage: ColorUseSnap[]): ColorUseSnap[] {
+  const merged = new Map<string, ColorUseSnap>();
+  for (const snap of usage) {
+    const id = readPageItemId(snap.item) || 0;
+    const key = `${id}|${snap.pageName}|${snap.fillName}|${snap.strokeName}`;
+    const previous = merged.get(key);
+    if (!previous) {
+      merged.set(key, { ...snap });
+      continue;
+    }
+    if (snap.fillName && !snap.fillOverprint) previous.fillOverprint = false;
+    if (snap.strokeName && !snap.strokeOverprint) previous.strokeOverprint = false;
+  }
+  return Array.from(merged.values());
 }
 
 function cheapPageItemName(item: PageItem): string {
@@ -67,26 +84,57 @@ export class DocumentScan {
     if (this.colorUsageCache) return this.colorUsageCache;
 
     const usage: ColorUseSnap[] = [];
-    walkDirectPageItems(this.doc, (item, _page, pageName) => {
-      const use = readGuideColorUse(item, isGuideSwatch);
-      if (!use) return;
-
-      const fillIsGuide = isGuideSwatch(use.fillName);
-      const strokeIsGuide = isGuideSwatch(use.strokeName);
+    const pushUse = (
+      item: PageItem,
+      pageName: string,
+      objectName: string,
+      fillName: string,
+      strokeName: string,
+      fillOverprint: boolean,
+      strokeOverprint: boolean
+    ): void => {
+      const fillIsGuide = isGuideSwatch(fillName);
+      const strokeIsGuide = isGuideSwatch(strokeName);
       if (!fillIsGuide && !strokeIsGuide) return;
-
       usage.push({
         item,
         pageName,
-        objectName: cheapPageItemName(item),
-        fillName: fillIsGuide ? use.fillName : "",
-        strokeName: strokeIsGuide ? use.strokeName : "",
-        fillOverprint: use.fillOverprint,
-        strokeOverprint: use.strokeOverprint,
+        objectName,
+        fillName: fillIsGuide ? fillName : "",
+        strokeName: strokeIsGuide ? strokeName : "",
+        fillOverprint,
+        strokeOverprint,
       });
+    };
+
+    walkDirectPageItems(this.doc, (item, _page, pageName) => {
+      const objectName = cheapPageItemName(item);
+      const use = readGuideColorUse(item, isGuideSwatch);
+      if (use) {
+        pushUse(
+          item,
+          pageName,
+          objectName,
+          use.fillName,
+          use.strokeName,
+          use.fillOverprint,
+          use.strokeOverprint
+        );
+      }
+      for (const textUse of collectGuideTextColorUseFromItem(item, isGuideSwatch)) {
+        pushUse(
+          item,
+          pageName,
+          objectName,
+          textUse.fillName,
+          textUse.strokeName,
+          textUse.fillOverprint,
+          textUse.strokeOverprint
+        );
+      }
     });
-    this.colorUsageCache = usage;
-    return usage;
+    this.colorUsageCache = mergeColorUsage(usage);
+    return this.colorUsageCache;
   }
 
   private ensurePageItemCaches(): void {

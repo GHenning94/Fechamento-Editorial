@@ -2,7 +2,7 @@ import type { Document, PageItem } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
-import { readGuideColorUse } from "../utils/guide-color-usage";
+import { collectGuideTextColorUseFromItem, readGuideColorUse } from "../utils/guide-color-usage";
 import { getPageItemDisplayName, isGuideColor, walkDirectPageItems } from "../utils/indesign-helpers";
 import { readPageItemId } from "../utils/page-item-reveal";
 import { getValidationScan } from "../core/validation-cache";
@@ -48,21 +48,26 @@ export class OverprintValidator extends BaseValidator {
         }
       } else {
         walkDirectPageItems(doc, (item, _page, pageName) => {
-          const use = readGuideColorUse(item, isGuideColor);
-          if (!use) return;
-          try {
-            if (use.fillName && isGuideColor(use.fillName) && !use.fillOverprint) {
-              report(pageName, getPageItemDisplayName(item), "Fill", use.fillName, item);
+          const uses = [
+            readGuideColorUse(item, isGuideColor),
+            ...collectGuideTextColorUseFromItem(item, isGuideColor),
+          ];
+          for (const use of uses) {
+            if (!use) continue;
+            try {
+              if (use.fillName && isGuideColor(use.fillName) && !use.fillOverprint) {
+                report(pageName, getPageItemDisplayName(item), "Fill", use.fillName, item);
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
-          }
-          try {
-            if (use.strokeName && isGuideColor(use.strokeName) && !use.strokeOverprint) {
-              report(pageName, getPageItemDisplayName(item), "Stroke", use.strokeName, item);
+            try {
+              if (use.strokeName && isGuideColor(use.strokeName) && !use.strokeOverprint) {
+                report(pageName, getPageItemDisplayName(item), "Stroke", use.strokeName, item);
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
           }
         });
       }
