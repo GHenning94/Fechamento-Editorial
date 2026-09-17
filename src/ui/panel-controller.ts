@@ -21,7 +21,7 @@ import { tryExpandPanelToHostHeight } from "./panel-expand";
 import { formatIssueLine } from "../utils/issue-text";
 import { getValidatorSuccessText } from "../utils/validator-success-text";
 import { boostElementWheelScroll } from "./fast-scroll";
-import { bindIssueGoTo } from "./issue-goto";
+import { bindIssueGoTo, isLastIssueGoTo } from "./issue-goto";
 import { revealPageItemById } from "../utils/page-item-reveal";
 
 export type ProgressHandler = (percent: number, label: string) => void;
@@ -658,9 +658,11 @@ export class PanelController {
                 ? `<span class="issue-ignore" data-ignore-key="${this.escape(ignoreKey)}" role="button" tabindex="0">Ignorar</span>`
                 : "";
             const pageAttr = issue.page ? ` data-goto-page="${this.escape(issue.page)}"` : "";
+            const lastGoTo =
+              typeof issue.itemId === "number" && isLastIssueGoTo(issue.itemId, issue.page);
             const gotoBtn =
               typeof issue.itemId === "number" && issue.itemId > 0
-                ? `<span class="issue-goto" data-goto-id="${issue.itemId}"${pageAttr} role="button" tabindex="0" title="Selecionar no InDesign">Ir até o item</span>`
+                ? `<span class="issue-goto${lastGoTo ? " is-last" : ""}" data-goto-id="${issue.itemId}"${pageAttr} role="button" tabindex="0" aria-pressed="${lastGoTo ? "true" : "false"}" title="Selecionar no InDesign">Ir até o item</span>`
                 : "";
             const actions =
               gotoBtn || ignoreBtn ? `<div class="issue-line-actions">${gotoBtn}${ignoreBtn}</div>` : "";

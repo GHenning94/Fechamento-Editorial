@@ -44,7 +44,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.FIOS]:
     "Todos os fios estão com espessura mínima de 0,3 pt.",
   [VALIDATOR_IDS.PASTEBOARD]:
-    "Não há objetos no pasteboard fora das páginas.",
+    "Não há objetos no pasteboard fora das páginas, inclusive nas páginas-mestras.",
   [VALIDATOR_IDS.OVERTEXT]:
     "Não há texto em overflow nas caixas de texto.",
 };

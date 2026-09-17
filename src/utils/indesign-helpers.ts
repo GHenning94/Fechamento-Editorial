@@ -410,10 +410,37 @@ export function getPageItemDisplayName(item: PageItem): string {
   }
 }
 
+function formatPasteboardPageName(item: PageItem, spreadPages: Page[], isMaster: boolean): string {
+  const nearest = resolveNearestPageName(item, spreadPages);
+  if (!isMaster) return nearest;
+  const pageLabel =
+    nearest && nearest !== "Pasteboard"
+      ? nearest
+      : spreadPages[0]?.name || "";
+  return pageLabel ? `Página-mestra ${pageLabel}` : "Página-mestra";
+}
+
+function collectSpreadRootItems(spread: Spread, spreadPages: Page[]): PageItem[] {
+  const roots: PageItem[] = [];
+  if (spread.pageItems) {
+    forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
+      if (item?.isValid) roots.push(item);
+    });
+  }
+  for (const page of spreadPages) {
+    if (!page.pageItems) continue;
+    forEachCollectionItem<PageItem>(page.pageItems, (item) => {
+      if (item?.isValid) roots.push(item);
+    });
+  }
+  return roots;
+}
+
 /**
  * Percorre objetos do spread (página + pasteboard) e reporta os que estão
  * 100% fora de todas as páginas, inclusive os que o InDesign ainda associa
  * a uma parentPage (caso típico de box no pasteboard).
+ * Inclui páginas-mestras.
  */
 export function walkPasteboardItems(
   doc: Document,
@@ -421,7 +448,7 @@ export function walkPasteboardItems(
 ): void {
   const seen = new Set<string>();
 
-  forEachCollectionItem<Spread>(doc.spreads, (spread) => {
+  const walkSpread = (spread: Spread, isMaster: boolean): void => {
     if (!spread?.isValid) return;
 
     const spreadPages = getSpreadPages(spread);
@@ -430,41 +457,35 @@ export function walkPasteboardItems(
       if (!item?.isValid || depth > 8) return;
       if (isOnHiddenLayer(item) || !hasMeasurableBounds(item)) return;
 
-        if (isFullyOutsideAllPages(item, spreadPages, doc)) {
-          const key = getPageItemDedupKey(item);
-          if (seen.has(key)) return;
-          seen.add(key);
-          callback(item, spreadPages, resolveNearestPageName(item, spreadPages));
-          return;
-        }
+      if (isFullyOutsideAllPages(item, spreadPages, doc)) {
+        const key = getPageItemDedupKey(item);
+        if (seen.has(key)) return;
+        seen.add(key);
+        callback(item, spreadPages, formatPasteboardPageName(item, spreadPages, isMaster));
+        return;
+      }
 
-        try {
-          if (!getCollectionItem<PageItem>(item.pageItems, 0)) return;
-          forEachCollectionItem<PageItem>(item.pageItems, (child) => {
-            visit(child, depth + 1);
-          });
-        } catch {
-          // ignora grupo inválido
-        }
+      try {
+        if (!getCollectionItem<PageItem>(item.pageItems, 0)) return;
+        forEachCollectionItem<PageItem>(item.pageItems, (child) => {
+          visit(child, depth + 1);
+        });
+      } catch {
+        // ignora grupo inválido
+      }
     };
 
-    const roots: PageItem[] = [];
-    if (spread.pageItems) {
-      forEachCollectionItem<PageItem>(spread.pageItems, (item) => {
-        if (item?.isValid) roots.push(item);
-      });
-    }
-    for (const page of spreadPages) {
-      if (!page.pageItems) continue;
-      forEachCollectionItem<PageItem>(page.pageItems, (item) => {
-        if (item?.isValid) roots.push(item);
-      });
-    }
-
-    for (const item of roots) {
+    for (const item of collectSpreadRootItems(spread, spreadPages)) {
       visit(item, 0);
     }
-  });
+  };
+
+  forEachCollectionItem<Spread>(doc.spreads, (spread) => walkSpread(spread, false));
+  try {
+    forEachCollectionItem<Spread>(doc.masterSpreads, (spread) => walkSpread(spread, true));
+  } catch {
+    // documento sem páginas-mestras acessíveis
+  }
 }
 
 export function isFullyOutsideAllPages(item: PageItem, pages: Page[], doc: Document): boolean {

@@ -101,12 +101,21 @@ function pageOrSpreadMatches(target: unknown, pageName?: string): boolean {
   return false;
 }
 
-function scanForId(collection: unknown, itemId: number): PageItem | null {
+function scanForId(collection: unknown, itemId: number, depth = 0): PageItem | null {
+  if (depth > 8) return null;
   let found: PageItem | null = null;
   try {
     forEachCollectionItem<PageItem>(collection, (item) => {
-      if (found) return;
-      if (readPageItemId(item) === itemId) found = item;
+      if (found || !item) return;
+      if (readPageItemId(item) === itemId) {
+        found = item;
+        return;
+      }
+      try {
+        found = scanForId(item.pageItems, itemId, depth + 1);
+      } catch {
+        // ignore
+      }
     });
   } catch {
     // ignore
@@ -227,6 +236,27 @@ function searchDocumentPages(doc: Document, itemId: number, pageName?: string): 
   } catch {
     // ignore
   }
+  if (found) return found;
+  try {
+    forEachCollectionItem<HostObject>(doc.spreads, (spread) => {
+      if (found || !spread?.isValid) return;
+      if (pageName && !pageOrSpreadMatches(spread, pageName)) {
+        let pageMatch = false;
+        try {
+          forEachCollectionItem<Page>(spread.pages, (page) => {
+            if (pageMatch || !page) return;
+            if (pageOrSpreadMatches(page, pageName)) pageMatch = true;
+          });
+        } catch {
+          // ignore
+        }
+        if (!pageMatch) return;
+      }
+      found = findOnSpread(spread, itemId);
+    });
+  } catch {
+    // ignore
+  }
   return found;
 }
 
@@ -245,7 +275,7 @@ function searchMasterSpreads(doc: Document, itemId: number, pageName?: string): 
       } catch {
         // ignore
       }
-      if (!found && (!pageName || spreadMatches)) {
+      if (!found) {
         found = findOnSpread(spread, itemId);
       }
     });
