@@ -1,43 +1,76 @@
 import { LICENSE_ACTIVATION_URL } from "./license-config";
 import { normalizeSerialInput, verifyLicenseSerial } from "./license-crypto";
+import { ensureInstallId, readInstallId } from "./install-id";
+import { getMachineId } from "./machine-id";
 import { LicenseError, LicensePayload, StoredLicense } from "./license-types";
 import { clearStoredLicense, readStoredLicense, writeStoredLicense } from "./license-storage";
 
-async function activateOnServer(serial: string, licenseId: string): Promise<void> {
-  const baseUrl = LICENSE_ACTIVATION_URL.trim();
+function activationUrl(): string {
+  return LICENSE_ACTIVATION_URL.trim().replace(/\/$/, "");
+}
+
+function readErrorMessage(raw: string, contentType: string, fallback: string): string {
+  try {
+    if (contentType.includes("application/json")) {
+      const body = JSON.parse(raw) as { error?: string };
+      if (body.error) {
+        return body.error;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+async function activateOnServer(
+  serial: string,
+  licenseId: string,
+  machineId: string,
+  installId: string
+): Promise<void> {
+  const baseUrl = activationUrl();
   if (!baseUrl) {
-    return;
+    throw new LicenseError(
+      "Servidor de ativação não configurado. Cada serial só pode ser usado uma vez."
+    );
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}/activate`;
+  const url = `${baseUrl}/activate`;
 
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ serial, jti: licenseId }),
+      body: JSON.stringify({ serial, jti: licenseId, machineId, installId }),
     });
   } catch {
     const hint = baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost")
       ? " Inicie com: npm run license:server"
-      : "";
+      : " Verifique a internet e tente de novo.";
     throw new LicenseError(
       `Não foi possível contactar o servidor de ativação.${hint}`
     );
   }
 
-  if (!response.ok && response.status !== 409) {
+  if (response.status === 409) {
+    let message =
+      "Este serial já foi usado. Desinstalar ou reinstalar o plugin exige um serial novo.";
+    try {
+      const raw = await response.text();
+      message = readErrorMessage(raw, response.headers.get("content-type") || "", message);
+    } catch {
+      // ignore
+    }
+    throw new LicenseError(message);
+  }
+
+  if (!response.ok) {
     let message = "Ativação recusada pelo servidor.";
     try {
       const raw = await response.text();
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const body = JSON.parse(raw) as { error?: string };
-        if (body.error) {
-          message = body.error;
-        }
-      }
+      message = readErrorMessage(raw, response.headers.get("content-type") || "", message);
     } catch {
       // ignore
     }
@@ -52,6 +85,15 @@ export async function isLicenseActive(): Promise<boolean> {
   }
 
   try {
+    const installId = await readInstallId();
+    const machineId = getMachineId();
+    if (!installId || stored.installId !== installId) {
+      return false;
+    }
+    if (!stored.machineId || stored.machineId !== machineId) {
+      return false;
+    }
+
     const payload = await verifyLicenseSerial(stored.serial);
     return payload.id === stored.licenseId;
   } catch {
@@ -62,12 +104,26 @@ export async function isLicenseActive(): Promise<boolean> {
 export async function activateLicense(serial: string): Promise<StoredLicense> {
   const normalized = normalizeSerialInput(serial);
   const payload = await verifyLicenseSerial(normalized);
+  const machineId = getMachineId();
+  let installId: string;
 
-  await activateOnServer(normalized, payload.id);
+  try {
+    installId = await ensureInstallId();
+  } catch (error) {
+    throw new LicenseError(
+      error instanceof Error
+        ? error.message
+        : "Não foi possível prender a licença nesta instalação do plugin."
+    );
+  }
+
+  await activateOnServer(normalized, payload.id, machineId, installId);
 
   const stored: StoredLicense = {
     serial: normalized,
     licenseId: payload.id,
+    machineId,
+    installId,
     activatedAt: new Date().toISOString(),
   };
 

@@ -41,7 +41,7 @@ async function defaultSerialValue(): Promise<string> {
   try {
     const clip = await readClipboardText();
     const fromClip = normalizeSerialInput(clip);
-    if (fromClip.startsWith("EAC1-")) {
+    if (fromClip.startsWith("EAC2-") || fromClip.startsWith("EAC2")) {
       return fromClip;
     }
   } catch {
@@ -66,7 +66,7 @@ export async function promptLicenseActivation(_container?: HTMLElement): Promise
 
       while (true) {
         const entered = showNativePrompt(
-          "Informe o serial (EAC1-XXXX-XXXX-XXXX-XXXX).\nDepois de ativar, este computador não pede o código de novo, só em caso de reinstalação.",
+          "Cole o serial completo (começa com EAC2-).\nCada código vale uma vez, neste computador e nesta instalação. Desinstalar pede um serial novo.",
           lastValue,
           "Ativação do plugin"
         );

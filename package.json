@@ -8,8 +8,10 @@
     "watch": "node tools/sync-version.js && webpack --watch --mode development",
     "dev": "node tools/sync-version.js && webpack --mode development",
     "package:ccx": "npm run build && node tools/package-ccx.js",
-    "license:secret": "node tools/generate-license-secret.js",
+    "license:keys": "node tools/generate-license-keys.js",
+    "license:secret": "node tools/generate-license-keys.js",
     "license:serial": "node tools/generate-serial.js",
+    "license:release": "node tools/release-serial.js",
     "license:server": "node tools/activation-server/server.js"
   },
   "devDependencies": {
@@ -19,6 +21,7 @@
     "css-loader": "^7.1.2",
     "mini-css-extract-plugin": "^2.9.2",
     "ts-loader": "^9.5.1",
+    "tweetnacl": "^1.0.3",
     "typescript": "^5.7.2",
     "webpack": "^5.97.1",
     "webpack-cli": "^5.1.4"

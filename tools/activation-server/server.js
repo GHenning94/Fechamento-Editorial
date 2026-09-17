@@ -5,36 +5,68 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { compactSerial, formatSerial, parseCompact, publicKeyFromAnyBase64, signedPayload } = require("../license-codec");
 
 const PORT = Number(process.env.PORT || process.env.LICENSE_SERVER_PORT || 3921);
 const HOST = "0.0.0.0";
-const SECRET_PATH = path.join(__dirname, "..", ".license-secret");
-const USED_PATH = path.join(__dirname, "used-serials.json");
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const PUBLIC_B64_PATH = path.join(__dirname, "..", "license-public.b64");
+const PUBLIC_TS_PATH = path.join(__dirname, "..", "..", "src", "licensing", "license-public-key.ts");
+const DATA_DIR = fs.existsSync("/var/data") ? "/var/data" : __dirname;
+const USED_PATH = process.env.USED_SERIALS_PATH || path.join(DATA_DIR, "used-serials.json");
 
 function getPathname(url) {
   return String(url || "/").split("?")[0];
 }
 
-function loadSecret() {
-  const fromEnv = process.env.LICENSE_SECRET_HEX?.trim();
-  if (fromEnv) {
-    return Buffer.from(fromEnv, "hex");
-  }
-
-  if (!fs.existsSync(SECRET_PATH)) {
-    throw new Error(
-      "Segredo ausente. Defina LICENSE_SECRET_HEX no Render ou execute npm run license:secret localmente."
-    );
-  }
-  return Buffer.from(fs.readFileSync(SECRET_PATH, "utf8").trim(), "hex");
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Admin-Secret",
+  };
 }
 
-function hasSecretConfigured() {
-  if (process.env.LICENSE_SECRET_HEX?.trim()) {
-    return true;
+function readEmbeddedPublicKeyB64() {
+  if (!fs.existsSync(PUBLIC_TS_PATH)) {
+    return "";
   }
-  return fs.existsSync(SECRET_PATH);
+  const embedded = fs.readFileSync(PUBLIC_TS_PATH, "utf8");
+  const match = embedded.match(/LICENSE_PUBLIC_KEY_B64\s*=\s*"([^"]+)"/);
+  return match ? match[1] : "";
+}
+
+function loadPublicKeyRaw() {
+  const fromEnv = process.env.LICENSE_PUBLIC_KEY_B64?.trim();
+  if (fromEnv) {
+    return publicKeyFromAnyBase64(fromEnv);
+  }
+
+  if (fs.existsSync(PUBLIC_B64_PATH)) {
+    return publicKeyFromAnyBase64(fs.readFileSync(PUBLIC_B64_PATH, "utf8"));
+  }
+
+  const fromTs = readEmbeddedPublicKeyB64();
+  if (fromTs) {
+    return publicKeyFromAnyBase64(fromTs);
+  }
+
+  throw new Error(
+    "Chave pública ausente. Defina LICENSE_PUBLIC_KEY_B64 ou execute npm run license:keys."
+  );
+}
+
+function hasPublicKeyConfigured() {
+  try {
+    loadPublicKeyRaw();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function publicKeyObject(raw32) {
+  const spki = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), raw32]);
+  return crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
 }
 
 function loadUsed() {
@@ -45,43 +77,103 @@ function loadUsed() {
 }
 
 function saveUsed(data) {
-  fs.writeFileSync(USED_PATH, JSON.stringify(data, null, 2));
-}
-
-function normalizeSerial(serial) {
-  return String(serial || "")
-    .trim()
-    .replace(/\s+/g, "")
-    .toUpperCase();
-}
-
-function computeChecksum(secret, licenseId) {
-  return crypto.createHmac("sha256", secret).update(licenseId, "utf8").digest("hex").slice(0, 4).toUpperCase();
+  const folder = path.dirname(USED_PATH);
+  fs.mkdirSync(folder, { recursive: true });
+  const tmp = `${USED_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, USED_PATH);
 }
 
 function verifySerial(serial) {
-  const normalized = normalizeSerial(serial);
-  const match = normalized.match(/^EAC1-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})$/);
-  if (!match) {
-    throw new Error("Serial inválido.");
+  const compact = compactSerial(serial);
+  const { licenseId, signature } = parseCompact(compact);
+  const payload = signedPayload(licenseId);
+  const publicKey = publicKeyObject(loadPublicKeyRaw());
+
+  if (!crypto.verify(null, payload, publicKey, signature)) {
+    throw Object.assign(new Error("Assinatura inválida."), { statusCode: 400 });
   }
 
-  const licenseId = `${match[1]}${match[2]}${match[3]}`;
-  const checksum = match[4];
+  return { licenseId, serial: formatSerial(compact) };
+}
 
-  for (const char of licenseId) {
-    if (!CODE_CHARS.includes(char)) {
-      throw new Error("Serial inválido.");
+function httpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function activateUnique(licenseId, serial, machineId, installId) {
+  const machine = String(machineId || "").trim();
+  const install = String(installId || "").trim().toLowerCase();
+  if (machine.length < 16 || !/^[a-f0-9]{32}$/.test(install)) {
+    throw httpError(400, "Identificador da instalação ausente.");
+  }
+
+  const used = loadUsed();
+  const existing = used[licenseId];
+
+  if (existing?.machineId || existing?.installId) {
+    const sameMachine = existing.machineId === machine;
+    const sameInstall = String(existing.installId || "").toLowerCase() === install;
+    if (!sameMachine || !sameInstall) {
+      throw httpError(
+        409,
+        "Este serial já foi usado. Desinstalar ou reinstalar o plugin exige um serial novo."
+      );
     }
   }
 
-  const secret = loadSecret();
-  const expected = computeChecksum(secret, licenseId);
-  if (checksum !== expected) {
-    throw new Error("Assinatura inválida.");
+  const now = new Date().toISOString();
+  used[licenseId] = {
+    machineId: machine,
+    installId: install,
+    activatedAt: existing?.activatedAt || now,
+    lastActivatedAt: now,
+    serial,
+    activations: (existing?.activations || 0) + 1,
+  };
+  saveUsed(used);
+
+  return { licenseId, reused: Boolean(existing?.installId) };
+}
+
+function releaseLicense(serial) {
+  const { licenseId } = verifySerial(serial);
+  const used = loadUsed();
+  const existed = Boolean(used[licenseId]);
+  delete used[licenseId];
+  saveUsed(used);
+  return { licenseId, released: existed };
+}
+
+function adminSecretConfigured() {
+  return Boolean(process.env.LICENSE_ADMIN_SECRET?.trim());
+}
+
+function isAdminRequest(req, body) {
+  const secret = process.env.LICENSE_ADMIN_SECRET?.trim();
+  if (!secret) {
+    return false;
   }
 
-  return { licenseId, serial: normalized };
+  const provided = String(
+    req.headers["x-admin-secret"] || body?.adminSecret || ""
+  );
+  const left = crypto.createHash("sha256").update(secret).digest();
+  const right = crypto.createHash("sha256").update(provided).digest();
+  return crypto.timingSafeEqual(left, right) && provided === secret;
+}
+
+let storeQueue = Promise.resolve();
+
+function withStore(fn) {
+  const run = storeQueue.then(() => fn(), () => fn());
+  storeQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }
 
 function readBody(req) {
@@ -99,54 +191,74 @@ function readBody(req) {
 }
 
 function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...corsHeaders(),
+  });
   res.end(JSON.stringify(payload));
 }
 
 const server = http.createServer(async (req, res) => {
   const pathname = getPathname(req.url);
 
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, corsHeaders());
+    res.end();
+    return;
+  }
+
   if (req.method === "GET" && (pathname === "/health" || pathname === "/")) {
     sendJson(res, 200, {
       ok: true,
       service: "editorial-autoclose-activation",
-      secretConfigured: hasSecretConfigured(),
+      publicKeyConfigured: hasPublicKeyConfigured(),
+      uniqueUse: true,
     });
     return;
   }
 
-  if (req.method !== "POST" || pathname !== "/activate") {
-    sendJson(res, 404, { error: "Rota não encontrada." });
+  try {
+    if (req.method === "POST" && pathname === "/activate") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const { licenseId, serial } = verifySerial(body.serial);
+      const result = await withStore(() =>
+        activateUnique(licenseId, serial, body.machineId, body.installId)
+      );
+      sendJson(res, 200, { ok: true, licenseId, reused: result.reused });
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/release") {
+      if (!adminSecretConfigured()) {
+        sendJson(res, 404, { error: "Rota não encontrada." });
+        return;
+      }
+
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if (!isAdminRequest(req, body)) {
+        sendJson(res, 401, { error: "Não autorizado." });
+        return;
+      }
+
+      const result = await withStore(() => releaseLicense(body.serial));
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+  } catch (error) {
+    sendJson(res, error.statusCode || 400, { error: error.message || "Falha na ativação." });
     return;
   }
 
-  try {
-    const raw = await readBody(req);
-    const body = JSON.parse(raw || "{}");
-    const { licenseId, serial } = verifySerial(body.serial);
-    const machineId = body.machineId || "unknown";
-    const used = loadUsed();
-    const key = body.jti || licenseId;
-
-    used[key] = {
-      machineId,
-      activatedAt: new Date().toISOString(),
-      serial,
-      activations: (used[key]?.activations || 0) + 1,
-    };
-    saveUsed(used);
-
-    sendJson(res, 200, { ok: true, licenseId });
-  } catch (error) {
-    sendJson(res, 400, { error: error.message || "Falha na ativação." });
-  }
+  sendJson(res, 404, { error: "Rota não encontrada." });
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`Servidor de ativação em http://${HOST}:${PORT}`);
-  console.log(`Segredo configurado: ${hasSecretConfigured() ? "sim" : "nao"}`);
+  console.log(`Chave pública configurada: ${hasPublicKeyConfigured() ? "sim" : "nao"}`);
+  console.log(`Uso único por máquina: sim (${USED_PATH})`);
   console.log("GET  /health");
-  console.log("POST /activate  { serial, machineId }");
+  console.log("POST /activate  { serial, machineId, installId }");
+  console.log("POST /release   { serial }  (admin)");
 });
 
 server.on("error", (error) => {

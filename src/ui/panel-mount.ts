@@ -140,7 +140,7 @@ export function showLicenseGate(container: HTMLElement, onEnterSerial: () => voi
       </header>
       <p class="license-gate-text">
         Este plugin só funciona após ativação com serial válido.
-        Depois de ativar, o código fica salvo neste computador.
+        Cada código vale uma vez neste computador. Se desinstalar, será preciso um serial novo.
       </p>
       <div id="btn-license-enter" class="btn btn-primary license-gate-btn" role="button" tabindex="0">
         Incluir serial

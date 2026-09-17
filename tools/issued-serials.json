@@ -1,0 +1,82 @@
+[
+  {
+    "serial": "EAC1-87F5-NY4X-DKD8-FF22",
+    "licenseId": "87F5NY4XDKD8",
+    "issuedAt": "2026-07-24T22:27:18.699Z",
+    "note": "Erik — MacBook Pro",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-XRVK-RMNG-T283-A8E8",
+    "licenseId": "XRVKRMNGT283",
+    "issuedAt": "2026-07-24T22:29:40.476Z",
+    "note": "Erik — MacBook Pro (retry)",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-2HU5-5L8L-GMYN-830E",
+    "licenseId": "2HU55L8LGMYN",
+    "issuedAt": "2026-08-20T11:54:51.805Z",
+    "note": "Erik — MacBook Pro",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-KQAE-QW9L-A66T-E06F",
+    "licenseId": "KQAEQW9LA66T",
+    "issuedAt": "2026-08-20T11:56:06.187Z",
+    "note": "",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-CXHQ-AL7Y-4BPB-2527",
+    "licenseId": "CXHQAL7Y4BPB",
+    "issuedAt": "2026-08-20T12:05:38.422Z",
+    "note": "",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-TGMQ-YDPW-6BAF-7AD9",
+    "licenseId": "TGMQYDPW6BAF",
+    "issuedAt": "2026-08-20T12:16:29.665Z",
+    "note": "",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-NXPX-J93A-52E6-19CF",
+    "licenseId": "NXPXJ93A52E6",
+    "issuedAt": "2026-08-20T12:49:06.157Z",
+    "note": "",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC1-QWX9-ZXZG-JDTD-1BE7",
+    "licenseId": "QWX9ZXZGJDTD",
+    "issuedAt": "2026-09-03T19:25:16.116Z",
+    "note": "teste",
+    "status": "pending"
+  },
+  {
+    "serial": "EAC2-UJPB-T546-4PRY-HMSW-2V88-TYR2-W6Y8-M3UQ-9UKB-DLZK-Y5PZ-XERU-33FU-A8AS-X3MH-SQQP-WL54-KBS2-CBRB-K7NP-CFWL-NYD8-YGJJ-VBBU-P9CW-SGBH-NB9H-HC26-8C2",
+    "licenseId": "UJPBT5464PRY",
+    "issuedAt": "2026-09-17T17:12:41.252Z",
+    "note": "teste-migracao",
+    "status": "pending",
+    "algorithm": "ed25519"
+  },
+  {
+    "serial": "EAC2-FY7P-QQTH-MXL7-UXEA3X2ZFAZ9LN6874ADJJPM425ESBYYC5EVW3SNDCRNAX6YEY8TB5WSGN3NAMF222T9GXUG9P79V457Y4URNU9C2BMW4ET629MHWDS",
+    "licenseId": "FY7PQQTHMXL7",
+    "issuedAt": "2026-09-17T17:12:58.496Z",
+    "note": "teste-formato",
+    "status": "pending",
+    "algorithm": "ed25519"
+  },
+  {
+    "serial": "EAC2-2CD5-8DYW-JQV6-R3HF9SVQKLXLCSH6R6Z4F8HZ4HYUQSYFQBMFVX9HDHS8WQ76L2ZG3YE7K4JS54JZEKKEP4QKSNLVSLJQZAUWFE34N6X3HTM6WQAD6BA",
+    "licenseId": "2CD58DYWJQV6",
+    "issuedAt": "2026-09-17T17:28:26.099Z",
+    "note": "teste-uso-unico",
+    "status": "pending",
+    "algorithm": "ed25519"
+  }
+]

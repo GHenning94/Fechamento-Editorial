@@ -32,7 +32,9 @@ module.exports = (env, argv) => {
       ],
     },
     plugins: [
-      new CleanWebpackPlugin(),
+      new CleanWebpackPlugin({
+        cleanOnceBeforeBuildPatterns: ["**/*", "!.license-install"],
+      }),
       new MiniCssExtractPlugin({ filename: "styles.css" }),
       new CopyWebpackPlugin({
         patterns: [

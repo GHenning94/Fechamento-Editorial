@@ -1,11 +1,9 @@
 /**
- * URL opcional do servidor de ativação (POST /activate).
- * Deixe vazio: o serial é validado no plugin, funciona offline e em qualquer máquina.
- *
- * Exemplo local: "http://127.0.0.1:3921"
+ * Servidor que registra cada serial (obrigatório).
+ * Cada código vale uma vez, neste computador e nesta instalação.
  * Produção: "https://fechamento-editorial.onrender.com"
  */
-export const LICENSE_ACTIVATION_URL: string = "";
+export const LICENSE_ACTIVATION_URL: string = "https://fechamento-editorial.onrender.com";
 
 /**
  * Exibe botão "Resetar licença" no painel (somente para testes).

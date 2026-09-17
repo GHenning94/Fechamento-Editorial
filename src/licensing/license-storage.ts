@@ -45,6 +45,7 @@ function parseLicense(raw: string | null | undefined): StoredLicense | null {
       serial: parsed.serial,
       licenseId,
       machineId: parsed.machineId,
+      installId: parsed.installId,
       activatedAt: parsed.activatedAt || new Date().toISOString(),
     };
   } catch {
@@ -197,7 +198,13 @@ export async function writeStoredLicense(license: StoredLicense): Promise<void> 
   writeLocalStorage(json);
 
   const stored = await readStoredLicense();
-  if (!stored || stored.serial !== license.serial || stored.licenseId !== license.licenseId) {
+  if (
+    !stored ||
+    stored.serial !== license.serial ||
+    stored.licenseId !== license.licenseId ||
+    stored.machineId !== license.machineId ||
+    stored.installId !== license.installId
+  ) {
     throw new Error(
       errors.length
         ? `Não foi possível salvar a licença neste computador (${errors.join(", ")}).`

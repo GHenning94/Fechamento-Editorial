@@ -29,6 +29,8 @@ with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as archive:
             continue
         if item.suffix == ".map":
             continue
+        if item.name == ".license-install":
+            continue
         archive.write(item, item.relative_to(src).as_posix())
 print(dest)
 `;

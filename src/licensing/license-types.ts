@@ -6,6 +6,7 @@ export interface StoredLicense {
   serial: string;
   licenseId: string;
   machineId?: string;
+  installId?: string;
   activatedAt: string;
 }
 
