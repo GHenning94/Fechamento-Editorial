@@ -1,7 +1,6 @@
 /** Gerador de PDF da checklist — layout Somos/Saber, checks clicáveis, campo manual e comentários. */
 
 import { CHECKLIST_HEADER_JPEG_B64 } from "../assets/checklist-header-data";
-import { CHECKLIST_LIMPAR_JPEG_B64 } from "../assets/checklist-limpar-data";
 
 const PAGE_W = 595.276;
 const PAGE_H = 841.89;
@@ -18,39 +17,14 @@ const BAR_FILL = "0.862 0.866 0.871";
 const MANUAL_FILL = "0.93 0.72 0.76";
 const CORPROF = "0.932 0.239 0.589";
 const FACA_CYAN = "0 0.702 0.942";
-const ERROR_COLOR = "0.847 0.200 0.380";
-const WARN_COLOR = "0.82 0.52 0.12";
-const CIRCLE_FILL = "0.905 0.908 0.912";
 const CHECK_FILL = "0.810 0.816 0.823";
 const LIMPAR_RECT = { x: 56.6929, y: 752.989, w: 43.2284, h: 47.518 };
-const MAX_DETAIL_LINES = 4;
+const REVIEW_LINE = "Há conteúdo a ser avaliado";
+const FIELD_GAP = 26;
 const INSTRUCTIONS = [
   "Esta checklist deve ser preenchida inicialmente pelo(s) responsável(eis) do projeto e completada por qualquer um do time que venha a finalizar o processo.",
   "Será o documento de referência para atestar a qualidade e cercar possíveis erros que possam ser escalonados durante o processo de produção de arte.",
   "Este documento deve acompanhar o material em todos seus processos, inclusive depois do direcionado aos usuários finais.",
-];
-
-const BACKGROUND_CIRCLES: { x: number; y: number; r: number }[] = [
-  { x: 14.173, y: 685.824, r: 19.842 },
-  { x: 14.173, y: 638.653, r: 18.425 },
-  { x: 60.945, y: 685.824, r: 18.425 },
-  { x: 60.584, y: 638.692, r: 17.008 },
-  { x: 13.749, y: 591.857, r: 17.008 },
-  { x: 13.749, y: 544.625, r: 15.591 },
-  { x: 153.988, y: 685.824, r: 15.591 },
-  { x: 153.988, y: 639.626, r: 14.173 },
-  { x: 107.716, y: 685.824, r: 17.008 },
-  { x: 106.965, y: 544.625, r: 11.338 },
-  { x: 106.965, y: 638.802, r: 15.591 },
-  { x: 106.965, y: 592.603, r: 14.173 },
-  { x: 60.767, y: 544.625, r: 14.173 },
-  { x: 13.749, y: 497.227, r: 14.173 },
-  { x: 60.767, y: 592.603, r: 15.59 },
-  { x: 201.553, y: 687.191, r: 14.173 },
-  { x: 247.679, y: 685.356, r: 11.338 },
-  { x: 295.512, y: 638.653, r: 8.504 },
-  { x: 201.599, y: 497.227, r: 8.504 },
-  { x: 201.599, y: 591.857, r: 11.338 },
 ];
 
 export interface ChecklistPdfItem {
@@ -312,7 +286,7 @@ export function formatChecklistDate(value: string): string {
   return trimmed.replace(/[T,]\s*\d{1,2}:\d{2}(:\d{2})?.*$/, "").replace(/\s+\d{1,2}:\d{2}(:\d{2})?.*$/, "").trim();
 }
 
-function visibleDetails(item: ChecklistPdfItem): string[] {
+function reviewDetails(item: ChecklistPdfItem): string[] {
   const details = (item.details || []).filter((line) => line.trim());
   if (item.checked || details.length === 0) return [];
   return details;
@@ -320,16 +294,32 @@ function visibleDetails(item: ChecklistPdfItem): string[] {
 
 function itemBlockHeight(item: ChecklistPdfItem, itemWidth: number): number {
   const titleLines = wrapTextToWidth(item.label, 9, itemWidth);
-  const details = visibleDetails(item);
-  const shown = details.slice(0, MAX_DETAIL_LINES);
-  const extra = details.length > MAX_DETAIL_LINES ? 1 : 0;
-  return titleLines.length * 11 + shown.length * 9.5 + extra * 9.5 + 8;
+  const hasReview = reviewDetails(item).length > 0;
+  return titleLines.length * 11 + (hasReview ? 10 : 0) + 8;
 }
 
 function drawBackgroundCircles(): string {
-  return BACKGROUND_CIRCLES.map(
-    (c) => `${CIRCLE_FILL} rg ${circlePath(c.x, c.y, c.r)} h f`
-  ).join("\n");
+  const xs = [14.173, 60.945, 107.716, 153.988, 201.553, 247.679, 295.512];
+  const baseR = [19.84, 18.43, 17.01, 15.59, 14.17, 11.34, 8.5];
+  const topY = 685.824;
+  const stepY = 47.17;
+  const rows = 8;
+  const cmds: string[] = [];
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < xs.length; col++) {
+      const y = topY - row * stepY;
+      if (y < 160) continue;
+      const diag = (col / (xs.length - 1)) * 0.38 + (row / Math.max(rows - 1, 1)) * 0.72;
+      const r = baseR[col] * (1 - row * 0.06);
+      if (r < 5.5) continue;
+      const gray = 0.948 + diag * 0.05;
+      if (gray >= 0.992) continue;
+      const g = gray.toFixed(3);
+      cmds.push(`${g} ${g} ${g} rg ${circlePath(xs[col], y, r)} h f`);
+    }
+  }
+  return cmds.join("\n");
 }
 
 function drawFooter(user: string, date: string): string {
@@ -418,7 +408,7 @@ function buildPageContent(input: ChecklistPdfInput): {
 
   y -= 8;
   currentCmds().push(textAt(MARGIN_X, y, 9, "F2", HEAD_GRAY, "TÍTULO DA OBRA"));
-  y -= 15;
+  y -= FIELD_GAP;
   currentCmds().push(`${BAR_FILL} rg ${MARGIN_X.toFixed(3)} ${y.toFixed(3)} ${BAR_W.toFixed(2)} ${BAR_H.toFixed(3)} re f`);
   const title = displayDocumentTitle(input.documentName);
   currentCmds().push(textAt(MARGIN_X + 3, y + 3.6, 9, "F2", TITLE_DARK, title));
@@ -445,7 +435,7 @@ function buildPageContent(input: ChecklistPdfInput): {
       "Ex.: 987654_PG_AtEFAI1_APIS_HGC_PR; 987654_Capa_AnEM2C1_FGB_Geo_CA, etc"
     )
   );
-  y -= 16;
+  y -= FIELD_GAP;
   currentCmds().push(`${MANUAL_FILL} rg ${MARGIN_X.toFixed(3)} ${y.toFixed(3)} ${BAR_W.toFixed(2)} ${BAR_H.toFixed(3)} re f`);
   textFields.push({
     name: "NomenclaturaArquivos",
@@ -475,7 +465,7 @@ function buildPageContent(input: ChecklistPdfInput): {
       lastSection = section;
     }
 
-    const details = visibleDetails(item);
+    const details = reviewDetails(item);
     const titleLines = wrapTextToWidth(item.label, 9, itemWidth);
     const checkY = y - 1.2;
     checkboxes.push({
@@ -494,30 +484,8 @@ function buildPageContent(input: ChecklistPdfInput): {
     });
 
     if (details.length > 0) {
-      const shown = details.slice(0, MAX_DETAIL_LINES);
-      const color = item.reviewKind === "warning" ? WARN_COLOR : ERROR_COLOR;
-      for (const line of shown) {
-        const wrap = wrapTextToWidth(line, 7.5, itemWidth);
-        currentCmds().push(textAt(textX, y, 7.5, "F2", color, wrap[0]));
-        y -= 9.5;
-        for (let i = 1; i < Math.min(wrap.length, 2); i++) {
-          currentCmds().push(textAt(textX, y, 7.5, "F1", color, wrap[i]));
-          y -= 9.5;
-        }
-      }
-      if (details.length > MAX_DETAIL_LINES) {
-        currentCmds().push(
-          textAt(
-            textX,
-            y,
-            7.5,
-            "F1",
-            color,
-            `+ ${details.length - MAX_DETAIL_LINES} ocorrência(s) no comentário ao lado`
-          )
-        );
-        y -= 9.5;
-      }
+      currentCmds().push(textAt(textX, y, 7.5, "F2", CORPROF, REVIEW_LINE));
+      y -= 10;
       outlines.push({
         title: item.label.slice(0, 80),
         pageIndex,
@@ -587,9 +555,7 @@ function jpegImageObj(id: number, bytes: Uint8Array, size: { w: number; h: numbe
 
 export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
   const headerBytes = decodeBase64(CHECKLIST_HEADER_JPEG_B64);
-  const limparBytes = decodeBase64(CHECKLIST_LIMPAR_JPEG_B64);
   const headerSize = jpegSize(headerBytes);
-  const limparSize = jpegSize(limparBytes);
   const { pages: pageContents, outlines, comments, checkboxes, textFields, buttons } = buildPageContent(input);
   const n = pageContents.length;
   const c = comments.length;
@@ -601,7 +567,6 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
   const font1 = nextId++;
   const font2 = nextId++;
   const headerImageId = nextId++;
-  const limparImageId = nextId++;
   const limparFormId = nextId++;
   const contentIds = Array.from({ length: n }, () => nextId++);
   const pageIds = Array.from({ length: n }, () => nextId++);
@@ -647,15 +612,10 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
   write(headerBytes);
   write("\nendstream\nendobj\n");
 
-  offsets[limparImageId] = pos;
-  write(jpegImageObj(limparImageId, limparBytes, limparSize));
-  write(limparBytes);
-  write("\nendstream\nendobj\n");
-
-  const limparStream = `q ${LIMPAR_RECT.w.toFixed(4)} 0 0 ${LIMPAR_RECT.h.toFixed(3)} 0 0 cm /ImLimpar Do Q`;
+  const limparStream = "q Q";
   offsets[limparFormId] = pos;
   write(
-    `${limparFormId} 0 obj\n<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 ${LIMPAR_RECT.w.toFixed(4)} ${LIMPAR_RECT.h.toFixed(3)}] /Matrix [1 0 0 1 0 0] /Resources << /ProcSet [/PDF /ImageC] /XObject << /ImLimpar ${limparImageId} 0 R >> >> /Length ${limparStream.length} >>\nstream\n${limparStream}\nendstream\nendobj\n`
+    `${limparFormId} 0 obj\n<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 ${LIMPAR_RECT.w.toFixed(4)} ${LIMPAR_RECT.h.toFixed(3)}] /Resources << /ProcSet [/PDF] >> /Length ${limparStream.length} >>\nstream\n${limparStream}\nendstream\nendobj\n`
   );
 
   for (let i = 0; i < n; i++) {
@@ -725,7 +685,7 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
     const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
     obj(
       buttonWidgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /P /F 4 /P ${destPage} 0 R /A ${resetActionId} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.w).toFixed(2)} ${(field.y + field.h).toFixed(2)}] /MK << /I ${limparFormId} 0 R /IF << /FB true /SW /N >> /TP 1 >> /Border [0 0 0] /AP << /N ${limparFormId} 0 R >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /N /F 4 /P ${destPage} 0 R /A ${resetActionId} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.w).toFixed(2)} ${(field.y + field.h).toFixed(2)}] /MK << /BC [] /BG [] /TP 1 >> /Border [0 0 0] /AP << /N ${limparFormId} 0 R >> >>`
     );
   }
 
