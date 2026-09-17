@@ -208,3 +208,107 @@ export function collectUsedFonts(doc: Document): UsedFontInfo[] {
 
   return result;
 }
+
+function readFontPath(font: Font): string {
+  const extra = font as Font & { filePath?: unknown };
+  const getters: Array<() => unknown> = [
+    () => font.location,
+    () => font.fontFilePath,
+    () => extra.filePath,
+  ];
+  for (const getter of getters) {
+    try {
+      const value = getter();
+      if (typeof value === "string" && value.trim()) return value.trim();
+      if (value && typeof value === "object") {
+        const rec = value as { nativePath?: string; fsName?: string; name?: string };
+        if (typeof rec.nativePath === "string" && rec.nativePath) return rec.nativePath;
+        if (typeof rec.fsName === "string" && rec.fsName) return rec.fsName;
+        if (typeof rec.name === "string" && rec.name) return rec.name;
+      }
+    } catch {
+      // tenta o próximo
+    }
+  }
+  return "";
+}
+
+function fileExtension(path: string): string {
+  const base = path.split(/[\\/]/).pop() || path;
+  const clean = base.split("?")[0];
+  const dot = clean.lastIndexOf(".");
+  if (dot < 0 || dot === clean.length - 1) return "";
+  return clean.slice(dot + 1).toLowerCase();
+}
+
+function readFontType(font: Font): unknown {
+  try {
+    if (font.fontType != null) return font.fontType;
+  } catch {
+    // ignore
+  }
+  try {
+    const type = (font as Font & { properties?: { fontType?: unknown } }).properties?.fontType;
+    if (type != null) return type;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function resolveFontTypeConstants(): {
+  TRUE_TYPE: number;
+  OPEN_TYPE_TT: number;
+  OPEN_TYPE_CFF: number;
+  OPEN_TYPE_CID: number;
+} {
+  try {
+    const { FontTypes } = getInDesignModule() as { FontTypes?: unknown };
+    return {
+      TRUE_TYPE: numericEnum(FontTypes, ["TRUE_TYPE", "trueType", "TRUETYPE"], 1953653108),
+      OPEN_TYPE_TT: numericEnum(FontTypes, ["OPEN_TYPE_TT", "openTypeTT", "OPENTYPETT"], 1868983924),
+      OPEN_TYPE_CFF: numericEnum(FontTypes, ["OPEN_TYPE_CFF", "openTypeCFF", "OPENTYPECFF"], 1868983910),
+      OPEN_TYPE_CID: numericEnum(FontTypes, ["OPEN_TYPE_CID", "openTypeCID", "OPENTYPECID"], 1868983913),
+    };
+  } catch {
+    return {
+      TRUE_TYPE: 1953653108,
+      OPEN_TYPE_TT: 1868983924,
+      OPEN_TYPE_CFF: 1868983910,
+      OPEN_TYPE_CID: 1868983913,
+    };
+  }
+}
+
+function isPluginUtilityFont(font: Font): boolean {
+  const family = readFontString(() => font.fontFamily).toLowerCase();
+  const name = fontDisplayName(font).toLowerCase();
+  return family === "calibri" || name.startsWith("calibri");
+}
+
+/** True se a fonte aplicada é TrueType (.TTF/.TTC), não OpenType CFF (.OTF). */
+export function isTrueTypeAppliedFont(font: Font): boolean {
+  if (isPluginUtilityFont(font)) return false;
+
+  const ext = fileExtension(readFontPath(font));
+  if (ext === "otf") return false;
+  if (ext === "ttf" || ext === "ttc" || ext === "tte") return true;
+
+  const type = readFontType(font);
+  const constants = resolveFontTypeConstants();
+  if (
+    matchesStatus(type, [constants.OPEN_TYPE_CFF, constants.OPEN_TYPE_CID], [
+      "opentypecff",
+      "opentypecid",
+      "otcf",
+      "otff",
+    ])
+  ) {
+    return false;
+  }
+  return matchesStatus(
+    type,
+    [constants.TRUE_TYPE, constants.OPEN_TYPE_TT],
+    ["truetype", "truet", "opentypett", "ottt"]
+  );
+}

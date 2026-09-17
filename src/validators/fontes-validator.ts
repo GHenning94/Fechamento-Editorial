@@ -8,6 +8,7 @@ import {
   getFontStatus,
   isFontMissing,
   isFontSubstituted,
+  isTrueTypeAppliedFont,
 } from "../utils/font-helpers";
 
 export class FontesValidator extends BaseValidator {
@@ -34,6 +35,16 @@ export class FontesValidator extends BaseValidator {
             details: isFontMissing(status)
               ? "A fonte não está instalada. Instale-a ou substitua no texto."
               : "O InDesign está usando uma fonte substituta. Instale a fonte original.",
+          });
+          continue;
+        }
+
+        if (isTrueTypeAppliedFont(font)) {
+          seen.add(key);
+          issues.push({
+            message: "Fonte TTF",
+            object: name,
+            details: "O documento deve usar apenas fontes OTF. Substitua esta fonte por uma versão .OTF.",
           });
         }
       }

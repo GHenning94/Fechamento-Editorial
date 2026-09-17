@@ -529,6 +529,9 @@ declare module "indesign" {
     fontStyleName?: string;
     fullName?: string;
     status: unknown;
+    fontType?: unknown;
+    location?: unknown;
+    fontFilePath?: unknown;
     isValid: boolean;
   }
 

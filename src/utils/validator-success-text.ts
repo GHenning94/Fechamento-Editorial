@@ -30,7 +30,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.CINZA_OVERPRINT]:
     "Não há textos em cinza para revisar overprint sobre fundo colorido.",
   [VALIDATOR_IDS.FONTES]:
-    "Todas as fontes em uso estão instaladas e sem substituição.",
+    "Todas as fontes em uso estão instaladas, sem substituição e em OTF.",
   [VALIDATOR_IDS.FONTES_DUPLICADAS]:
     "Não há fontes duplicadas em uso no documento.",
   [VALIDATOR_IDS.LINKS]:
