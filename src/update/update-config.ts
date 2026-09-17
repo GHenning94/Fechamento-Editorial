@@ -8,7 +8,7 @@ export const CCX_FILE_NAME = "EditorialAutoClose.ccx";
  * Força o ícone verde de atualização mesmo com a versão já atualizada.
  * Deixe false antes de distribuir a .ccx.
  */
-export const UPDATE_DEV_FORCE_BANNER = true;
+export const UPDATE_DEV_FORCE_BANNER = false;
 
 export const PLUGIN_UPDATE_FILES: Array<{ path: string; binary: boolean; optional?: boolean }> = [
   { path: "index.js", binary: false },

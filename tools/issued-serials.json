@@ -78,5 +78,13 @@
     "note": "teste-uso-unico",
     "status": "pending",
     "algorithm": "ed25519"
+  },
+  {
+    "serial": "EAC2-WJHB-GGAD-QVQX-7SLNCRXZ2WKURGY2N7YBNS35JETAB4DQETRR98CKUW39LS9NUD7FWA2968EQWEWS33YW982YFQ773TDQKGEWHRFZ639FK6F6MB2YWAS",
+    "licenseId": "WJHBGGADQVQX",
+    "issuedAt": "2026-09-17T18:33:52.782Z",
+    "note": "Gui teste",
+    "status": "pending",
+    "algorithm": "ed25519"
   }
 ]
