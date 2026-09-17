@@ -5,6 +5,7 @@ release/
 .DS_Store
 *.log
 report/
+tmp_ref/
 tools/.license-private.pem
 tools/.license-secret
 tools/issued-serials.json

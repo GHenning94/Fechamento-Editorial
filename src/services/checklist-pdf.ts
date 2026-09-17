@@ -1,25 +1,61 @@
-/** Gerador mínimo de PDF 1.4 — logo JPEG, Helvetica, checks clicáveis e comentários. */
+/** Gerador de PDF da checklist — layout Somos/Saber, checks clicáveis, campo manual e comentários. */
 
-import { SOMOS_LOGO_JPEG_B64 } from "../assets/somos-logo-data";
+import { CHECKLIST_HEADER_JPEG_B64 } from "../assets/checklist-header-data";
+import { CHECKLIST_LIMPAR_JPEG_B64 } from "../assets/checklist-limpar-data";
 
-const PAGE_W = 595.28;
+const PAGE_W = 595.276;
 const PAGE_H = 841.89;
-const MARGIN_X = 36;
-const MAGENTA = "0.847 0.200 0.380";
-const MAGENTA_LIGHT = "0.957 0.769 0.824";
-const GRAY = "0.361 0.361 0.361";
-const BLACK = "0 0 0";
-const RULE = "0.82 0.82 0.82";
-const FOOTER_H = 50;
-const BOTTOM_MARGIN = 32;
-const CHECK_SIZE = 13;
+const MARGIN_X = 56.693;
+const HEADER_H = 132;
+const CHECK_SIZE = 8.504;
+const BAR_H = 14.173;
+const BAR_W = 481.89;
+const TITLE_DARK = "0.301 0.302 0.31";
+const HEAD_GRAY = "0.475 0.482 0.492";
+const TEXT_GRAY = "0.447 0.453 0.463";
+const MUTED = "0.388 0.392 0.401";
+const BAR_FILL = "0.862 0.866 0.871";
+const MANUAL_FILL = "0.93 0.72 0.76";
+const CORPROF = "0.932 0.239 0.589";
+const FACA_CYAN = "0 0.702 0.942";
+const ERROR_COLOR = "0.847 0.200 0.380";
+const WARN_COLOR = "0.82 0.52 0.12";
+const CIRCLE_FILL = "0.905 0.908 0.912";
+const CHECK_FILL = "0.810 0.816 0.823";
+const LIMPAR_RECT = { x: 56.6929, y: 752.989, w: 43.2284, h: 47.518 };
+const MAX_DETAIL_LINES = 4;
 const INSTRUCTIONS = [
   "Esta checklist deve ser preenchida inicialmente pelo(s) responsável(eis) do projeto e completada por qualquer um do time que venha a finalizar o processo.",
   "Será o documento de referência para atestar a qualidade e cercar possíveis erros que possam ser escalonados durante o processo de produção de arte.",
   "Este documento deve acompanhar o material em todos seus processos, inclusive depois do direcionado aos usuários finais.",
 ];
 
+const BACKGROUND_CIRCLES: { x: number; y: number; r: number }[] = [
+  { x: 14.173, y: 685.824, r: 19.842 },
+  { x: 14.173, y: 638.653, r: 18.425 },
+  { x: 60.945, y: 685.824, r: 18.425 },
+  { x: 60.584, y: 638.692, r: 17.008 },
+  { x: 13.749, y: 591.857, r: 17.008 },
+  { x: 13.749, y: 544.625, r: 15.591 },
+  { x: 153.988, y: 685.824, r: 15.591 },
+  { x: 153.988, y: 639.626, r: 14.173 },
+  { x: 107.716, y: 685.824, r: 17.008 },
+  { x: 106.965, y: 544.625, r: 11.338 },
+  { x: 106.965, y: 638.802, r: 15.591 },
+  { x: 106.965, y: 592.603, r: 14.173 },
+  { x: 60.767, y: 544.625, r: 14.173 },
+  { x: 13.749, y: 497.227, r: 14.173 },
+  { x: 60.767, y: 592.603, r: 15.59 },
+  { x: 201.553, y: 687.191, r: 14.173 },
+  { x: 247.679, y: 685.356, r: 11.338 },
+  { x: 295.512, y: 638.653, r: 8.504 },
+  { x: 201.599, y: 497.227, r: 8.504 },
+  { x: 201.599, y: 591.857, r: 11.338 },
+];
+
 export interface ChecklistPdfItem {
+  id?: string;
+  section?: "GERAL" | "PROJETO GRÁFICO" | "CAPAS";
   label: string;
   checked: boolean;
   details?: string[];
@@ -57,6 +93,24 @@ interface CheckboxField {
   y: number;
   size: number;
   checked: boolean;
+}
+
+interface TextField {
+  name: string;
+  pageIndex: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface PushButton {
+  name: string;
+  pageIndex: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 function sanitizePdfText(text: string): string {
@@ -198,25 +252,44 @@ function wrapTextToWidth(text: string, fontSize: number, maxWidth: number): stri
   return lines.length ? lines : [""];
 }
 
-function textAt(x: number, y: number, size: number, font: "F1" | "F2", color: string, value: string): string {
+function textAt(x: number, y: number, size: number, font: "F1" | "F2" | "F3", color: string, value: string): string {
   return `BT /${font} ${size} Tf ${color} rg ${x.toFixed(2)} ${y.toFixed(2)} Td ${pdfString(value)} Tj ET`;
 }
 
-function checkboxAppearanceStream(size: number, checked: boolean): string {
-  const pad = 0.4;
-  const inner = `${pad.toFixed(2)} ${pad.toFixed(2)} ${(size - pad * 2).toFixed(2)} ${(size - pad * 2).toFixed(2)} re`;
-  if (!checked) {
-    return `0.94 0.94 0.94 rg ${inner} f 0.55 0.55 0.55 RG 0.8 w ${inner} S`;
+function drawLabelLine(
+  x: number,
+  y: number,
+  size: number,
+  line: string,
+  itemId: string | undefined,
+  isFirst: boolean
+): string {
+  if (isFirst && (itemId === "corprof" || itemId === "faca")) {
+    const parts = line.split(/(\s+)/);
+    const first = parts[0] || "";
+    const rest = parts.slice(1).join("");
+    const color = itemId === "corprof" ? CORPROF : FACA_CYAN;
+    const cmds = [textAt(x, y, size, "F1", color, first)];
+    if (rest) {
+      cmds.push(textAt(x + helveticaWidth(first, size), y, size, "F1", TEXT_GRAY, rest));
+    }
+    return cmds.join("\n");
   }
+  return textAt(x, y, size, "F1", TEXT_GRAY, line);
+}
+
+function checkboxAppearanceStream(size: number, checked: boolean): string {
   const cx = size / 2;
   const cy = size / 2;
+  const r = size / 2 - 0.15;
+  const circle = `${CHECK_FILL} rg ${circlePath(cx, cy, r)} h f`;
+  if (!checked) return circle;
   return [
-    `0.94 0.94 0.94 rg ${inner} f`,
-    `0.55 0.55 0.55 RG 0.8 w ${inner} S`,
-    `0 0 0 RG 1.6 w 1 J 1 j`,
-    `${(cx - 2.8).toFixed(2)} ${(cy - 0.2).toFixed(2)} m`,
-    `${(cx - 0.4).toFixed(2)} ${(cy - 2.6).toFixed(2)} l`,
-    `${(cx + 3.2).toFixed(2)} ${(cy + 2.5).toFixed(2)} l S`,
+    circle,
+    `0.22 0.22 0.22 RG 1.35 w 1 J 1 j`,
+    `${(cx - 2.15).toFixed(2)} ${(cy - 0.15).toFixed(2)} m`,
+    `${(cx - 0.35).toFixed(2)} ${(cy - 2.05).toFixed(2)} l`,
+    `${(cx + 2.45).toFixed(2)} ${(cy + 1.95).toFixed(2)} l S`,
   ].join(" ");
 }
 
@@ -239,115 +312,219 @@ export function formatChecklistDate(value: string): string {
   return trimmed.replace(/[T,]\s*\d{1,2}:\d{2}(:\d{2})?.*$/, "").replace(/\s+\d{1,2}:\d{2}(:\d{2})?.*$/, "").trim();
 }
 
-function buildPageContent(
-  input: ChecklistPdfInput,
-  logo: { bytes: Uint8Array; w: number; h: number }
-): { pages: string[]; outlines: OutlineNode[]; comments: CommentAnnot[]; checkboxes: CheckboxField[] } {
-  const pages: string[] = [];
+function visibleDetails(item: ChecklistPdfItem): string[] {
+  const details = (item.details || []).filter((line) => line.trim());
+  if (item.checked || details.length === 0) return [];
+  return details;
+}
+
+function itemBlockHeight(item: ChecklistPdfItem, itemWidth: number): number {
+  const titleLines = wrapTextToWidth(item.label, 9, itemWidth);
+  const details = visibleDetails(item);
+  const shown = details.slice(0, MAX_DETAIL_LINES);
+  const extra = details.length > MAX_DETAIL_LINES ? 1 : 0;
+  return titleLines.length * 11 + shown.length * 9.5 + extra * 9.5 + 8;
+}
+
+function drawBackgroundCircles(): string {
+  return BACKGROUND_CIRCLES.map(
+    (c) => `${CIRCLE_FILL} rg ${circlePath(c.x, c.y, c.r)} h f`
+  ).join("\n");
+}
+
+function drawFooter(user: string, date: string): string {
   const cmds: string[] = [];
+  const labels = ["Designer responsável", "Fechado por", "Data"];
+  const values = [user || "", user || "", formatChecklistDate(date)];
+  const xs = [56.693, 191.339, 325.984];
+  cmds.push(textAt(xs[0], 80.286, 10, "F1", MUTED, labels[0]));
+  cmds.push(textAt(xs[1], 80.286, 10, "F1", MUTED, labels[1]));
+  cmds.push(textAt(xs[2], 80.286, 10, "F1", MUTED, labels[2]));
+  for (let i = 0; i < 3; i++) {
+    cmds.push(`0.862 0.866 0.871 rg ${xs[i].toFixed(3)} 57.226 127.043 14.173 re f`);
+    cmds.push(textAt(xs[i] + 3, 61.2, 9, "F2", TITLE_DARK, values[i]));
+  }
+  return cmds.join("\n");
+}
+
+function buildPageContent(input: ChecklistPdfInput): {
+  pages: string[];
+  outlines: OutlineNode[];
+  comments: CommentAnnot[];
+  checkboxes: CheckboxField[];
+  textFields: TextField[];
+  buttons: PushButton[];
+} {
+  const pages: string[][] = [];
   const outlines: OutlineNode[] = [];
   const comments: CommentAnnot[] = [];
   const checkboxes: CheckboxField[] = [];
-  const logoW = 92;
-  const logoH = (logoW * logo.h) / logo.w;
-  const logoX = (PAGE_W - logoW) / 2;
-  const logoY = PAGE_H - 22 - logoH;
-  let y = logoY - 26;
-  const contentW = PAGE_W - MARGIN_X * 2;
-  const textX = MARGIN_X + 18;
-  const itemWidth = PAGE_W - MARGIN_X - textX;
-  const itemSize = 9.5;
-  const itemLead = 12;
-  const reviewSize = 8;
-  const reviewLead = 10;
+  const textFields: TextField[] = [];
+  const buttons: PushButton[] = [];
+  const textX = MARGIN_X + 13;
+  const itemWidth = PAGE_W - textX - 36;
+  let pageIndex = 0;
+  let y = 694.66;
 
-  cmds.push(`${MAGENTA} rg ${circlePath(PAGE_W + 8, PAGE_H - 28, 78)} h f`);
-  cmds.push(`q ${logoW.toFixed(2)} 0 0 ${logoH.toFixed(2)} ${logoX.toFixed(2)} ${logoY.toFixed(2)} cm /ImLogo Do Q`);
+  const bottomLimit = (index: number): number => (index === 0 ? 36 : 108);
 
-  cmds.push(textAt(MARGIN_X, y, 16, "F2", MAGENTA, "CHECKLIST DESIGN"));
-  y -= 20;
-
-  cmds.push(textAt(MARGIN_X, y, 7.5, "F2", MAGENTA, "INSTRUÇÕES DE PREENCHIMENTO E UTILIZAÇÃO"));
-  y -= 12;
-  for (const instruction of INSTRUCTIONS) {
-    const lines = wrapTextToWidth(`- ${instruction}`, 8, contentW);
-    for (const line of lines) {
-      cmds.push(textAt(MARGIN_X, y, 8, "F1", GRAY, line));
-      y -= 10;
+  const startPage = (index: number): string[] => {
+    const cmds: string[] = [];
+    if (index === 0) {
+      cmds.push(drawBackgroundCircles());
+      cmds.push(
+        `q ${PAGE_W.toFixed(3)} 0 0 ${HEADER_H.toFixed(2)} 0 ${(PAGE_H - HEADER_H).toFixed(2)} cm /ImHeader Do Q`
+      );
+      buttons.push({
+        name: "LimparFormulario",
+        pageIndex: 0,
+        x: LIMPAR_RECT.x,
+        y: LIMPAR_RECT.y,
+        w: LIMPAR_RECT.w,
+        h: LIMPAR_RECT.h,
+      });
     }
-    y -= 1;
-  }
-  y -= 16;
-
-  const title = displayDocumentTitle(input.documentName);
-  cmds.push(`${MAGENTA} rg ${MARGIN_X.toFixed(2)} ${(y - 22).toFixed(2)} 2.2 30 re f`);
-  cmds.push(textAt(MARGIN_X + 10, y, 6.5, "F2", MAGENTA, "TÍTULO DA OBRA"));
-  y -= 13;
-  cmds.push(textAt(MARGIN_X + 10, y, 11, "F2", BLACK, title));
-  y -= 10;
-  cmds.push(`${MAGENTA} RG 1.2 w ${MARGIN_X.toFixed(2)} ${y.toFixed(2)} m ${(MARGIN_X + 64).toFixed(2)} ${y.toFixed(2)} l S`);
-  cmds.push(
-    `${RULE} RG 0.35 w ${(MARGIN_X + 70).toFixed(2)} ${y.toFixed(2)} m ${(PAGE_W - MARGIN_X).toFixed(2)} ${y.toFixed(2)} l S`
-  );
-  y -= 22;
-
-  const itemContentHeight = (item: ChecklistPdfItem): number => {
-    const details = (item.details || []).filter((line) => line.trim());
-    const hasReview = !item.checked && details.length > 0;
-    const titleLines = wrapTextToWidth(item.label, itemSize, itemWidth);
-    return itemLead + (titleLines.length - 1) * itemLead + (hasReview ? reviewLead : 0);
+    return cmds;
   };
 
-  const notes = input.notes && input.notes.length > 0 ? input.notes : [];
-  const notesH = notes.length > 0 ? 14 + notes.length * 10 : 0;
-  const contentHeights = input.items.map(itemContentHeight);
-  const available = y - FOOTER_H - BOTTOM_MARGIN - notesH;
-  const minGap = 5;
-  const maxGap = 10;
-  const minTotal =
-    contentHeights.reduce((sum, height) => sum + height, 0) + minGap * Math.max(0, input.items.length - 1);
-  let itemGap = minGap;
-  if (input.items.length > 1 && available > minTotal) {
-    itemGap = Math.min(maxGap, minGap + (available - minTotal) / (input.items.length - 1));
+  pages.push(startPage(0));
+
+  const currentCmds = (): string[] => pages[pageIndex];
+
+  const newPage = (): void => {
+    pageIndex += 1;
+    pages.push(startPage(pageIndex));
+    y = PAGE_H - 56;
+  };
+
+  const ensureSpace = (height: number): void => {
+    if (y - height < bottomLimit(pageIndex)) newPage();
+  };
+
+  currentCmds().push(textAt(MARGIN_X, y, 13, "F2", TITLE_DARK, "CHECKLIST DESIGN"));
+  y -= 28.2;
+  currentCmds().push(textAt(MARGIN_X, y, 11, "F2", HEAD_GRAY, "INSTRUÇÕES DE PREENCHIMENTO E UTILIZAÇÃO"));
+  y -= 14;
+  for (const instruction of INSTRUCTIONS) {
+    const lines = wrapTextToWidth(instruction, 9, PAGE_W - MARGIN_X * 2 - 12);
+    currentCmds().push(textAt(MARGIN_X, y, 9, "F1", TEXT_GRAY, `${String.fromCharCode(149)} ${lines[0]}`));
+    y -= 11;
+    for (let i = 1; i < lines.length; i++) {
+      currentCmds().push(textAt(MARGIN_X + 9, y, 9, "F1", TEXT_GRAY, lines[i]));
+      y -= 11;
+    }
+    y -= 1.5;
   }
 
-  input.items.forEach((item, index) => {
-    const details = (item.details || []).filter((line) => line.trim()).slice(0, 40);
-    const hasReview = !item.checked && details.length > 0;
-    const titleLines = wrapTextToWidth(item.label, itemSize, itemWidth);
-    const isLast = index === input.items.length - 1;
+  y -= 8;
+  currentCmds().push(textAt(MARGIN_X, y, 9, "F2", HEAD_GRAY, "TÍTULO DA OBRA"));
+  y -= 15;
+  currentCmds().push(`${BAR_FILL} rg ${MARGIN_X.toFixed(3)} ${y.toFixed(3)} ${BAR_W.toFixed(2)} ${BAR_H.toFixed(3)} re f`);
+  const title = displayDocumentTitle(input.documentName);
+  currentCmds().push(textAt(MARGIN_X + 3, y + 3.6, 9, "F2", TITLE_DARK, title));
+  y -= 20;
 
-    const checkX = MARGIN_X;
-    const checkY = y - 2;
+  currentCmds().push(textAt(textX, y, 9, "F1", TEXT_GRAY, "Nomenclatura dos arquivos"));
+  y -= 11;
+  const nomenLines = wrapTextToWidth(
+    "(CAE/Tipo de produto/Selo/Segmento/Ano/Caderno/Obra/Disciplina/Modulo/CAouMP) sempre nesta ordem e CAb.",
+    9,
+    PAGE_W - textX - MARGIN_X
+  );
+  for (const line of nomenLines) {
+    currentCmds().push(textAt(textX, y, 9, "F1", TEXT_GRAY, line));
+    y -= 11;
+  }
+  currentCmds().push(
+    textAt(
+      textX,
+      y,
+      9,
+      "F1",
+      MUTED,
+      "Ex.: 987654_PG_AtEFAI1_APIS_HGC_PR; 987654_Capa_AnEM2C1_FGB_Geo_CA, etc"
+    )
+  );
+  y -= 16;
+  currentCmds().push(`${MANUAL_FILL} rg ${MARGIN_X.toFixed(3)} ${y.toFixed(3)} ${BAR_W.toFixed(2)} ${BAR_H.toFixed(3)} re f`);
+  textFields.push({
+    name: "NomenclaturaArquivos",
+    pageIndex,
+    x: MARGIN_X,
+    y,
+    w: BAR_W,
+    h: BAR_H,
+  });
+  y -= 26;
+
+  let lastSection = "";
+  input.items.forEach((item, index) => {
+    const section = item.section || "";
+    if (section === "CAPAS" && pageIndex === 0) {
+      newPage();
+    }
+
+    let blockH = itemBlockHeight(item, itemWidth);
+    if (section && section !== lastSection) blockH += 22;
+    ensureSpace(blockH);
+
+    if (section && section !== lastSection) {
+      y -= 4;
+      currentCmds().push(textAt(MARGIN_X, y, 9, "F2", HEAD_GRAY, section));
+      y -= 18;
+      lastSection = section;
+    }
+
+    const details = visibleDetails(item);
+    const titleLines = wrapTextToWidth(item.label, 9, itemWidth);
+    const checkY = y - 1.2;
     checkboxes.push({
       name: `Item${String(index + 1).padStart(2, "0")}`,
-      pageIndex: 0,
-      x: checkX,
+      pageIndex,
+      x: MARGIN_X,
       y: checkY,
       size: CHECK_SIZE,
       checked: item.checked,
     });
 
     const itemY = y;
-    cmds.push(textAt(textX, y, itemSize, "F1", GRAY, titleLines[0]));
-    y -= itemLead;
-    for (let i = 1; i < titleLines.length; i++) {
-      cmds.push(textAt(textX, y, itemSize, "F1", GRAY, titleLines[i]));
-      y -= itemLead;
-    }
-    if (hasReview) {
-      cmds.push(textAt(textX, y, reviewSize, "F2", MAGENTA, "Há conteúdo a ser avaliado"));
-      y -= reviewLead;
-    }
+    titleLines.forEach((line, lineIndex) => {
+      currentCmds().push(drawLabelLine(textX, y, 9, line, item.id, lineIndex === 0));
+      y -= 11;
+    });
 
-    if (hasReview) {
+    if (details.length > 0) {
+      const shown = details.slice(0, MAX_DETAIL_LINES);
+      const color = item.reviewKind === "warning" ? WARN_COLOR : ERROR_COLOR;
+      for (const line of shown) {
+        const wrap = wrapTextToWidth(line, 7.5, itemWidth);
+        currentCmds().push(textAt(textX, y, 7.5, "F2", color, wrap[0]));
+        y -= 9.5;
+        for (let i = 1; i < Math.min(wrap.length, 2); i++) {
+          currentCmds().push(textAt(textX, y, 7.5, "F1", color, wrap[i]));
+          y -= 9.5;
+        }
+      }
+      if (details.length > MAX_DETAIL_LINES) {
+        currentCmds().push(
+          textAt(
+            textX,
+            y,
+            7.5,
+            "F1",
+            color,
+            `+ ${details.length - MAX_DETAIL_LINES} ocorrência(s) no comentário ao lado`
+          )
+        );
+        y -= 9.5;
+      }
       outlines.push({
         title: item.label.slice(0, 80),
-        pageIndex: 0,
+        pageIndex,
         y: itemY,
         children: details.map((line) => ({
           title: line.slice(0, 120),
-          pageIndex: 0,
+          pageIndex,
           y: itemY,
           children: [],
         })),
@@ -355,48 +532,26 @@ function buildPageContent(
       comments.push({
         title: item.label.slice(0, 60),
         contents: details.join("\n\n"),
-        pageIndex: 0,
+        pageIndex,
         x: PAGE_W - MARGIN_X - 16,
         y: itemY - 2,
         warning: item.reviewKind !== "error",
       });
     }
 
-    if (!isLast) y -= itemGap;
+    y -= 6;
   });
 
-  if (notes.length > 0 && y - notesH - FOOTER_H > BOTTOM_MARGIN + 8) {
-    y -= 4;
-    cmds.push(textAt(MARGIN_X, y, 7.5, "F2", MAGENTA, "ARTEFATOS"));
-    y -= 12;
-    for (const note of notes) {
-      cmds.push(textAt(MARGIN_X, y, 8, "F1", GRAY, note));
-      y -= 10;
-    }
-  }
+  currentCmds().push(drawFooter(input.user, input.date));
 
-  const bandH = 44;
-  const bandBottom = BOTTOM_MARGIN;
-  const bandTop = bandBottom + bandH;
-  const innerW = PAGE_W - MARGIN_X * 2;
-  cmds.push(`0.965 0.945 0.950 rg ${MARGIN_X.toFixed(2)} ${bandBottom.toFixed(2)} ${innerW.toFixed(2)} ${bandH.toFixed(2)} re f`);
-  cmds.push(`${MAGENTA} RG 1.1 w ${MARGIN_X.toFixed(2)} ${bandTop.toFixed(2)} m ${(PAGE_W - MARGIN_X).toFixed(2)} ${bandTop.toFixed(2)} l S`);
-
-  const colW = innerW / 3;
-  const labels = ["Designer responsável", "Fechado por", "Data"];
-  const values = [input.user, input.user, formatChecklistDate(input.date)];
-  for (let i = 0; i < 3; i++) {
-    const x = MARGIN_X + 10 + i * colW;
-    if (i > 0) {
-      const vx = MARGIN_X + i * colW;
-      cmds.push(`${MAGENTA_LIGHT} RG 0.6 w ${vx.toFixed(2)} ${(bandBottom + 8).toFixed(2)} m ${vx.toFixed(2)} ${(bandTop - 6).toFixed(2)} l S`);
-    }
-    cmds.push(textAt(x, bandTop - 13, 6.5, "F2", MAGENTA, labels[i]));
-    cmds.push(textAt(x, bandTop - 28, 9, "F2", BLACK, values[i] || ""));
-  }
-
-  pages.push(cmds.join("\n"));
-  return { pages, outlines, comments, checkboxes };
+  return {
+    pages: pages.map((cmds) => cmds.join("\n")),
+    outlines,
+    comments,
+    checkboxes,
+    textFields,
+    buttons,
+  };
 }
 
 interface AssignedOutline {
@@ -426,21 +581,28 @@ function assignOutlineIds(nodes: OutlineNode[], parentId: number, nextId: { n: n
   return assigned;
 }
 
-export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Array): Uint8Array {
-  const logoBytes = logoJpeg && logoJpeg.length > 0 ? logoJpeg : decodeBase64(SOMOS_LOGO_JPEG_B64);
-  const size = jpegSize(logoBytes);
-  const { pages: pageContents, outlines, comments, checkboxes } = buildPageContent(input, {
-    bytes: logoBytes,
-    ...size,
-  });
+function jpegImageObj(id: number, bytes: Uint8Array, size: { w: number; h: number }): string {
+  return `${id} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${size.w} /Height ${size.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`;
+}
+
+export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
+  const headerBytes = decodeBase64(CHECKLIST_HEADER_JPEG_B64);
+  const limparBytes = decodeBase64(CHECKLIST_LIMPAR_JPEG_B64);
+  const headerSize = jpegSize(headerBytes);
+  const limparSize = jpegSize(limparBytes);
+  const { pages: pageContents, outlines, comments, checkboxes, textFields, buttons } = buildPageContent(input);
   const n = pageContents.length;
   const c = comments.length;
   const k = checkboxes.length;
+  const t = textFields.length;
+  const b = buttons.length;
 
   let nextId = 1;
   const font1 = nextId++;
   const font2 = nextId++;
-  const imageId = nextId++;
+  const headerImageId = nextId++;
+  const limparImageId = nextId++;
+  const limparFormId = nextId++;
   const contentIds = Array.from({ length: n }, () => nextId++);
   const pageIds = Array.from({ length: n }, () => nextId++);
   const pagesId = nextId++;
@@ -448,6 +610,9 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   const apOffId = nextId++;
   const apYesId = nextId++;
   const widgetIds = Array.from({ length: k }, () => nextId++);
+  const textWidgetIds = Array.from({ length: t }, () => nextId++);
+  const buttonWidgetIds = Array.from({ length: b }, () => nextId++);
+  const resetActionId = nextId++;
   const acroFormId = nextId++;
   const outlineRootId = outlines.length > 0 ? nextId++ : -1;
   const assignedOutlines =
@@ -477,12 +642,21 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   obj(font1, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
   obj(font2, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
 
-  offsets[imageId] = pos;
-  write(
-    `${imageId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${size.w} /Height ${size.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoBytes.length} >>\nstream\n`
-  );
-  write(logoBytes);
+  offsets[headerImageId] = pos;
+  write(jpegImageObj(headerImageId, headerBytes, headerSize));
+  write(headerBytes);
   write("\nendstream\nendobj\n");
+
+  offsets[limparImageId] = pos;
+  write(jpegImageObj(limparImageId, limparBytes, limparSize));
+  write(limparBytes);
+  write("\nendstream\nendobj\n");
+
+  const limparStream = `q ${LIMPAR_RECT.w.toFixed(4)} 0 0 ${LIMPAR_RECT.h.toFixed(3)} 0 0 cm /ImLimpar Do Q`;
+  offsets[limparFormId] = pos;
+  write(
+    `${limparFormId} 0 obj\n<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 ${LIMPAR_RECT.w.toFixed(4)} ${LIMPAR_RECT.h.toFixed(3)}] /Matrix [1 0 0 1 0 0] /Resources << /ProcSet [/PDF /ImageC] /XObject << /ImLimpar ${limparImageId} 0 R >> >> /Length ${limparStream.length} >>\nstream\n${limparStream}\nendstream\nendobj\n`
+  );
 
   for (let i = 0; i < n; i++) {
     const stream = pageContents[i];
@@ -495,20 +669,21 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
   write(formXObject(apYesId, CHECK_SIZE, checkboxAppearanceStream(CHECK_SIZE, true)));
 
   const annotsByPage = pageContents.map(() => [] as number[]);
-  for (let i = 0; i < c; i++) {
-    annotsByPage[comments[i].pageIndex]?.push(commentIds[i]);
-  }
-  for (let i = 0; i < k; i++) {
-    annotsByPage[checkboxes[i].pageIndex]?.push(widgetIds[i]);
-  }
+  for (let i = 0; i < c; i++) annotsByPage[comments[i].pageIndex]?.push(commentIds[i]);
+  for (let i = 0; i < k; i++) annotsByPage[checkboxes[i].pageIndex]?.push(widgetIds[i]);
+  for (let i = 0; i < t; i++) annotsByPage[textFields[i].pageIndex]?.push(textWidgetIds[i]);
+  for (let i = 0; i < b; i++) annotsByPage[buttons[i].pageIndex]?.push(buttonWidgetIds[i]);
 
   for (let i = 0; i < n; i++) {
     const annots = annotsByPage[i];
-    const annotsPart =
-      annots.length > 0 ? ` /Annots [${annots.map((id) => `${id} 0 R`).join(" ")}]` : "";
+    const annotsPart = annots.length > 0 ? ` /Annots [${annots.map((id) => `${id} 0 R`).join(" ")}]` : "";
+    const xobjects =
+      i === 0
+        ? `/XObject << /ImHeader ${headerImageId} 0 R >>`
+        : "/XObject << >>";
     obj(
       pageIds[i],
-      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIds[i]} 0 R /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> /XObject << /ImLogo ${imageId} 0 R >> >>${annotsPart} >>`
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIds[i]} 0 R /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> ${xobjects} >>${annotsPart} >>`
     );
   }
 
@@ -530,12 +705,41 @@ export function buildChecklistPdf(input: ChecklistPdfInput, logoJpeg?: Uint8Arra
     const state = field.checked ? "/Yes" : "/Off";
     obj(
       widgetIds[i],
-      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /N /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /MK << /BG [0.94 0.94 0.94] /BC [0.55 0.55 0.55] /CA () >> /BS << /W 1 /S /S >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> /D << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 0 /T ${pdfString(field.name)} /V ${state} /DV /Off /AS ${state} /H /P /F 4 /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.size).toFixed(2)} ${(field.y + field.size).toFixed(2)}] /MK << /BG [0.81 0.816 0.823] /BC [] /CA () >> /BS << /W 0 /S /S >> /AP << /N << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> /D << /Yes ${apYesId} 0 R /Off ${apOffId} 0 R >> >> >>`
     );
   }
 
-  const fieldRefs = widgetIds.map((id) => `${id} 0 R`).join(" ");
-  obj(acroFormId, `<< /Fields [${fieldRefs}] /NeedAppearances false >>`);
+  for (let i = 0; i < t; i++) {
+    const field = textFields[i];
+    const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
+    obj(
+      textWidgetIds[i],
+      `<< /Type /Annot /Subtype /Widget /FT /Tx /T ${pdfString(field.name)} /V () /DV () /F 4 /Ff 0 /Q 0 /DA (/Helv 9 Tf 0.278 0.281 0.277 rg) /MK << /BG [0.93 0.72 0.76] /BC [] >> /BS << /W 0 /S /S >> /P ${destPage} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.w).toFixed(2)} ${(field.y + field.h).toFixed(2)}] >>`
+    );
+  }
+
+  obj(resetActionId, "<< /Type /Action /S /ResetForm /Flags 1 /Fields [] >>");
+
+  for (let i = 0; i < b; i++) {
+    const field = buttons[i];
+    const destPage = pageIds[Math.min(field.pageIndex, n - 1)];
+    obj(
+      buttonWidgetIds[i],
+      `<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T ${pdfString(field.name)} /H /P /F 4 /P ${destPage} 0 R /A ${resetActionId} 0 R /Rect [${field.x.toFixed(2)} ${field.y.toFixed(2)} ${(field.x + field.w).toFixed(2)} ${(field.y + field.h).toFixed(2)}] /MK << /I ${limparFormId} 0 R /IF << /FB true /SW /N >> /TP 1 >> /Border [0 0 0] /AP << /N ${limparFormId} 0 R >> >>`
+    );
+  }
+
+  const fieldRefs = [
+    ...widgetIds,
+    ...textWidgetIds,
+    ...buttonWidgetIds,
+  ]
+    .map((id) => `${id} 0 R`)
+    .join(" ");
+  obj(
+    acroFormId,
+    `<< /Fields [${fieldRefs}] /NeedAppearances true /DR << /Font << /Helv ${font1} 0 R /HeBo ${font2} 0 R >> >> >>`
+  );
 
   if (assignedOutlines.length > 0) {
     const topLevel = assignedOutlines.filter((entry) => entry.parentId === outlineRootId);
