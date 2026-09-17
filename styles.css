@@ -876,6 +876,20 @@ progress::-webkit-progress-value {
   background-color: #2a241c;
 }
 
+.issue-goto.is-last,
+.issue-goto[aria-pressed="true"] {
+  color: #1c1610;
+  border-color: var(--accent);
+  background-color: var(--accent);
+}
+
+.issue-goto.is-last:hover,
+.issue-goto[aria-pressed="true"]:hover {
+  color: #1c1610;
+  border-color: var(--accent-hover);
+  background-color: var(--accent-hover);
+}
+
 .issue-detail {
   color: var(--accent);
   font-size: 10px;
