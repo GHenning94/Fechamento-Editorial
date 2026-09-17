@@ -163,49 +163,142 @@ export function isProcessColorModel(color: Color): boolean {
   }
 }
 
-export function readColorOverprintFill(color: Color): boolean | null {
-  try {
-    const value = color.overprintFill;
-    if (typeof value === "boolean") return value;
-  } catch {
-    // Color.overprintFill não existe no DOM clássico do InDesign
+export function unwrapBooleanFlag(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === -1) return true;
+  if (value === 0) return false;
+  if (typeof value === "string") {
+    const key = value.trim().toLowerCase();
+    if (key === "true" || key === "yes") return true;
+    if (key === "false" || key === "no") return false;
+  }
+  if (value && typeof value === "object") {
+    const inner = (value as { value?: unknown }).value;
+    if (inner !== value) return unwrapBooleanFlag(inner);
   }
   return null;
 }
 
+export function unwrapNumberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object") {
+    const inner = (value as { value?: unknown }).value;
+    if (typeof inner === "number" && Number.isFinite(inner)) return inner;
+  }
+  return null;
+}
+
+function firstBooleanFlag(getters: Array<() => unknown>): boolean | null {
+  let seenFalse = false;
+  for (const getter of getters) {
+    try {
+      const parsed = unwrapBooleanFlag(getter());
+      if (parsed === true) return true;
+      if (parsed === false) seenFalse = true;
+    } catch {
+      // ignore
+    }
+  }
+  return seenFalse ? false : null;
+}
+
+export function readColorOverprintFill(color: Color): boolean | null {
+  return firstBooleanFlag([
+    () => color.overprintFill,
+    () => (color as Color & { fillOverprint?: unknown }).fillOverprint,
+  ]);
+}
+
 export function itemHasFillOverprint(item: PageItem): boolean {
-  try {
-    if (item.fillOverprint === true) return true;
-  } catch {
-    // ignore
-  }
-  try {
-    if ((item as PageItem & { overprintFill?: boolean }).overprintFill === true) return true;
-  } catch {
-    // ignore
-  }
-  return false;
+  const target = item as PageItem & {
+    overprintFill?: unknown;
+    properties?: { fillOverprint?: unknown; overprintFill?: unknown };
+  };
+  return (
+    firstBooleanFlag([
+      () => item.fillOverprint,
+      () => target.overprintFill,
+      () => target.properties?.fillOverprint,
+      () => target.properties?.overprintFill,
+    ]) === true
+  );
 }
 
 export function itemHasStrokeOverprint(item: PageItem): boolean {
-  try {
-    if (item.strokeOverprint === true) return true;
-  } catch {
-    // ignore
-  }
-  try {
-    if ((item as PageItem & { overprintStroke?: boolean }).overprintStroke === true) return true;
-  } catch {
-    // ignore
-  }
-  return false;
+  const target = item as PageItem & {
+    overprintStroke?: unknown;
+    properties?: { strokeOverprint?: unknown; overprintStroke?: unknown };
+  };
+  return (
+    firstBooleanFlag([
+      () => item.strokeOverprint,
+      () => target.overprintStroke,
+      () => target.properties?.strokeOverprint,
+      () => target.properties?.overprintStroke,
+    ]) === true
+  );
 }
 
 export function styleHasOverprintFill(style: ParagraphStyle): boolean {
+  const target = style as ParagraphStyle & {
+    fillOverprint?: unknown;
+    properties?: { overprintFill?: unknown; fillOverprint?: unknown };
+  };
+  return (
+    firstBooleanFlag([
+      () => style.overprintFill,
+      () => target.fillOverprint,
+      () => target.properties?.overprintFill,
+      () => target.properties?.fillOverprint,
+    ]) === true
+  );
+}
+
+export function pageItemTypeName(item: PageItem): string {
   try {
-    return style.overprintFill === true;
+    return item.constructor?.name || "";
   } catch {
-    return false;
+    return "";
+  }
+}
+
+const SKIP_GUIDE_OVERPRINT_TYPES =
+  /^(Group|Image|PDF|EPS|Graphic|ImportedPage|HTML|Movie|Sound|Button|MultiStateObject|MediaItem|FormField)$/i;
+
+/** Grupos e gráficos colocados não pintam tinta própria; o overprint vive nos filhos/quadro. */
+export function skipGuideOverprintContainer(item: PageItem): boolean {
+  return SKIP_GUIDE_OVERPRINT_TYPES.test(pageItemTypeName(item));
+}
+
+export function isGraphicLineItem(item: PageItem): boolean {
+  return /graphicline/i.test(pageItemTypeName(item));
+}
+
+export function isNoneSwatchName(name: string): boolean {
+  if (!name) return true;
+  const key = name
+    .replace(/^\[|\]$/g, "")
+    .trim()
+    .toLowerCase();
+  return key === "none" || key === "nenhum" || key === "nenhuma";
+}
+
+export function readTintPercent(getter: () => unknown): number {
+  try {
+    const raw = unwrapNumberValue(getter());
+    if (raw == null || raw < 0) return 100;
+    if (raw > 0 && raw <= 1) return raw * 100;
+    return raw;
+  } catch {
+    return 100;
+  }
+}
+
+export function readStrokeWeightPt(item: PageItem): number {
+  try {
+    return unwrapNumberValue(item.strokeWeight) ?? 0;
+  } catch {
+    return 0;
   }
 }
 

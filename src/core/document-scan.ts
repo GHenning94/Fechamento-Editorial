@@ -7,7 +7,8 @@ import {
 } from "../utils/indesign-helpers";
 import { isCorProfColorName, isGuiasDeletarColorName } from "../utils/editorial-color";
 import { isPluginGeneratedItem } from "../utils/editorial-layer";
-import { itemHasFillOverprint, itemHasStrokeOverprint, swatchNameOf } from "../utils/color-model";
+import { isNoneSwatchName, swatchNameOf } from "../utils/color-model";
+import { readGuideColorUse } from "../utils/guide-color-usage";
 
 export interface ColorUseSnap {
   item: PageItem;
@@ -17,15 +18,6 @@ export interface ColorUseSnap {
   strokeName: string;
   fillOverprint: boolean;
   strokeOverprint: boolean;
-}
-
-function isIgnorableSwatchName(name: string): boolean {
-  if (!name) return true;
-  const key = name
-    .replace(/^\[|\]$/g, "")
-    .trim()
-    .toLowerCase();
-  return key === "none" || key === "nenhum" || key === "nenhuma";
 }
 
 function isGuideSwatch(name: string): boolean {
@@ -76,31 +68,21 @@ export class DocumentScan {
 
     const usage: ColorUseSnap[] = [];
     walkDirectPageItems(this.doc, (item, _page, pageName) => {
-      let fillName = "";
-      let strokeName = "";
-      try {
-        fillName = swatchNameOf(item.fillColor);
-      } catch {
-        fillName = "";
-      }
-      try {
-        strokeName = swatchNameOf(item.strokeColor);
-      } catch {
-        strokeName = "";
-      }
+      const use = readGuideColorUse(item, isGuideSwatch);
+      if (!use) return;
 
-      const fillIsGuide = isGuideSwatch(fillName);
-      const strokeIsGuide = isGuideSwatch(strokeName);
+      const fillIsGuide = isGuideSwatch(use.fillName);
+      const strokeIsGuide = isGuideSwatch(use.strokeName);
       if (!fillIsGuide && !strokeIsGuide) return;
 
       usage.push({
         item,
         pageName,
         objectName: cheapPageItemName(item),
-        fillName: fillIsGuide ? fillName : "",
-        strokeName: strokeIsGuide ? strokeName : "",
-        fillOverprint: fillIsGuide ? itemHasFillOverprint(item) : false,
-        strokeOverprint: strokeIsGuide ? itemHasStrokeOverprint(item) : false,
+        fillName: fillIsGuide ? use.fillName : "",
+        strokeName: strokeIsGuide ? use.strokeName : "",
+        fillOverprint: use.fillOverprint,
+        strokeOverprint: use.strokeOverprint,
       });
     });
     this.colorUsageCache = usage;
@@ -121,7 +103,7 @@ export class DocumentScan {
           if (typeof weight === "number" && weight > 0) {
             let skipStroke = false;
             try {
-              skipStroke = isIgnorableSwatchName(swatchNameOf(item.strokeColor));
+              skipStroke = isNoneSwatchName(swatchNameOf(item.strokeColor));
             } catch {
               skipStroke = false;
             }

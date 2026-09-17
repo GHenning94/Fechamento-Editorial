@@ -1,13 +1,9 @@
 import type { Document, PageItem } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
-import { LAYER_GUIAS_DELETAR, VALIDATOR_IDS } from "../utils/constants";
-import {
-  itemHasFillOverprint,
-  itemHasStrokeOverprint,
-  swatchNameOf,
-} from "../utils/color-model";
+import { COLOR_GUIAS_DELETAR, LAYER_GUIAS_DELETAR, VALIDATOR_IDS } from "../utils/constants";
 import { isGuiasDeletarColorName } from "../utils/editorial-color";
+import { readGuideColorUse } from "../utils/guide-color-usage";
 import { getPageItemDisplayName, isGuideColor, walkDirectPageItems } from "../utils/indesign-helpers";
 import { readPageItemId } from "../utils/page-item-reveal";
 import { getValidationScan } from "../core/validation-cache";
@@ -58,18 +54,18 @@ export class OverprintValidator extends BaseValidator {
         }
       } else {
         walkDirectPageItems(doc, (item, _page, pageName) => {
+          const use = readGuideColorUse(item, isGuideColor);
+          if (!use) return;
           try {
-            const fillName = swatchNameOf(item.fillColor);
-            if (isGuideColor(fillName) && !itemHasFillOverprint(item)) {
-              report(pageName, getPageItemDisplayName(item), "Fill", fillName, item);
+            if (use.fillName && isGuideColor(use.fillName) && !use.fillOverprint) {
+              report(pageName, getPageItemDisplayName(item), "Fill", use.fillName, item);
             }
           } catch {
             // ignore
           }
           try {
-            const strokeName = swatchNameOf(item.strokeColor);
-            if (isGuideColor(strokeName) && !itemHasStrokeOverprint(item)) {
-              report(pageName, getPageItemDisplayName(item), "Stroke", strokeName, item);
+            if (use.strokeName && isGuideColor(use.strokeName) && !use.strokeOverprint) {
+              report(pageName, getPageItemDisplayName(item), "Stroke", use.strokeName, item);
             }
           } catch {
             // ignore
@@ -80,7 +76,7 @@ export class OverprintValidator extends BaseValidator {
       if (guiasMissingOverprint) {
         issues.push({
           message: `Overprint não aplicado na layer ${LAYER_GUIAS_DELETAR}`,
-          details: `Tudo dentro da layer ${LAYER_GUIAS_DELETAR} deve ter Fill e Stroke Overprint, em todas as páginas. Revise o documento.`,
+          details: `Objetos com a cor ${COLOR_GUIAS_DELETAR} precisam de Overprint Fill no preenchimento e Overprint Stroke no traço, quando esses canais existirem. Revise todas as páginas.`,
         });
       }
 

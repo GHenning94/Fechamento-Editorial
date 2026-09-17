@@ -2,9 +2,8 @@ import type { Document } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
 import { COLOR_GUIAS_DELETAR, VALIDATOR_IDS } from "../utils/constants";
-import { findGuiasDeletarColor, isGuiasDeletarColorName } from "../utils/editorial-color";
+import { findGuiasDeletarColor } from "../utils/editorial-color";
 import { isSpotColor } from "../utils/color-model";
-import { colorOverprintSatisfied } from "../utils/guide-color-overprint";
 
 export class GuiasColorValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.GUIAS_COLOR;
@@ -34,13 +33,6 @@ export class GuiasColorValidator extends BaseValidator {
       if (!isSpotColor(match.color)) {
         issues.push({
           message: "GUIAS_DELETAR deve ser Spot Color",
-          object: match.foundName,
-        });
-      }
-
-      if (!colorOverprintSatisfied(doc, match.color, isGuiasDeletarColorName)) {
-        issues.push({
-          message: "GUIAS_DELETAR sem Overprint Fill ativo",
           object: match.foundName,
         });
       }

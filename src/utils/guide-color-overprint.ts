@@ -1,13 +1,8 @@
 import type { Color, Document, ParagraphStyle } from "indesign";
 import { forEachCollectionItem } from "./collection-helpers";
-import {
-  itemHasFillOverprint,
-  itemHasStrokeOverprint,
-  readColorOverprintFill,
-  styleHasOverprintFill,
-  swatchNameOf,
-} from "./color-model";
+import { readColorOverprintFill, styleHasOverprintFill, swatchNameOf } from "./color-model";
 import { getValidationScan } from "../core/validation-cache";
+import { readGuideColorUse } from "./guide-color-usage";
 import { walkDirectPageItems } from "./indesign-helpers";
 
 export function colorOverprintSatisfied(
@@ -40,11 +35,12 @@ export function guideColorUsageMissingOverprint(
     }
   } else {
     walkDirectPageItems(doc, (item) => {
+      const use = readGuideColorUse(item, matchesName);
+      if (!use) return;
       try {
-        const fillName = swatchNameOf(item.fillColor);
-        if (fillName && matchesName(fillName)) {
+        if (use.fillName && matchesName(use.fillName)) {
           foundUsage = true;
-          if (!itemHasFillOverprint(item)) {
+          if (!use.fillOverprint) {
             missing = true;
             return false;
           }
@@ -53,10 +49,9 @@ export function guideColorUsageMissingOverprint(
         // ignore
       }
       try {
-        const strokeName = swatchNameOf(item.strokeColor);
-        if (strokeName && matchesName(strokeName)) {
+        if (use.strokeName && matchesName(use.strokeName)) {
           foundUsage = true;
-          if (!itemHasStrokeOverprint(item)) {
+          if (!use.strokeOverprint) {
             missing = true;
             return false;
           }

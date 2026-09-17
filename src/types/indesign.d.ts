@@ -110,6 +110,7 @@ declare module "indesign" {
     selection: unknown;
     activeWindow?: {
       activePage?: Page;
+      activeSpread?: unknown;
       zoom?: (to: unknown) => void;
       select?: (value: unknown) => void;
     };
@@ -208,6 +209,10 @@ declare module "indesign" {
     stories: Stories;
     spreads: Spreads;
     masterSpreads?: Spreads;
+    layoutWindows?: {
+      length: number;
+      item(index: number): { activePage?: Page; activeSpread?: unknown };
+    };
     preflightOptions: PreflightOption;
     preflightProfiles: PreflightProfiles;
     documentPreferences: DocumentPreferences;
