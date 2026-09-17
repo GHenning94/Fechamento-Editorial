@@ -197,26 +197,20 @@ function formatIssue(summary: ValidationSummary, issue: ValidationIssue, validat
 
 export function mapOriginalChecklist(
   summary: ValidationSummary | null,
-  artifacts?: ChecklistArtifacts
+  _artifacts?: ChecklistArtifacts,
+  options?: { markPackage?: boolean }
 ): ChecklistPdfItem[] {
   const results = summary?.results || [];
 
   return ORIGINAL_ROWS.map((row) => {
     if (row.packageArtifacts) {
-      const ready = Boolean(
-        artifacts?.packageGenerated && artifacts?.idmlGenerated && artifacts?.pdfArteGenerated
-      );
+      const mark = Boolean(options?.markPackage);
       return {
         id: row.id,
         section: row.section,
         label: row.label,
-        checked: ready,
-        details: ready
-          ? []
-          : artifacts
-            ? ["Erro: Package, IDML ou PDF arte ainda nao gerados neste fechamento."]
-            : [],
-        reviewKind: ready || !artifacts ? undefined : "error",
+        checked: mark,
+        details: [],
       };
     }
 

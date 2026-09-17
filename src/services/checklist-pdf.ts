@@ -19,6 +19,8 @@ const CORPROF = "0.932 0.239 0.589";
 const FACA_CYAN = "0 0.702 0.942";
 const CHECK_FILL = "0.810 0.816 0.823";
 const LIMPAR_RECT = { x: 56.6929, y: 752.989, w: 43.2284, h: 47.518 };
+const COMMENT_SIZE = 14;
+const COMMENT_GAP = 4;
 const REVIEW_LINE = "Há conteúdo a ser avaliado";
 const FIELD_GAP = 26;
 const INSTRUCTIONS = [
@@ -292,6 +294,16 @@ function reviewDetails(item: ChecklistPdfItem): string[] {
   return details;
 }
 
+function splitReview(details: string[]): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  for (const line of details) {
+    if (/^alerta\b/i.test(line)) warnings.push(line);
+    else errors.push(line);
+  }
+  return { errors, warnings };
+}
+
 function itemBlockHeight(item: ChecklistPdfItem, itemWidth: number): number {
   const titleLines = wrapTextToWidth(item.label, 9, itemWidth);
   const hasReview = reviewDetails(item).length > 0;
@@ -352,7 +364,7 @@ function buildPageContent(input: ChecklistPdfInput): {
   const textFields: TextField[] = [];
   const buttons: PushButton[] = [];
   const textX = MARGIN_X + 13;
-  const itemWidth = PAGE_W - textX - 36;
+  const itemWidth = PAGE_W - textX - 42;
   let pageIndex = 0;
   let y = 694.66;
 
@@ -486,6 +498,7 @@ function buildPageContent(input: ChecklistPdfInput): {
     if (details.length > 0) {
       currentCmds().push(textAt(textX, y, 7.5, "F2", CORPROF, REVIEW_LINE));
       y -= 10;
+      const { errors, warnings } = splitReview(details);
       outlines.push({
         title: item.label.slice(0, 80),
         pageIndex,
@@ -497,14 +510,32 @@ function buildPageContent(input: ChecklistPdfInput): {
           children: [],
         })),
       });
-      comments.push({
-        title: item.label.slice(0, 60),
-        contents: details.join("\n\n"),
-        pageIndex,
-        x: PAGE_W - MARGIN_X - 16,
-        y: itemY - 2,
-        warning: item.reviewKind !== "error",
-      });
+      const right = PAGE_W - MARGIN_X - 2;
+      const warningX = right - COMMENT_SIZE;
+      const errorX =
+        errors.length > 0 && warnings.length > 0
+          ? warningX - COMMENT_SIZE - COMMENT_GAP
+          : warningX;
+      if (errors.length > 0) {
+        comments.push({
+          title: `${item.label.slice(0, 50)} (erros)`,
+          contents: errors.join("\n\n"),
+          pageIndex,
+          x: errorX,
+          y: itemY - 2,
+          warning: false,
+        });
+      }
+      if (warnings.length > 0) {
+        comments.push({
+          title: `${item.label.slice(0, 50)} (alertas)`,
+          contents: warnings.join("\n\n"),
+          pageIndex,
+          x: warningX,
+          y: itemY - 2,
+          warning: true,
+        });
+      }
     }
 
     y -= 6;
@@ -653,9 +684,10 @@ export function buildChecklistPdf(input: ChecklistPdfInput): Uint8Array {
   for (let i = 0; i < c; i++) {
     const note = comments[i];
     const destPage = pageIds[Math.min(note.pageIndex, n - 1)];
+    const color = note.warning ? "0.95 0.72 0.18" : "0.847 0.200 0.380";
     obj(
       commentIds[i],
-      `<< /Type /Annot /Subtype /Text /Name /Comment /Open false /F 4 /C [${note.warning ? "0.95 0.72 0.18" : "0.847 0.200 0.380"}] /Rect [${note.x.toFixed(2)} ${note.y.toFixed(2)} ${(note.x + 14).toFixed(2)} ${(note.y + 14).toFixed(2)}] /P ${destPage} 0 R /T ${pdfString(note.title)} /Contents ${pdfString(note.contents)} >>`
+      `<< /Type /Annot /Subtype /Text /Name /Comment /Open false /F 4 /C [${color}] /Rect [${note.x.toFixed(2)} ${note.y.toFixed(2)} ${(note.x + COMMENT_SIZE).toFixed(2)} ${(note.y + COMMENT_SIZE).toFixed(2)}] /P ${destPage} 0 R /T ${pdfString(note.title)} /Contents ${pdfString(note.contents)} /Subj ${pdfString(note.warning ? "Alerta" : "Erro")} >>`
     );
   }
 

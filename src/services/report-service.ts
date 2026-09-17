@@ -49,7 +49,7 @@ export class ReportService {
       documentName: report.documentName,
       user,
       date: report.date,
-      items: mapOriginalChecklist(report.checklist, report.artifacts),
+      items: mapOriginalChecklist(report.checklist, report.artifacts, { markPackage: true }),
       notes,
     });
     await writeBinaryFile(target, bytes);
