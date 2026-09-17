@@ -8,6 +8,8 @@ report/
 tmp_ref/
 tools/.license-private.pem
 tools/.license-secret
+tools/issued-serials.json
 **/.license-install
+.vercel
 tools/activation-server/used-serials.json
 Fechamento Editorial/

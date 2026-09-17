@@ -1,9 +1,8 @@
 /**
- * Servidor que registra cada serial (obrigatório).
- * Cada código vale uma vez, neste computador e nesta instalação.
- * Produção: "https://fechamento-editorial.onrender.com"
+ * Endereço do Vercel (uso único). Você não liga servidor: o InDesign fala com isso sozinho.
+ * Depois do primeiro deploy, se a URL for outra, cole aqui e rode npm run build.
  */
-export const LICENSE_ACTIVATION_URL: string = "https://fechamento-editorial.onrender.com";
+export const LICENSE_ACTIVATION_URL: string = "https://fechamento-editorial-dkhbcbi2v.vercel.app";
 
 /**
  * Exibe botão "Resetar licença" no painel (somente para testes).

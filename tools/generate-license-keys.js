@@ -22,6 +22,10 @@ function writePublicFiles(privateKey) {
   const rawPublic = Buffer.from(spkiDer.subarray(spkiDer.length - 32));
 
   fs.writeFileSync(PUBLIC_B64_PATH, spkiDer.toString("base64") + "\n");
+  fs.writeFileSync(
+    path.join(TOOLS_DIR, "license-public.js"),
+    `module.exports = {\n  LICENSE_PUBLIC_KEY_B64: "${rawPublic.toString("base64")}",\n};\n`
+  );
 
   const ts = `/**
  * Chave pública Ed25519 (32 bytes raw, Base64).

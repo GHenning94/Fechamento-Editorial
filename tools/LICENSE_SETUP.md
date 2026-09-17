@@ -1,120 +1,90 @@
 # Como o serial funciona (guia prático)
 
-Cada serial `EAC2-...` vale **uma vez**. Ele fica preso a **este computador** e a **esta instalação** do plugin.
+Cada serial `EAC2-...` vale **uma vez**. Ele fica preso a **este computador** e a **esta instalação**.
 
 | O que a pessoa fez | Precisa de serial novo? |
 |---|---|
 | Fechou e abriu o InDesign | Não |
 | Atualizou o plugin pelo botão verde | Não |
-| Colou o mesmo código em outro computador | Sim (o antigo é recusado) |
-| Desinstalou o plugin | Sim |
-| Reinstalou o plugin | Sim |
+| Colou o mesmo código em outro computador | Sim |
+| Desinstalou ou reinstalou o plugin | Sim |
 
-A primeira ativação precisa de internet. Depois, aquele InDesign funciona sem rede, até desinstalar.
+No seu dia a dia você **só gera o serial no Terminal**, como antes. Não liga servidor.
 
----
-
-## 1. Uma vez só: guardar a chave privada
-
-No seu Mac, o arquivo secreto já foi criado:
-
-`tools/.license-private.pem`
-
-1. Copie esse arquivo para um lugar seguro (pendrive, iCloud com senha, cofre).
-2. **Não** envie esse arquivo no WhatsApp, e-mail ou GitHub.
-3. Sem ele, você não consegue gerar seriais novos.
-
-Se o arquivo já existe, **não** rode de novo o comando de gerar chaves com `--force`.
+A pessoa, na primeira ativação, precisa de internet. O InDesign fala sozinho com o Vercel (um site que não “desliga”). Isso é configurado **uma vez**.
 
 ---
 
-## 2. Uma vez só: ligar o servidor no Render
+## 1. Ver a chave privada (o Finder esconde)
 
-O plugin pergunta a um servidor na internet se o serial ainda não foi usado. Sem isso, o uso único não funciona.
+O arquivo existe: o nome começa com ponto (`.license-private.pem`), então o Finder não mostra.
 
-1. Entre em [https://dashboard.render.com](https://dashboard.render.com) e faça login (pode usar a conta do GitHub).
-2. Abra o serviço **fechamento-editorial**. Se ainda não existir:
-   - **New +** → **Blueprint** (ou Web Service)
-   - Conecte o repositório `Fechamento-Editorial`
-   - O arquivo `render.yaml` já descreve o serviço
-3. Em **Environment**, crie:
-   - `LICENSE_ADMIN_SECRET` = uma senha longa que só você sabe (anote no mesmo lugar da chave privada)
-   - `LICENSE_PUBLIC_KEY_B64` = pode deixar em branco; o servidor lê a chave pública do repositório
-4. Em **Disk**, confirme um disco montado em `/var/data` (senão a lista de seriais some quando o servidor reinicia).
-5. Clique em **Manual Deploy** → **Deploy latest commit** (depois de enviar o código ao GitHub).
-6. Espere ficar **Live**. Abra no navegador:  
-   `https://fechamento-editorial.onrender.com/health`  
-   Tem de aparecer `"ok": true`.
+No Terminal, na pasta do projeto:
 
-Se o serviço “dormir” no plano gratuito, a primeira ativação do dia pode demorar ou falhar. Nesse caso, abra o endereço acima uma vez e tente ativar de novo.
+```bash
+npm run license:show-key
+```
+
+O Finder abre com o arquivo selecionado. Se a lista continuar vazia, pressione **Command + Shift + ponto (.)**.
+
+Copie esse arquivo para um pendrive ou pasta com senha. **Não** mande no WhatsApp nem no GitHub.
 
 ---
 
-## 3. Enviar o código ao GitHub e recarregar o plugin
+## 2. Uma vez só: Vercel (não precisa do Render)
 
-1. No **GitHub Desktop**, escreva um resumo (por exemplo: `Licença de uso único`) e faça **Commit** e **Push**.
-2. Espere o Render terminar o deploy.
-3. No computador de teste, no **UDT** (Adobe UXP Developer Tool):
-   - **Unload** no plugin
-   - **Load** na pasta `dist/manifest.json`
-4. Abra o InDesign e o painel **EDITORIAL AUTOCLOSE**.
+Pode ser Vercel. Não use o Render gratuito: ele dorme e a ativação falha.
+
+1. Entre em [https://vercel.com](https://vercel.com) e faça login com o **GitHub**.
+2. **Add New…** → **Project** → importe `Fechamento-Editorial`.
+3. Framework Preset: **Other**. Clique em **Deploy**.
+4. Quando terminar, abra o projeto → aba **Storage** → **Create** → **Upstash Redis** (ou Redis) → conecte **neste** projeto.
+5. Em **Settings** → **Environment Variables**, crie `LICENSE_ADMIN_SECRET` com uma senha longa que só você saiba. Anote junto da chave privada.
+6. Em **Deployments**, faça **Redeploy** do último deploy (para o Redis valer).
+7. Copie a URL de produção (no seu projeto: `https://fechamento-editorial-dkhbcbi2v.vercel.app`).
+8. Se a URL for **diferente** da que está em `src/licensing/license-config.ts`, cole a URL certa ali.
+9. No GitHub Desktop: commit, push. O Vercel publica sozinho.
+10. Abra no Safari: `SUA-URL/health` — tem que aparecer `"ok": true` e `"store": "kv"`.
+
+Você **não** liga isso no dia a dia. Fica no ar sozinho, sem “acordar” site.
 
 ---
 
-## 4. Gerar um serial (sempre que for dar o plugin a alguém)
+## 3. Recarregar o plugin uma vez
 
-1. Abra o **Terminal** na pasta do projeto.
-2. Cole (troque o nome):
+No **UDT**: **Unload** → **Load** em `dist/manifest.json`. Abra o InDesign.
+
+---
+
+## 4. Todo dia: gerar serial e enviar (igual ao HMAC)
 
 ```bash
 npm run license:serial -- "Nome da pessoa"
 ```
 
-3. Aparece uma linha começando com `EAC2-`. Ela já vai para a área de transferência.
-4. Envie **essa linha inteira** só para aquela pessoa (WhatsApp, e-mail interno).
-5. Guarde na sua lista quem recebeu qual código (o computador também anota em `tools/issued-serials.json`, que não vai para o GitHub).
-
-A pessoa cola o código no InDesign **com internet ligada**. Se colar em outro computador, ou desinstalar e tentar o mesmo código, o plugin recusa.
+Cole a linha `EAC2-...` inteira só para aquela pessoa. Pronto.
 
 ---
 
 ## 5. Distribuir o plugin (.ccx)
 
-1. Abra `src/update/update-config.ts` e deixe `UPDATE_DEV_FORCE_BANNER = false`.
-2. No Terminal:
-
-```bash
-npm run package:ccx
-```
-
-3. O arquivo sai em `release/EditorialAutoClose.ccx`.
-4. A pessoa dá clique duplo no `.ccx` (Creative Cloud) ou instala pelo UDT.
-
-Cada pessoa precisa do **próprio** serial. Não compartilhe um código no grupo.
+1. Em `src/update/update-config.ts`, `UPDATE_DEV_FORCE_BANNER = false`.
+2. `npm run package:ccx`
+3. Arquivo em `release/EditorialAutoClose.ccx`.
 
 ---
 
-## 6. Se a pessoa desinstalou, formatou o Mac ou o serial “já foi usado”
+## 6. Desinstalou / “serial já foi usado”
 
-Gere **outro** serial (`npm run license:serial`) e envie para ela.
-
-Só use a liberação do código antigo se você tiver certeza de que ninguém mais vai usar aquele serial:
-
-```bash
-LICENSE_ADMIN_SECRET=sua-senha npm run license:release -- "EAC2-cole-o-codigo-inteiro"
-```
-
-A senha é a mesma do Render. No dia a dia, é mais simples emitir um serial novo.
+Gere **outro** serial e envie. Não reaproveite o anterior.
 
 ---
 
-## 7. Problemas comuns
+## Problemas comuns
 
 | O que aparece | O que fazer |
 |---|---|
-| Serial já foi usado | Essa pessoa precisa de um código **novo** |
-| Não foi possível contactar o servidor | Internet ligada; abrir o endereço `/health` do Render |
-| Serial não reconhecido | Colar o código **inteiro**, começando com `EAC2-` |
-| Pediu serial depois de só fechar o InDesign | Recarregue o plugin (`Unload` → `Load`) uma vez nesta versão nova |
-
-Não rode `npm run license:keys -- --force` depois que alguém já estiver usando o plugin: todos os seriais antigos deixam de valer.
+| Não vejo `.license-private.pem` | `npm run license:show-key` ou Command + Shift + ponto no Finder |
+| Serial já foi usado | Código novo para essa pessoa |
+| Não foi possível contactar o servidor | Internet da pessoa; conferir `/health` no Vercel |
+| `"store": "file"` no /health | Falta conectar o Redis no Vercel e fazer Redeploy |

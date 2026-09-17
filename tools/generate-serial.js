@@ -127,7 +127,7 @@ if (note) {
 }
 console.log("");
 console.log(`Registrado em: ${LEDGER_PATH}`);
-console.log("Assinado com Ed25519. Quem só tem o GitHub público não consegue gerar este código.");
+console.log("No dia a dia você só gera o serial. Não precisa ligar servidor.");
 console.log("Uso único: vale uma vez, neste computador e nesta instalação.");
 console.log("Desinstalar ou reinstalar o plugin exige um serial novo.");
 console.log("O serial foi copiado. No InDesign, abra o painel e clique em Ativar.");

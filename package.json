@@ -11,6 +11,7 @@
     "license:keys": "node tools/generate-license-keys.js",
     "license:secret": "node tools/generate-license-keys.js",
     "license:serial": "node tools/generate-serial.js",
+    "license:show-key": "node tools/show-license-key.js",
     "license:release": "node tools/release-serial.js",
     "license:server": "node tools/activation-server/server.js"
   },

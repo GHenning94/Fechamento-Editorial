@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo skipped",
+  "buildCommand": "echo skipped",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/activate", "destination": "/api/activate" },
+    { "source": "/release", "destination": "/api/release" },
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/", "destination": "/api/health" }
+  ]
+}
