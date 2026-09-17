@@ -18,7 +18,7 @@ const SUCCESS_TEXT: Record<string, string> = {
   [VALIDATOR_IDS.GUIAS_COLOR]:
     "A cor GUIAS_DELETAR está aplicada corretamente na layer de guias.",
   [VALIDATOR_IDS.OVERPRINT]:
-    "Objetos com CorProf e GUIAS_DELETAR estão com overprint de preenchimento e traço.",
+    "Objetos com a cor GUIAS_DELETAR estão com overprint de preenchimento e traço.",
   [VALIDATOR_IDS.ESTILOS_IDIOMA]:
     "Os estilos de parágrafo estão com o idioma Português: Brasileiro.",
   [VALIDATOR_IDS.HIFENIZACAO]:

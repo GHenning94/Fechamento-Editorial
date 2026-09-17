@@ -4,7 +4,7 @@ import { createResult, ValidationIssue } from "../models/validation-result";
 import { COLOR_CORPROF, VALIDATOR_IDS } from "../utils/constants";
 import { findCorProfColor, isCorProfColorName } from "../utils/editorial-color";
 import { isSpotColor } from "../utils/color-model";
-import { colorOverprintSatisfied } from "../utils/guide-color-overprint";
+import { collectMissingColorOverprintIssues } from "../utils/guide-color-overprint";
 
 export class CorProfValidator extends BaseValidator {
   readonly id = VALIDATOR_IDS.CORPROF;
@@ -38,12 +38,7 @@ export class CorProfValidator extends BaseValidator {
         });
       }
 
-      if (!colorOverprintSatisfied(doc, match.color, isCorProfColorName)) {
-        issues.push({
-          message: "CorProf sem Overprint Fill ativo",
-          object: match.foundName,
-        });
-      }
+      issues.push(...collectMissingColorOverprintIssues(doc, isCorProfColorName));
 
       return createResult(this.id, this.name, issues, "error");
     });

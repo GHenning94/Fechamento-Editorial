@@ -1,83 +1,73 @@
-import type { Color, Document, ParagraphStyle } from "indesign";
-import { forEachCollectionItem } from "./collection-helpers";
-import { readColorOverprintFill, styleHasOverprintFill, swatchNameOf } from "./color-model";
+import type { Document, PageItem } from "indesign";
+import type { ValidationIssue } from "../models/validation-result";
 import { getValidationScan } from "../core/validation-cache";
-import { readGuideColorUse, collectGuideTextColorUseFromItem } from "./guide-color-usage";
-import { walkDirectPageItems } from "./indesign-helpers";
+import { collectGuideTextColorUseFromItem, readGuideColorUse } from "./guide-color-usage";
+import { getPageItemDisplayName, walkDirectPageItems } from "./indesign-helpers";
+import { readPageItemId } from "./page-item-reveal";
 
-export function colorOverprintSatisfied(
-  doc: Document,
-  color: Color,
-  matchesName: (name: string) => boolean
-): boolean {
-  if (readColorOverprintFill(color) === true) return true;
-  return !guideColorUsageMissingOverprint(doc, matchesName);
-}
-
-export function guideColorUsageMissingOverprint(
+export function collectMissingColorOverprintIssues(
   doc: Document,
   matchesName: (name: string) => boolean
-): boolean {
-  let foundUsage = false;
-  let missing = false;
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  const report = (
+    pageName: string,
+    objectName: string,
+    kind: "Fill" | "Stroke",
+    colorName: string,
+    item?: PageItem | null
+  ): void => {
+    issues.push({
+      message: `Objeto sem ${kind} Overprint`,
+      page: pageName,
+      object: objectName || "Objeto",
+      details: `Cor aplicada: ${colorName}`,
+      itemId: readPageItemId(item),
+    });
+  };
+
+  const objectLabel = (item: PageItem, fallback: string): string => {
+    if (fallback) return fallback;
+    return getPageItemDisplayName(item);
+  };
 
   const cached = getValidationScan()?.getColorUsage();
   if (cached) {
     for (const snap of cached) {
-      if (snap.fillName && matchesName(snap.fillName)) {
-        foundUsage = true;
-        if (!snap.fillOverprint) return true;
+      if (snap.fillName && matchesName(snap.fillName) && !snap.fillOverprint) {
+        report(snap.pageName, objectLabel(snap.item, snap.objectName), "Fill", snap.fillName, snap.item);
       }
-      if (snap.strokeName && matchesName(snap.strokeName)) {
-        foundUsage = true;
-        if (!snap.strokeOverprint) return true;
+      if (snap.strokeName && matchesName(snap.strokeName) && !snap.strokeOverprint) {
+        report(snap.pageName, objectLabel(snap.item, snap.objectName), "Stroke", snap.strokeName, snap.item);
       }
     }
-  } else {
-    walkDirectPageItems(doc, (item) => {
-      const uses = [
-        readGuideColorUse(item, matchesName),
-        ...collectGuideTextColorUseFromItem(item, matchesName),
-      ];
-      for (const use of uses) {
-        if (!use) continue;
-        try {
-          if (use.fillName && matchesName(use.fillName)) {
-            foundUsage = true;
-            if (!use.fillOverprint) {
-              missing = true;
-              return false;
-            }
-          }
-        } catch {
-          // ignore
-        }
-        try {
-          if (use.strokeName && matchesName(use.strokeName)) {
-            foundUsage = true;
-            if (!use.strokeOverprint) {
-              missing = true;
-              return false;
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    });
-    if (missing) return true;
+    return issues;
   }
 
-  forEachCollectionItem<ParagraphStyle>(doc.paragraphStyles, (style) => {
-    if (missing || !style?.isValid) return;
-    try {
-      if (!matchesName(swatchNameOf(style.fillColor))) return;
-      foundUsage = true;
-      if (!styleHasOverprintFill(style)) missing = true;
-    } catch {
-      // ignore
+  walkDirectPageItems(doc, (item, _page, pageName) => {
+    const uses = [
+      readGuideColorUse(item, matchesName),
+      ...collectGuideTextColorUseFromItem(item, matchesName),
+    ];
+    for (const use of uses) {
+      if (!use) continue;
+      try {
+        if (use.fillName && matchesName(use.fillName) && !use.fillOverprint) {
+          report(pageName, getPageItemDisplayName(item), "Fill", use.fillName, item);
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        if (use.strokeName && matchesName(use.strokeName) && !use.strokeOverprint) {
+          report(pageName, getPageItemDisplayName(item), "Stroke", use.strokeName, item);
+        }
+      } catch {
+        // ignore
+      }
     }
   });
 
-  return foundUsage ? missing : false;
+  return issues;
 }
