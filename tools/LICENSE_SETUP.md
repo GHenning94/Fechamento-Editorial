@@ -40,11 +40,15 @@ Pode ser Vercel. Não use o Render gratuito: ele dorme e a ativação falha.
 3. Framework Preset: **Other**. Clique em **Deploy**.
 4. Quando terminar, abra o projeto → aba **Storage** → **Create** → **Upstash Redis** (ou Redis) → conecte **neste** projeto.
 5. Em **Settings** → **Environment Variables**, crie `LICENSE_ADMIN_SECRET` com uma senha longa que só você saiba. Anote junto da chave privada.
-6. Em **Deployments**, faça **Redeploy** do último deploy (para o Redis valer).
-7. Copie a URL de produção (no seu projeto: `https://fechamento-editorial-dkhbcbi2v.vercel.app`).
-8. Se a URL for **diferente** da que está em `src/licensing/license-config.ts`, cole a URL certa ali.
-9. No GitHub Desktop: commit, push. O Vercel publica sozinho.
-10. Abra no Safari: `SUA-URL/health` — tem que aparecer `"ok": true` e `"store": "kv"`.
+6. **Settings → Build and Deployment** (é isso que tira o “Deployment has failed”):
+   - Framework Preset: **Other**
+   - Build Command: ligue **Override** e cole `npm run vercel-build`
+   - Output Directory: ligue **Override** e cole `public`
+   - Install Command: ligue **Override** e cole `echo skipped`
+   Clique **Save**.
+7. **Settings → Deployment Protection**: em Production, **Require Log In** desligado (você já fez).
+8. No GitHub Desktop: commit, **Push**. Espere um deploy **novo** e **verde** na `main`. Não redeploy das linhas vermelhas.
+9. Aba anônima: `https://fechamento-editorial-dkhbcbi2v.vercel.app/health` — texto `"ok": true`.
 
 Você **não** liga isso no dia a dia. Fica no ar sozinho, sem “acordar” site.
 
@@ -87,4 +91,5 @@ Gere **outro** serial e envie. Não reaproveite o anterior.
 | Não vejo `.license-private.pem` | `npm run license:show-key` ou Command + Shift + ponto no Finder |
 | Serial já foi usado | Código novo para essa pessoa |
 | Não foi possível contactar o servidor | Internet da pessoa; conferir `/health` no Vercel |
-| `"store": "file"` no /health | Falta conectar o Redis no Vercel e fazer Redeploy |
+| `"store": "file"` no /health | Falta conectar o Redis no Vercel e fazer Redeploy da linha **verde** |
+| Deployment has failed | Em **Settings → Build and Deployment**, Framework **Other**, Build Command `npm run vercel-build`, Output Directory `public`. Depois push na `main` e espere o deploy **verde** novo. Não redeploy das vermelhas. |

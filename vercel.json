@@ -1,9 +1,14 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "echo skipped",
-  "buildCommand": "echo skipped",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "public",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "plugin-dist": false
+    }
+  },
   "rewrites": [
     { "source": "/activate", "destination": "/api/activate" },
     { "source": "/release", "destination": "/api/release" },

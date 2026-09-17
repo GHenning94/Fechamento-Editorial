@@ -8,6 +8,7 @@
     "watch": "node tools/sync-version.js && webpack --watch --mode development",
     "dev": "node tools/sync-version.js && webpack --mode development",
     "package:ccx": "npm run build && node tools/package-ccx.js",
+    "vercel-build": "node -e \"require('fs').mkdirSync('public',{recursive:true})\"",
     "license:keys": "node tools/generate-license-keys.js",
     "license:secret": "node tools/generate-license-keys.js",
     "license:serial": "node tools/generate-serial.js",

@@ -1,0 +1,8 @@
+node_modules
+dist
+release
+src
+EditorialAutoClose
+icons
+*.ccx
+.DS_Store
