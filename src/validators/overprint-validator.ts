@@ -1,8 +1,7 @@
 import type { Document, PageItem } from "indesign";
 import { BaseValidator } from "./base-validator";
 import { createResult, ValidationIssue } from "../models/validation-result";
-import { COLOR_GUIAS_DELETAR, LAYER_GUIAS_DELETAR, VALIDATOR_IDS } from "../utils/constants";
-import { isGuiasDeletarColorName } from "../utils/editorial-color";
+import { VALIDATOR_IDS } from "../utils/constants";
 import { readGuideColorUse } from "../utils/guide-color-usage";
 import { getPageItemDisplayName, isGuideColor, walkDirectPageItems } from "../utils/indesign-helpers";
 import { readPageItemId } from "../utils/page-item-reveal";
@@ -15,7 +14,6 @@ export class OverprintValidator extends BaseValidator {
   validate(doc: Document) {
     return this.safeValidate(doc, () => {
       const issues: ValidationIssue[] = [];
-      let guiasMissingOverprint = false;
 
       const report = (
         pageName: string,
@@ -24,10 +22,6 @@ export class OverprintValidator extends BaseValidator {
         colorName: string,
         item?: PageItem | null
       ): void => {
-        if (isGuiasDeletarColorName(colorName)) {
-          guiasMissingOverprint = true;
-          return;
-        }
         issues.push({
           message: `Objeto sem ${kind} Overprint`,
           page: pageName,
@@ -70,13 +64,6 @@ export class OverprintValidator extends BaseValidator {
           } catch {
             // ignore
           }
-        });
-      }
-
-      if (guiasMissingOverprint) {
-        issues.push({
-          message: `Overprint não aplicado na layer ${LAYER_GUIAS_DELETAR}`,
-          details: `Objetos com a cor ${COLOR_GUIAS_DELETAR} precisam de Overprint Fill no preenchimento e Overprint Stroke no traço, quando esses canais existirem. Revise todas as páginas.`,
         });
       }
 
