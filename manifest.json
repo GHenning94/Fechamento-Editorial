@@ -27,6 +27,25 @@
         "width": 300,
         "height": 520
       }
+    },
+    {
+      "type": "panel",
+      "id": "capasAutoclosePanel",
+      "label": {
+        "default": "CAPAS AUTOCLOSE"
+      },
+      "minimumSize": {
+        "width": 280,
+        "height": 420
+      },
+      "preferredDockedSize": {
+        "width": 300,
+        "height": 520
+      },
+      "preferredFloatingSize": {
+        "width": 300,
+        "height": 520
+      }
     }
   ],
   "icons": [

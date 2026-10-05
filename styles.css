@@ -416,6 +416,16 @@ button::-moz-focus-inner {
   margin-left: 8px;
 }
 
+.btn-script-codigo {
+  background-color: #2f6f8f !important;
+  color: #f4f7f8 !important;
+  border-color: #1d4e68 !important;
+}
+
+.btn-script-codigo:hover:not(.is-disabled):not([aria-disabled="true"]) {
+  background-color: #3b86ac !important;
+}
+
 .btn-create-rendimento {
   background-color: #3db8a8 !important;
   color: #102018 !important;
