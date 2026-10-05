@@ -13,6 +13,8 @@ export const UPDATE_DEV_FORCE_BANNER = false;
 export const PLUGIN_UPDATE_FILES: Array<{ path: string; binary: boolean; optional?: boolean }> = [
   { path: "index.js", binary: false },
   { path: "index.html", binary: false },
+  { path: "capas.js", binary: false, optional: true },
+  { path: "capas.html", binary: false, optional: true },
   { path: "styles.css", binary: false },
   { path: "manifest.json", binary: false, optional: true },
   { path: "VERSION", binary: false, optional: true },

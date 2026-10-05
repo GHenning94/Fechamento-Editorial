@@ -153,6 +153,8 @@ function enforceCoverLayout(root: HTMLElement): void {
 
   const memorial = root.querySelector("#btn-create-styles")?.parentElement;
   if (memorial?.classList.contains("actions-row")) memorial.remove();
+  root.querySelector("#btn-create-styles")?.remove();
+  root.querySelector("#btn-create-rendimento")?.remove();
 
   if (root.querySelector("#btn-script-codigo")) return;
 

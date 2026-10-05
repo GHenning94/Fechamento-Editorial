@@ -9,10 +9,13 @@ module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
 
   return {
-    entry: "./src/index.ts",
+    entry: {
+      index: "./src/index.ts",
+      capas: "./src/capas.ts",
+    },
     output: {
       path: path.resolve(__dirname, "dist"),
-      filename: "index.js",
+      filename: "[name].js",
     },
     devtool: isProduction ? false : "source-map",
     resolve: {
@@ -39,6 +42,7 @@ module.exports = (env, argv) => {
       new CopyWebpackPlugin({
         patterns: [
           { from: "src/index.html", to: "index.html" },
+          { from: "src/capas.html", to: "capas.html" },
           { from: "manifest.json", to: "manifest.json" },
           { from: "VERSION", to: "VERSION", toType: "file", noErrorOnMissing: true },
           { from: "changelog.json", to: "changelog.json", toType: "file", noErrorOnMissing: true },
@@ -61,6 +65,8 @@ module.exports = (env, argv) => {
     },
     optimization: {
       minimize: isProduction,
+      splitChunks: false,
+      runtimeChunk: false,
     },
   };
 };

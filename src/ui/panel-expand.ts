@@ -24,7 +24,7 @@ export function tryExpandPanelToHostHeight(): void {
     document.body.style.height = px;
     document.body.style.overflow = "hidden";
 
-    const root = document.getElementById("root");
+    const root = document.getElementById("root") || document.getElementById("cover-root");
     if (root) {
       root.style.minHeight = px;
       root.style.height = px;
