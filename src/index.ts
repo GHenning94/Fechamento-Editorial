@@ -50,6 +50,22 @@ const sessions: Record<PanelProfile, PanelSession> = {
   cover: createSession("cover"),
 };
 
+function resolvePanelNode(value: unknown): HTMLElement | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as { node?: unknown; innerHTML?: unknown; querySelector?: unknown };
+  const nested = record.node;
+  if (nested && nested !== value && typeof nested === "object") {
+    const node = nested as { innerHTML?: unknown; querySelector?: unknown };
+    if (typeof node.innerHTML === "string" && typeof node.querySelector === "function") {
+      return nested as HTMLElement;
+    }
+  }
+  if (typeof record.innerHTML === "string" && typeof record.querySelector === "function") {
+    return value as HTMLElement;
+  }
+  return null;
+}
+
 function sessionFrom(container: HTMLElement): PanelSession {
   return container.dataset.profile === "cover" ? sessions.cover : sessions.editorial;
 }
@@ -294,8 +310,8 @@ async function requestActivation(container: HTMLElement): Promise<boolean> {
   return promptLicenseActivation(container);
 }
 
-async function initPanel(container: HTMLElement | null | undefined, profile: PanelProfile): Promise<void> {
-  const target = container || document.body;
+async function initPanel(raw: unknown, profile: PanelProfile): Promise<void> {
+  const target = resolvePanelNode(raw);
   if (!target) {
     return;
   }
@@ -309,7 +325,11 @@ async function initPanel(container: HTMLElement | null | undefined, profile: Pan
   session.initInFlight = true;
 
   try {
-    removeStrayPanelRoots(target);
+    if (profile === "editorial") {
+      removeStrayPanelRoots(target);
+    } else if (!target.querySelector("#cover-root #btn-script-codigo")) {
+      mountPanelRoot(target, true, "cover");
+    }
 
     const licensed = await isLicenseActive();
     if (!licensed) {
@@ -325,8 +345,9 @@ async function initPanel(container: HTMLElement | null | undefined, profile: Pan
       }
     }
 
-    if (session.controller?.isReady() && target.querySelector("#root #btn-checklist")) {
-      bindDevLicenseReset(target, target.querySelector("#root") as HTMLElement);
+    const readyMarker = profile === "cover" ? "#cover-root #btn-script-codigo" : "#root #btn-checklist";
+    if (session.controller?.isReady() && target.querySelector(readyMarker)) {
+      bindDevLicenseReset(target, target.querySelector(profile === "cover" ? "#cover-root" : "#root") as HTMLElement);
       return;
     }
 
@@ -362,12 +383,18 @@ async function retryActivation(container: HTMLElement): Promise<void> {
 entrypoints.setup({
   panels: {
     editorialAutoclosePanel: {
-      show(node: HTMLElement) {
+      create(node: unknown) {
+        void initPanel(node, "editorial");
+      },
+      show(node: unknown) {
         void initPanel(node, "editorial");
       },
     },
     capasAutoclosePanel: {
-      show(node: HTMLElement) {
+      create(node: unknown) {
+        void initPanel(node, "cover");
+      },
+      show(node: unknown) {
         void initPanel(node, "cover");
       },
     },

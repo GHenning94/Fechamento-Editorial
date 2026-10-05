@@ -100,31 +100,27 @@ const PANEL_HTML = `
 
 let initialized = false;
 
-function applyCoverChrome(root: HTMLElement): void {
-  const title = root.querySelector(".panel-title");
-  if (title) title.textContent = "CAPAS AUTOCLOSE";
-  const subtitle = root.querySelector(".panel-subtitle");
-  if (subtitle) subtitle.textContent = "Fechamento de capas";
-
-  const memorialRow = root.querySelector(".actions-row");
-  memorialRow?.remove();
-
-  const checklist = root.querySelector("#btn-checklist");
-  if (!checklist || checklist.parentElement?.classList.contains("actions-row")) return;
-
-  const row = document.createElement("div");
-  row.className = "actions-row";
-  checklist.parentElement?.insertBefore(row, checklist);
-  row.appendChild(checklist);
-
-  const script = document.createElement("div");
-  script.id = "btn-script-codigo";
-  script.className = "btn btn-script-codigo";
-  script.setAttribute("role", "button");
-  script.tabIndex = 0;
-  script.textContent = "Script código";
-  row.appendChild(script);
-}
+/** HTML próprio da aba de capas, já sem memorial/rendimento e com Script código. */
+const COVER_PANEL_HTML = PANEL_HTML
+  .replace(
+    '<div id="root" class="panel">',
+    '<div id="cover-root" class="panel" data-profile="cover">'
+  )
+  .replace(
+    '<div class="panel-title">EDITORIAL AUTOCLOSE</div>\n        <div class="panel-subtitle">Fechamento editorial automatizado</div>',
+    '<div class="panel-title">CAPAS AUTOCLOSE</div>\n        <div class="panel-subtitle">Fechamento de capas</div>'
+  )
+  .replace(
+    `    <div class="actions-row">
+      <div id="btn-create-styles" class="btn btn-create-styles" role="button" tabindex="0">Criar Memorial</div>
+      <div id="btn-create-rendimento" class="btn btn-create-rendimento" role="button" tabindex="0">Criar Rendimento</div>
+    </div>
+    <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar Checklist</div>`,
+    `    <div class="actions-row">
+      <div id="btn-checklist" class="btn btn-primary" role="button" tabindex="0">Validar Checklist</div>
+      <div id="btn-script-codigo" class="btn btn-script-codigo" role="button" tabindex="0">Script código</div>
+    </div>`
+  );
 
 export function mountPanelRoot(
   container: HTMLElement,
@@ -135,16 +131,20 @@ export function mountPanelRoot(
     container.innerHTML = "";
   }
 
-  const existing = container.querySelector("#root");
+  const marker = profile === "cover" ? "#cover-root" : "#root";
+  const existing = container.querySelector(marker);
   if (existing instanceof HTMLElement && !force) {
     return existing;
   }
 
-  container.innerHTML = PANEL_HTML;
-  const root = container.querySelector("#root") as HTMLElement | null;
-  if (root && profile === "cover") {
-    applyCoverChrome(root);
+  container.innerHTML = profile === "cover" ? COVER_PANEL_HTML : PANEL_HTML;
+  if (
+    profile === "cover" &&
+    (container.innerHTML.includes("Criar Memorial") || !container.innerHTML.includes("Script código"))
+  ) {
+    throw new Error("O painel de capas não pode usar o layout editorial.");
   }
+  const root = container.querySelector(profile === "cover" ? "#cover-root" : "#root") as HTMLElement | null;
   return root;
 }
 

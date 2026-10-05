@@ -8,28 +8,22 @@ const SCRIPT_FILES = {
 } as const;
 
 const MENU_SCRIPT = `
-var dlg = new Window("dialog", "Script código");
-dlg.alignChildren = "fill";
-dlg.add("statictext", undefined, "Escolha o script:");
-var grupo = dlg.add("panel");
-grupo.alignChildren = "left";
-var opRemocao = grupo.add("radiobutton", undefined, "1. Remoção / substituição de código de barras");
-var opCae = grupo.add("radiobutton", undefined, "2. Inserção CAE / ISBN");
-var opInfos = grupo.add("radiobutton", undefined, "3. Caderno e disciplina");
-opRemocao.value = true;
-var botoes = dlg.add("group");
-botoes.alignment = "center";
-botoes.add("button", undefined, "Iniciar", { name: "ok" });
-botoes.add("button", undefined, "Cancelar", { name: "cancel" });
-if (dlg.show() !== 1) {
-  0;
-} else if (opCae.value) {
-  2;
-} else if (opInfos.value) {
-  3;
-} else {
-  1;
+var dlg = app.dialogs.add({ name: "CAPAS AUTOCLOSE", canCancel: true });
+var coluna = dlg.dialogColumns.add();
+coluna.staticTexts.add({ staticLabel: "Código da capa" });
+var grupo = coluna.radiobuttonGroups.add();
+grupo.radiobuttonControls.add({ staticLabel: "Código de barras: substituir ou remover", checkedState: true });
+grupo.radiobuttonControls.add({ staticLabel: "Inserir CAE e ISBN" });
+grupo.radiobuttonControls.add({ staticLabel: "Preencher caderno e disciplina" });
+var escolhido = 0;
+if (dlg.show()) {
+  var controles = grupo.radiobuttonControls;
+  for (var i = 0; i < controles.length; i++) {
+    if (controles[i].checkedState) escolhido = i + 1;
+  }
 }
+dlg.destroy();
+escolhido;
 `;
 
 type PluginFile = {
@@ -98,7 +92,10 @@ export async function runCoverCodeScript(): Promise<"cancelled" | "done"> {
   const choice = choiceNumber(runHostScript(MENU_SCRIPT));
   if (!choice) return "cancelled";
 
-  const source = await readCoverScript(SCRIPT_FILES[choice]);
+  const source = (await readCoverScript(SCRIPT_FILES[choice])).replace(
+    /Configuração do Script/g,
+    "CAPAS AUTOCLOSE"
+  );
   runHostScript(source);
   return "done";
 }
