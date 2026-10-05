@@ -11,7 +11,6 @@ import {
   clearPanelContainer,
   markPanelInitialized,
   mountPanelRoot,
-  removeStrayPanelRoots,
   resetPanelInitialization,
   showLicenseGate,
 } from "./ui/panel-mount";
@@ -33,6 +32,8 @@ interface PanelSession {
   controller: PanelController | null;
   lastChecklistSummary: ValidationSummary | null;
   initInFlight: boolean;
+  node: HTMLElement | null;
+  generation: number;
 }
 
 function createSession(profile: PanelProfile): PanelSession {
@@ -42,6 +43,8 @@ function createSession(profile: PanelProfile): PanelSession {
     controller: null,
     lastChecklistSummary: null,
     initInFlight: false,
+    node: null,
+    generation: 0,
   };
 }
 
@@ -50,20 +53,17 @@ const sessions: Record<PanelProfile, PanelSession> = {
   cover: createSession("cover"),
 };
 
+function isMountable(value: unknown): value is HTMLElement {
+  if (!value || typeof value !== "object") return false;
+  const node = value as HTMLElement;
+  return typeof node.appendChild === "function" || "innerHTML" in node;
+}
+
 function resolvePanelNode(value: unknown): HTMLElement | null {
   if (!value || typeof value !== "object") return null;
-  const record = value as { node?: unknown; innerHTML?: unknown; querySelector?: unknown };
-  const nested = record.node;
-  if (nested && nested !== value && typeof nested === "object") {
-    const node = nested as { innerHTML?: unknown; querySelector?: unknown };
-    if (typeof node.innerHTML === "string" && typeof node.querySelector === "function") {
-      return nested as HTMLElement;
-    }
-  }
-  if (typeof record.innerHTML === "string" && typeof record.querySelector === "function") {
-    return value as HTMLElement;
-  }
-  return null;
+  const record = value as { node?: unknown };
+  if (isMountable(record.node) && record.node !== value) return record.node;
+  return isMountable(value) ? value : null;
 }
 
 function sessionFrom(container: HTMLElement): PanelSession {
@@ -312,51 +312,46 @@ async function requestActivation(container: HTMLElement): Promise<boolean> {
 
 async function initPanel(raw: unknown, profile: PanelProfile): Promise<void> {
   const target = resolvePanelNode(raw);
-  if (!target) {
-    return;
-  }
+  if (!target) return;
 
-  target.dataset.profile = profile;
   const session = sessions[profile];
-
-  if (session.initInFlight || isLicensePromptOpen()) {
+  const marker = profile === "cover" ? "#cover-root #btn-script-codigo" : "#root #btn-create-styles";
+  if (session.node === target && session.controller?.isReady() && target.querySelector(marker)) {
     return;
   }
+
+  session.generation += 1;
+  const generation = session.generation;
+  session.node = target;
+  target.dataset.profile = profile;
+  mountPanelRoot(target, true, profile);
+
+  if (isLicensePromptOpen()) return;
+
   session.initInFlight = true;
-
   try {
-    if (profile === "editorial") {
-      removeStrayPanelRoots(target);
-    } else if (!target.querySelector("#cover-root #btn-script-codigo")) {
-      mountPanelRoot(target, true, "cover");
-    }
-
     const licensed = await isLicenseActive();
+    if (session.generation !== generation) return;
+
     if (!licensed) {
-      resetPanelInitialization();
       session.controller = null;
       showLicenseGate(target, () => {
         void retryActivation(target);
       });
-
       const activated = await requestActivation(target);
-      if (!activated) {
-        return;
-      }
+      if (!activated || session.generation !== generation) return;
+      mountPanelRoot(target, true, profile);
     }
 
-    const readyMarker = profile === "cover" ? "#cover-root #btn-script-codigo" : "#root #btn-checklist";
-    if (session.controller?.isReady() && target.querySelector(readyMarker)) {
-      bindDevLicenseReset(target, target.querySelector(profile === "cover" ? "#cover-root" : "#root") as HTMLElement);
-      return;
-    }
-
+    if (session.generation !== generation) return;
     resetPanelInitialization();
     session.controller = null;
     session.lastChecklistSummary = null;
     await mountLicensedPanel(target, session);
   } finally {
-    session.initInFlight = false;
+    if (session.generation === generation) {
+      session.initInFlight = false;
+    }
   }
 }
 

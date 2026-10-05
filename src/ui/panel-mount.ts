@@ -138,14 +138,39 @@ export function mountPanelRoot(
   }
 
   container.innerHTML = profile === "cover" ? COVER_PANEL_HTML : PANEL_HTML;
-  if (
-    profile === "cover" &&
-    (container.innerHTML.includes("Criar Memorial") || !container.innerHTML.includes("Script código"))
-  ) {
-    throw new Error("O painel de capas não pode usar o layout editorial.");
-  }
   const root = container.querySelector(profile === "cover" ? "#cover-root" : "#root") as HTMLElement | null;
+  if (root && profile === "cover") {
+    enforceCoverLayout(root);
+  }
   return root;
+}
+
+function enforceCoverLayout(root: HTMLElement): void {
+  const title = root.querySelector(".panel-title");
+  if (title) title.textContent = "CAPAS AUTOCLOSE";
+  const subtitle = root.querySelector(".panel-subtitle");
+  if (subtitle) subtitle.textContent = "Fechamento de capas";
+
+  const memorial = root.querySelector("#btn-create-styles")?.parentElement;
+  if (memorial?.classList.contains("actions-row")) memorial.remove();
+
+  if (root.querySelector("#btn-script-codigo")) return;
+
+  const checklist = root.querySelector("#btn-checklist");
+  if (!checklist) return;
+
+  const row = document.createElement("div");
+  row.className = "actions-row";
+  checklist.parentElement?.insertBefore(row, checklist);
+  row.appendChild(checklist);
+
+  const script = document.createElement("div");
+  script.id = "btn-script-codigo";
+  script.className = "btn btn-script-codigo";
+  script.setAttribute("role", "button");
+  script.tabIndex = 0;
+  script.textContent = "Script código";
+  row.appendChild(script);
 }
 
 export function isPanelInitialized(): boolean {
