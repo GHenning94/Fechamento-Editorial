@@ -100,7 +100,37 @@ const PANEL_HTML = `
 
 let initialized = false;
 
-export function mountPanelRoot(container: HTMLElement, force = false): HTMLElement | null {
+function applyCoverChrome(root: HTMLElement): void {
+  const title = root.querySelector(".panel-title");
+  if (title) title.textContent = "CAPAS AUTOCLOSE";
+  const subtitle = root.querySelector(".panel-subtitle");
+  if (subtitle) subtitle.textContent = "Fechamento de capas";
+
+  const memorialRow = root.querySelector(".actions-row");
+  memorialRow?.remove();
+
+  const checklist = root.querySelector("#btn-checklist");
+  if (!checklist || checklist.parentElement?.classList.contains("actions-row")) return;
+
+  const row = document.createElement("div");
+  row.className = "actions-row";
+  checklist.parentElement?.insertBefore(row, checklist);
+  row.appendChild(checklist);
+
+  const script = document.createElement("div");
+  script.id = "btn-script-codigo";
+  script.className = "btn btn-script-codigo";
+  script.setAttribute("role", "button");
+  script.tabIndex = 0;
+  script.textContent = "Script código";
+  row.appendChild(script);
+}
+
+export function mountPanelRoot(
+  container: HTMLElement,
+  force = false,
+  profile: "editorial" | "cover" = "editorial"
+): HTMLElement | null {
   if (force) {
     container.innerHTML = "";
   }
@@ -111,7 +141,11 @@ export function mountPanelRoot(container: HTMLElement, force = false): HTMLEleme
   }
 
   container.innerHTML = PANEL_HTML;
-  return container.querySelector("#root") as HTMLElement | null;
+  const root = container.querySelector("#root") as HTMLElement | null;
+  if (root && profile === "cover") {
+    applyCoverChrome(root);
+  }
+  return root;
 }
 
 export function isPanelInitialized(): boolean {

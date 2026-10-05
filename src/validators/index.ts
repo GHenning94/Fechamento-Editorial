@@ -22,6 +22,32 @@ import { PasteboardValidator } from "./pasteboard-validator";
 import { OvertextValidator } from "./overtext-validator";
 import { CinzaOverprintValidator } from "./cinza-overprint-validator";
 
+const STYLE_VALIDATOR_IDS = new Set<string>([
+  "V05_ESTILOS_PADRAO_PROFESSOR",
+  "V20_ESTILOS_PADRAO_CREDITO",
+  "V22_ESTILOS_PADRAO_FONTE",
+  "V09_ESTILOS_IDIOMA",
+  "V10_HIFENIZACAO",
+  "V11_ESTILOS_NOMENCLATURA",
+  "V21_OVERTEXT",
+  "V23_ESTILOS_PASTAS",
+]);
+
+/** Capas não têm estilo de parágrafo nem de caractere, nem memorial/rendimento de miolo. */
+function createCoverValidators(): IValidator[] {
+  return createAllValidators().filter((validator) => {
+    if (STYLE_VALIDATOR_IDS.has(validator.id)) return false;
+    if (validator.id === "V01_LAYERS_OBRIGATORIAS" || validator.id === "V02_LAYERS_NOMENCLATURA") {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function createValidators(profile: "editorial" | "cover" = "editorial"): IValidator[] {
+  return profile === "cover" ? createCoverValidators() : createAllValidators();
+}
+
 export function createAllValidators(): IValidator[] {
   return [
     new LayersObrigatoriasValidator(),

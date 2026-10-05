@@ -21,19 +21,45 @@ import { yieldToHost } from "./utils/yield-to-host";
 import { createMemorialStyleTags } from "./services/style-tags-service";
 import { createRendimentoTags } from "./services/rendimento-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
+import { runCoverCodeScript } from "./services/cover-scripts";
 
 const { entrypoints } = require("uxp");
 
-const orchestrator = new ClosureOrchestrator();
-let activeController: PanelController | null = null;
-let lastChecklistSummary: ValidationSummary | null = null;
-let panelInitInFlight = false;
+type PanelProfile = "editorial" | "cover";
+
+interface PanelSession {
+  profile: PanelProfile;
+  orchestrator: ClosureOrchestrator;
+  controller: PanelController | null;
+  lastChecklistSummary: ValidationSummary | null;
+  initInFlight: boolean;
+}
+
+function createSession(profile: PanelProfile): PanelSession {
+  return {
+    profile,
+    orchestrator: new ClosureOrchestrator(profile),
+    controller: null,
+    lastChecklistSummary: null,
+    initInFlight: false,
+  };
+}
+
+const sessions: Record<PanelProfile, PanelSession> = {
+  editorial: createSession("editorial"),
+  cover: createSession("cover"),
+};
+
+function sessionFrom(container: HTMLElement): PanelSession {
+  return container.dataset.profile === "cover" ? sessions.cover : sessions.editorial;
+}
 
 async function handleLicenseReset(container: HTMLElement): Promise<void> {
+  const session = sessionFrom(container);
   const removed = await deactivateLicense();
   resetPanelInitialization();
-  activeController = null;
-  lastChecklistSummary = null;
+  session.controller = null;
+  session.lastChecklistSummary = null;
   clearPanelContainer(container);
 
   if (!removed) {
@@ -51,7 +77,7 @@ async function handleLicenseReset(container: HTMLElement): Promise<void> {
     return;
   }
 
-  await initPanel(container);
+  await initPanel(container, sessionFrom(container).profile);
 }
 
 function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
@@ -78,7 +104,7 @@ function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
   };
 }
 
-async function mountLicensedPanel(container: HTMLElement): Promise<void> {
+async function mountLicensedPanel(container: HTMLElement, session: PanelSession): Promise<void> {
   await yieldToHost(50);
 
   try {
@@ -93,7 +119,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
     return;
   }
 
-  const root = mountPanelRoot(container, true);
+  const root = mountPanelRoot(container, true, session.profile);
   if (!root) {
     return;
   }
@@ -103,7 +129,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
     return;
   }
 
-  activeController = controller;
+  session.controller = controller;
   markPanelInitialized();
   bindDevLicenseReset(container, root);
   bindUpdateBanner(root, (message, type) => controller.setStatus(message, type));
@@ -116,18 +142,18 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       const signal = controller.startCancellableAction();
 
       try {
-        const summary = await orchestrator.runChecklist((current, total, label) => {
+        const summary = await session.orchestrator.runChecklist((current, total, label) => {
           if (controller.isCancelling()) return;
           const percent = Math.round((current / total) * 100);
           controller.setProgress(percent, `Checklist: ${label}`);
         }, signal);
 
-        lastChecklistSummary = summary;
+        session.lastChecklistSummary = summary;
         controller.setReportDownloadEnabled(true);
         controller.setProgress(100, "Checklist concluído");
         controller.setSummaryFilterListener((filtered) => {
-          lastChecklistSummary = filtered;
-          orchestrator.cacheCurrentDocumentChecklist(filtered);
+          session.lastChecklistSummary = filtered;
+          session.orchestrator.cacheCurrentDocumentChecklist(filtered);
         });
         controller.renderSummary(summary, "Checklist");
       } catch (error) {
@@ -194,7 +220,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
     },
 
     onDownloadReport: async () => {
-      const reportSummary = controller.getSummaryForReport() || lastChecklistSummary;
+      const reportSummary = controller.getSummaryForReport() || session.lastChecklistSummary;
       if (!reportSummary) {
         controller.setStatus("Execute o checklist antes de baixar o relatório.", "warning");
         return;
@@ -202,7 +228,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
 
       let docName = "documento";
       try {
-        docName = orchestrator.getCurrentDocumentInfo().name;
+        docName = session.orchestrator.getCurrentDocumentInfo().name;
       } catch {
         // usa nome genérico
       }
@@ -225,7 +251,7 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
       }
 
       controller.setStatus("Geração de relatório em andamento...", "info");
-      const savedPath = await orchestrator.exportChecklistReport(
+      const savedPath = await session.orchestrator.exportChecklistReport(
         reportSummary,
         filePath,
         userName
@@ -236,13 +262,29 @@ async function mountLicensedPanel(container: HTMLElement): Promise<void> {
     onClose: async (userName: string, destinationFolder: string) => {
       controller.resetProgress();
       controller.setStatus("Fechamento em andamento...", "info");
-      return orchestrator.closeMaterial(userName, destinationFolder, (step, total, label) => {
+      return session.orchestrator.closeMaterial(userName, destinationFolder, (step, total, label) => {
         const percent = Math.round((step / total) * 100);
         controller.setProgress(percent, label);
       });
     },
-    hasMemorialLayer: () => orchestrator.hasMemorialLayer(),
-    hasRendimentoLayer: () => orchestrator.hasRendimentoLayer(),
+    hasMemorialLayer: () => session.orchestrator.hasMemorialLayer(),
+    hasRendimentoLayer: () => session.orchestrator.hasRendimentoLayer(),
+    skipUtilityLayers: session.profile === "cover",
+    onScriptCodigo: session.profile === "cover"
+      ? async () => {
+          controller.setStatus("Script código...", "info");
+          try {
+            const result = await runCoverCodeScript();
+            controller.setStatus(
+              result === "cancelled" ? "Script cancelado." : "Script concluído.",
+              result === "cancelled" ? "info" : "success"
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            controller.setStatus(message, "error");
+          }
+        }
+      : undefined,
   });
 
   controller.setStatus("Pronto.", "info");
@@ -252,16 +294,19 @@ async function requestActivation(container: HTMLElement): Promise<boolean> {
   return promptLicenseActivation(container);
 }
 
-async function initPanel(container?: HTMLElement | null): Promise<void> {
+async function initPanel(container: HTMLElement | null | undefined, profile: PanelProfile): Promise<void> {
   const target = container || document.body;
   if (!target) {
     return;
   }
 
-  if (panelInitInFlight || isLicensePromptOpen()) {
+  target.dataset.profile = profile;
+  const session = sessions[profile];
+
+  if (session.initInFlight || isLicensePromptOpen()) {
     return;
   }
-  panelInitInFlight = true;
+  session.initInFlight = true;
 
   try {
     removeStrayPanelRoots(target);
@@ -269,7 +314,7 @@ async function initPanel(container?: HTMLElement | null): Promise<void> {
     const licensed = await isLicenseActive();
     if (!licensed) {
       resetPanelInitialization();
-      activeController = null;
+      session.controller = null;
       showLicenseGate(target, () => {
         void retryActivation(target);
       });
@@ -280,17 +325,17 @@ async function initPanel(container?: HTMLElement | null): Promise<void> {
       }
     }
 
-    if (activeController?.isReady() && target.querySelector("#root #btn-checklist")) {
+    if (session.controller?.isReady() && target.querySelector("#root #btn-checklist")) {
       bindDevLicenseReset(target, target.querySelector("#root") as HTMLElement);
       return;
     }
 
     resetPanelInitialization();
-    activeController = null;
-    lastChecklistSummary = null;
-    await mountLicensedPanel(target);
+    session.controller = null;
+    session.lastChecklistSummary = null;
+    await mountLicensedPanel(target, session);
   } finally {
-    panelInitInFlight = false;
+    session.initInFlight = false;
   }
 }
 
@@ -299,6 +344,7 @@ async function retryActivation(container: HTMLElement): Promise<void> {
     return;
   }
 
+  const session = sessionFrom(container);
   const activated = await requestActivation(container);
   if (!activated) {
     showLicenseGate(container, () => {
@@ -308,16 +354,21 @@ async function retryActivation(container: HTMLElement): Promise<void> {
   }
 
   resetPanelInitialization();
-  activeController = null;
-  lastChecklistSummary = null;
-  await mountLicensedPanel(container);
+  session.controller = null;
+  session.lastChecklistSummary = null;
+  await mountLicensedPanel(container, session);
 }
 
 entrypoints.setup({
   panels: {
     editorialAutoclosePanel: {
       show(node: HTMLElement) {
-        void initPanel(node);
+        void initPanel(node, "editorial");
+      },
+    },
+    capasAutoclosePanel: {
+      show(node: HTMLElement) {
+        void initPanel(node, "cover");
       },
     },
   },

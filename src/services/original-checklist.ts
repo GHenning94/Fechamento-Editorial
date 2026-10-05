@@ -16,7 +16,7 @@ export interface ChecklistArtifacts {
   pdfEstilosGenerated?: boolean;
 }
 
-interface OriginalRowSpec {
+export interface OriginalRowSpec {
   id: string;
   section: ChecklistPdfItem["section"];
   label: string;
@@ -195,14 +195,15 @@ function formatIssue(summary: ValidationSummary, issue: ValidationIssue, validat
   });
 }
 
-export function mapOriginalChecklist(
+export function mapChecklistRows(
+  rows: OriginalRowSpec[],
   summary: ValidationSummary | null,
   _artifacts?: ChecklistArtifacts,
   options?: { markPackage?: boolean }
 ): ChecklistPdfItem[] {
   const results = summary?.results || [];
 
-  return ORIGINAL_ROWS.map((row) => {
+  return rows.map((row) => {
     if (row.packageArtifacts) {
       const mark = Boolean(options?.markPackage);
       return {
@@ -241,4 +242,12 @@ export function mapOriginalChecklist(
       reviewKind: details.length === 0 ? undefined : hasError ? "error" : "warning",
     };
   });
+}
+
+export function mapOriginalChecklist(
+  summary: ValidationSummary | null,
+  artifacts?: ChecklistArtifacts,
+  options?: { markPackage?: boolean }
+): ChecklistPdfItem[] {
+  return mapChecklistRows(ORIGINAL_ROWS, summary, artifacts, options);
 }

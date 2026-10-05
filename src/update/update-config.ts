@@ -20,6 +20,9 @@ export const PLUGIN_UPDATE_FILES: Array<{ path: string; binary: boolean; optiona
   { path: "icons/icon.png", binary: true, optional: true },
   { path: "icons/work-spinner.gif", binary: true, optional: true },
   { path: "icons/update-download.png", binary: true, optional: true },
+  { path: "scripts/script_remocao-substituicao.jsx", binary: false, optional: true },
+  { path: "scripts/script_insercao_cae_isbn.jsx", binary: false, optional: true },
+  { path: "scripts/script_infos_disciplina_caderno.jsx", binary: false, optional: true },
 ];
 
 export function githubRawUrl(branch: string, filePath: string): string {

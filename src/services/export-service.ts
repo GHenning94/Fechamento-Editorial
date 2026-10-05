@@ -1,6 +1,6 @@
 import type { Document } from "indesign";
 import { ExportArtifacts, ExportPaths } from "../models/closure-report";
-import { exportPdfArte, exportPdfEstilos } from "./pdf-export-service";
+import { exportPdfArte, exportPdfCover, exportPdfEstilos } from "./pdf-export-service";
 import { getInDesignApp } from "../utils/indesign-runtime";
 import { UserInteractionLevels } from "indesign";
 import {
@@ -82,6 +82,7 @@ export type PdfExportArtifacts = Pick<
   | "pdfArtePath"
   | "pdfEstilosPath"
   | "pdfWarnings"
+  | "pdfCoverSpreads"
 >;
 
 export class ExportService {
@@ -124,6 +125,21 @@ export class ExportService {
     };
   }
 
+  runPdfCover(doc: Document, paths: ExportPaths): PdfExportArtifacts {
+    const docBaseName = sanitizeFileName(doc.name.replace(/\.indd$/i, ""));
+    const cover = exportPdfCover(doc, paths.packageRoot, docBaseName);
+
+    return {
+      pdfArteGenerated: cover.generated,
+      pdfEstilosGenerated: false,
+      pdfPresetMissing: cover.presetMissing,
+      pdfMemorialLayerMissing: false,
+      pdfArtePath: cover.path,
+      pdfCoverSpreads: cover.readerSpreads,
+      pdfWarnings: cover.warnings.length > 0 ? cover.warnings : undefined,
+    };
+  }
+
   runPdfEstilos(doc: Document, paths: ExportPaths): PdfExportArtifacts {
     const docBaseName = sanitizeFileName(doc.name.replace(/\.indd$/i, ""));
     const estilos = exportPdfEstilos(doc, paths.packageRoot, docBaseName);
@@ -153,6 +169,7 @@ export class ExportService {
       pdfMemorialLayerMissing: pdfEstilos.pdfMemorialLayerMissing,
       pdfArtePath: pdfArte.pdfArtePath,
       pdfEstilosPath: pdfEstilos.pdfEstilosPath,
+      pdfCoverSpreads: pdfArte.pdfCoverSpreads,
       pdfWarnings: pdfWarnings.length > 0 ? pdfWarnings : undefined,
     };
   }

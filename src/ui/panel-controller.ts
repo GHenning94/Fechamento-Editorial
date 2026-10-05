@@ -32,6 +32,7 @@ export class PanelController {
   private btnCreateRendimento: HTMLElement | null;
   private btnDownloadReport: HTMLElement | null;
   private btnClose: HTMLElement | null;
+  private btnScriptCodigo: HTMLElement | null;
   private progressBar: HTMLProgressElement | null;
   private progressLabel: HTMLElement | null;
   private btnCancelChecklist: HTMLElement | null;
@@ -57,6 +58,7 @@ export class PanelController {
     this.btnCreateRendimento = root.querySelector("#btn-create-rendimento");
     this.btnDownloadReport = root.querySelector("#btn-download-report");
     this.btnClose = root.querySelector("#btn-close");
+    this.btnScriptCodigo = root.querySelector("#btn-script-codigo");
     this.progressBar = root.querySelector("#progress-bar");
     this.progressLabel = root.querySelector("#progress-label");
     this.btnCancelChecklist = root.querySelector("#btn-cancel-checklist");
@@ -147,8 +149,7 @@ export class PanelController {
   isReady(): boolean {
     return Boolean(
       this.btnChecklist &&
-      this.btnCreateStyles &&
-      this.btnCreateRendimento &&
+      (this.btnScriptCodigo || (this.btnCreateStyles && this.btnCreateRendimento)) &&
       this.btnDownloadReport &&
       this.btnClose &&
       this.progressBar &&
@@ -176,6 +177,8 @@ export class PanelController {
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>;
     hasMemorialLayer: () => boolean;
     hasRendimentoLayer: () => boolean;
+    onScriptCodigo?: () => Promise<void>;
+    skipUtilityLayers?: boolean;
   }): void {
     if (!this.isReady()) return;
 
@@ -193,17 +196,29 @@ export class PanelController {
     onActionActivate(this.btnDownloadReport, () => {
       void this.runAction(handlers.onDownloadReport);
     });
+    if (this.btnScriptCodigo && handlers.onScriptCodigo) {
+      onActionActivate(this.btnScriptCodigo, () => {
+        void this.runAction(handlers.onScriptCodigo!);
+      });
+    }
     onActionActivate(this.btnClose, () => {
-      void this.runClose(handlers.onClose, handlers.hasMemorialLayer, handlers.hasRendimentoLayer);
+      void this.runClose(
+        handlers.onClose,
+        handlers.hasMemorialLayer,
+        handlers.hasRendimentoLayer,
+        Boolean(handlers.skipUtilityLayers)
+      );
     });
   }
 
   private async runClose(
     onClose: (userName: string, destinationFolder: string) => Promise<ClosureReport>,
     hasMemorialLayer: () => boolean,
-    hasRendimentoLayer: () => boolean
+    hasRendimentoLayer: () => boolean,
+    skipUtilityLayers = false
   ): Promise<void> {
     try {
+      if (!skipUtilityLayers) {
       const hasMemorial = hasMemorialLayer();
       const hasRendimento = hasRendimentoLayer();
       if (!hasMemorial && !hasRendimento) {
@@ -237,6 +252,7 @@ export class PanelController {
           this.setStatus("Fechamento cancelado.", "info");
           return;
         }
+      }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

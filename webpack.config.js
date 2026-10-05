@@ -45,6 +45,7 @@ module.exports = (env, argv) => {
           { from: "icons", to: "icons", noErrorOnMissing: true },
           { from: "src/assets/work-spinner.gif", to: "icons/work-spinner.gif" },
           { from: "src/assets/update-download.png", to: "icons/update-download.png" },
+          { from: "scripts/cover", to: "scripts" },
         ],
       }),
     ],

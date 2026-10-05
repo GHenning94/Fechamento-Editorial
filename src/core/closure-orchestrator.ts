@@ -18,15 +18,21 @@ import {
   getCachedChecklistResult,
   storeChecklistResult,
 } from "./checklist-cache";
+import { coverShouldExportReaderSpreads } from "../utils/cover-spread";
 import { ChecklistRunner, ProgressCallback } from "./checklist-runner";
 
 const HEAVY_STEP_PAUSE_MS = 280;
 const FINAL_PAUSE_MS = 350;
 
 export class ClosureOrchestrator {
-  private checklistRunner = new ChecklistRunner();
+  private checklistRunner: ChecklistRunner;
   private exportService = new ExportService();
-  private reportService = new ReportService();
+  private reportService: ReportService;
+
+  constructor(private profile: "editorial" | "cover" = "editorial") {
+    this.checklistRunner = new ChecklistRunner(profile);
+    this.reportService = new ReportService(profile);
+  }
 
   async runChecklist(onProgress?: ProgressCallback, signal?: AbortSignal): Promise<ValidationSummary> {
     const summary = await this.checklistRunner.runAsync(onProgress, signal);
@@ -93,6 +99,9 @@ export class ClosureOrchestrator {
     destinationFolder: string,
     onProgress?: ProgressCallback
   ): Promise<ClosureReport> {
+    if (this.profile === "cover") {
+      return this.closeCoverMaterial(userName, destinationFolder, onProgress);
+    }
     const totalSteps = 6;
     clearInDesignSelection();
 
@@ -241,6 +250,117 @@ export class ClosureOrchestrator {
     }
 
     return "Não salvo";
+  }
+
+  private async closeCoverMaterial(
+    userName: string,
+    destinationFolder: string,
+    onProgress?: ProgressCallback
+  ): Promise<ClosureReport> {
+    const totalSteps = 5;
+    clearInDesignSelection();
+
+    onProgress?.(1, totalSteps, "Salvando documento...");
+    await yieldForUi();
+    await ensureDocumentSaved();
+    await yieldToHost(HEAVY_STEP_PAUSE_MS);
+
+    const docInfo = runInDesignReadOnly("CAPAS AUTOCLOSE — Documento", () => {
+      const doc = getActiveDocument();
+      return {
+        name: doc.name,
+        path: this.readDocumentPath(doc),
+      };
+    });
+
+    const cachedChecklist = getCachedChecklistResult(docInfo.name, docInfo.path);
+    const paths = await this.exportService.packageService.buildPackageStructure(
+      docInfo.name,
+      destinationFolder
+    );
+    await yieldToHost(300);
+
+    onProgress?.(2, totalSteps, "Gerando package InDesign...");
+    await yieldForUi();
+    const packageResult = runInDesignHeavyMutation("CAPAS AUTOCLOSE — Package", () =>
+      this.exportService.runPackage(getActiveDocument(), paths)
+    );
+    clearInDesignSelection();
+    await yieldToHost(HEAVY_STEP_PAUSE_MS);
+
+    const spreadLabel = runInDesignReadOnly("CAPAS AUTOCLOSE — Modo do PDF", () =>
+      coverShouldExportReaderSpreads(getActiveDocument())
+        ? "Exportando PDF em spreads..."
+        : "Exportando PDF em páginas..."
+    );
+
+    onProgress?.(3, totalSteps, spreadLabel);
+    await yieldToHost(120);
+    const pdfResult = runInDesignHeavyMutation("CAPAS AUTOCLOSE — PDF", () =>
+      this.exportService.runPdfCover(getActiveDocument(), paths)
+    );
+    clearInDesignSelection();
+    await yieldToHost(HEAVY_STEP_PAUSE_MS);
+
+    const emptyEstilos: PdfExportArtifacts = {
+      pdfArteGenerated: false,
+      pdfEstilosGenerated: false,
+      pdfPresetMissing: false,
+      pdfMemorialLayerMissing: false,
+    };
+    const artifacts = this.exportService.mergeArtifacts(packageResult, pdfResult, emptyEstilos);
+    const pdfWarnings = artifacts.pdfWarnings ?? [];
+    const hasValidationErrors = cachedChecklist ? hasBlockingErrors(cachedChecklist) : false;
+    const closureWarnings = [
+      hasValidationErrors
+        ? "Package gerado com avisos: foram encontrados erros no checklist (veja o relatório)."
+        : undefined,
+      ...pdfWarnings,
+    ].filter(Boolean);
+
+    let reportGenerated = false;
+    if (cachedChecklist) {
+      onProgress?.(4, totalSteps, "Gerando relatório...");
+      await yieldToHost(400);
+
+      const report: ClosureReport = {
+        date: new Date().toLocaleDateString("pt-BR"),
+        user: userName,
+        documentName: docInfo.name,
+        documentPath: docInfo.path,
+        checklist: cachedChecklist,
+        reportGenerated: false,
+        artifacts,
+        blocked: false,
+        blockReason: closureWarnings.length > 0 ? closureWarnings.join(" ") : undefined,
+      };
+
+      try {
+        await this.reportService.generate(report);
+        reportGenerated = true;
+      } catch {
+        reportGenerated = false;
+      }
+    }
+
+    onProgress?.(5, totalSteps, "Fechamento concluído");
+    clearInDesignSelection();
+
+    return {
+      date: new Date().toLocaleDateString("pt-BR"),
+      user: userName,
+      documentName: docInfo.name,
+      documentPath: docInfo.path,
+      checklist: cachedChecklist,
+      reportGenerated,
+      artifacts,
+      blocked: false,
+      blockReason: cachedChecklist
+        ? closureWarnings.length > 0
+          ? closureWarnings.join(" ")
+          : undefined
+        : "Relatório não gerado: execute VALIDAR CHECKLIST antes do fechamento.",
+    };
   }
 }
 

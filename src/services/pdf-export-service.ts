@@ -5,6 +5,7 @@ import { joinPath } from "../utils/file-system";
 import { getInDesignApp, getInDesignModule } from "../utils/indesign-runtime";
 import { findEditorialLayer, findGuiasLayer, findRendimentoLayer } from "../utils/editorial-layer";
 import { toPdfExportTarget } from "../utils/pdf-export-path";
+import { coverShouldExportReaderSpreads } from "../utils/cover-spread";
 import { withPresetSpreadSettings, PdfSpreadSettings } from "../utils/pdf-preset-session";
 
 export interface PdfExportOutcome {
@@ -291,6 +292,54 @@ export function exportPdfEstilos(
     restoreLayer(memorial);
     restoreLayer(rendimento);
     restoreLayer(guias);
+  }
+}
+
+export interface CoverPdfExportOutcome {
+  presetMissing: boolean;
+  generated: boolean;
+  path?: string;
+  readerSpreads: boolean;
+  warnings: string[];
+}
+
+/** Um PDF de capa: spreads se as páginas estão lado a lado; páginas simples se estão uma abaixo da outra. */
+export function exportPdfCover(
+  doc: Document,
+  packageRoot: string,
+  docBaseName: string
+): CoverPdfExportOutcome {
+  const warnings: string[] = [];
+  const preset = findPdfPreset();
+  const readerSpreads = coverShouldExportReaderSpreads(doc);
+  if (!preset) {
+    return {
+      presetMissing: true,
+      generated: false,
+      readerSpreads,
+      warnings: [`Preset PDF "${PDF_PRESET_NAME}" não encontrado. Nenhum PDF foi exportado.`],
+    };
+  }
+
+  const outputPath = joinPath(packageRoot, `${docBaseName}.pdf`);
+  try {
+    exportPdf(doc, preset, outputPath, { exportReaderSpreads: readerSpreads });
+    return {
+      presetMissing: false,
+      generated: true,
+      path: outputPath,
+      readerSpreads,
+      warnings,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push(`Falha ao exportar PDF de capa: ${message}`);
+    return {
+      presetMissing: false,
+      generated: false,
+      readerSpreads,
+      warnings,
+    };
   }
 }
 

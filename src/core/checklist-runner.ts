@@ -1,5 +1,5 @@
 import type { Document, Link } from "indesign";
-import { createAllValidators } from "../validators";
+import { createValidators } from "../validators";
 import { IValidator } from "../models/validator";
 import { summarizeResults, ValidationResult, ValidationSummary } from "../models/validation-result";
 import { VALIDATOR_IDS } from "../utils/constants";
@@ -223,11 +223,13 @@ function restoreLayerAccess(snapshot: LayerLockSnapshot[]): void {
 }
 
 export class ChecklistRunner {
+  constructor(private profile: "editorial" | "cover" = "editorial") {}
+
   run(doc: Document, onProgress?: ProgressCallback): ValidationSummary {
     releaseValidationScan();
     return withLayersUnlockedForValidation(doc, () =>
       withValidationSession(doc, () => {
-        const validators = createAllValidators();
+        const validators = createValidators(this.profile);
         const results: ValidationResult[] = [];
         const total = validators.length;
 
@@ -252,7 +254,7 @@ export class ChecklistRunner {
     throwIfAborted(signal);
     releaseValidationScan();
     clearFileColorSpaceCache();
-    const validators = createAllValidators();
+    const validators = createValidators(this.profile);
     const results: ValidationResult[] = [];
     const total = validators.length;
 

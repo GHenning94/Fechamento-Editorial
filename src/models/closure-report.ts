@@ -18,6 +18,7 @@ export interface ExportArtifacts {
   pdfArtePath?: string;
   pdfEstilosPath?: string;
   pdfWarnings?: string[];
+  pdfCoverSpreads?: boolean;
 }
 
 export interface ClosureReport {

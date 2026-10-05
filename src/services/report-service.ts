@@ -4,6 +4,7 @@ import { ClosureReport } from "../models/closure-report";
 import { ValidationSummary } from "../models/validation-result";
 import { writeBinaryFile } from "../utils/file-system";
 import { buildChecklistPdf } from "./checklist-pdf";
+import { mapCoverChecklist } from "./cover-checklist";
 import { mapOriginalChecklist } from "./original-checklist";
 
 function toPdfPath(filePath: string): string {
@@ -19,13 +20,19 @@ export interface ChecklistReportInput {
 }
 
 export class ReportService {
+  constructor(private profile: "editorial" | "cover" = "editorial") {}
+
   async generateChecklistReport(input: ChecklistReportInput, filePath: string): Promise<string> {
     const target = toPdfPath(filePath);
+    const items =
+      this.profile === "cover"
+        ? mapCoverChecklist(input.checklist)
+        : mapOriginalChecklist(input.checklist);
     const bytes = buildChecklistPdf({
       documentName: input.documentName,
       user: input.user,
       date: input.date,
-      items: mapOriginalChecklist(input.checklist),
+      items,
     });
     await writeBinaryFile(target, bytes);
     return target;
@@ -39,17 +46,27 @@ export class ReportService {
     const notes: string[] = [];
     notes.push(`Package: ${report.artifacts.packageGenerated ? "Sim" : "Não"}`);
     notes.push(`IDML: ${report.artifacts.idmlGenerated ? "Sim" : "Não"}`);
-    notes.push(`PDF arte: ${report.artifacts.pdfArteGenerated ? "Sim" : "Não"}`);
-    notes.push(`PDF ESTILOS: ${report.artifacts.pdfEstilosGenerated ? "Sim" : "Não"}`);
+    if (this.profile === "cover") {
+      const mode = report.artifacts.pdfCoverSpreads ? "spreads" : "páginas simples";
+      notes.push(`PDF capa: ${report.artifacts.pdfArteGenerated ? `Sim (${mode})` : "Não"}`);
+    } else {
+      notes.push(`PDF arte: ${report.artifacts.pdfArteGenerated ? "Sim" : "Não"}`);
+      notes.push(`PDF ESTILOS: ${report.artifacts.pdfEstilosGenerated ? "Sim" : "Não"}`);
+    }
     if (report.blockReason) {
       notes.push(report.blockReason);
     }
+
+    const items =
+      this.profile === "cover"
+        ? mapCoverChecklist(report.checklist, report.artifacts, { markPackage: true })
+        : mapOriginalChecklist(report.checklist, report.artifacts, { markPackage: true });
 
     const bytes = buildChecklistPdf({
       documentName: report.documentName,
       user,
       date: report.date,
-      items: mapOriginalChecklist(report.checklist, report.artifacts, { markPackage: true }),
+      items,
       notes,
     });
     await writeBinaryFile(target, bytes);
