@@ -1,3 +1,3 @@
-import { bootstrapPanel } from "./panel-bootstrap";
+import { bootstrapPanels } from "./panel-bootstrap";
 
-bootstrapPanel("editorial", "editorialAutoclosePanel");
+bootstrapPanels();

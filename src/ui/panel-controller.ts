@@ -18,6 +18,7 @@ import { promptUserNameDialog } from "./user-name-dialog";
 import { showResultsDetailDialog, updateOpenResultsDetailDialogs } from "./results-detail-dialog";
 import { bindResultGroupToggles } from "./result-group-toggle";
 import { tryExpandPanelToHostHeight } from "./panel-expand";
+import { queryUi } from "./panel-mount";
 import { formatIssueLine } from "../utils/issue-text";
 import { getValidatorSuccessText } from "../utils/validator-success-text";
 import { boostElementWheelScroll } from "./fast-scroll";
@@ -53,24 +54,24 @@ export class PanelController {
   private onSummaryFiltered: ((summary: ValidationSummary) => void) | null = null;
 
   constructor(private root: HTMLElement) {
-    this.btnChecklist = root.querySelector("#btn-checklist");
-    this.btnCreateStyles = root.querySelector("#btn-create-styles");
-    this.btnCreateRendimento = root.querySelector("#btn-create-rendimento");
-    this.btnDownloadReport = root.querySelector("#btn-download-report");
-    this.btnClose = root.querySelector("#btn-close");
-    this.btnScriptCodigo = root.querySelector("#btn-script-codigo");
-    this.progressBar = root.querySelector("#progress-bar");
-    this.progressLabel = root.querySelector("#progress-label");
-    this.btnCancelChecklist = root.querySelector("#btn-cancel-checklist");
-    this.countErrors = root.querySelector("#count-errors");
-    this.countWarnings = root.querySelector("#count-warnings");
-    this.countApproved = root.querySelector("#count-approved");
-    this.listApproved = root.querySelector("#list-approved");
-    this.listWarnings = root.querySelector("#list-warnings");
-    this.listErrors = root.querySelector("#list-errors");
-    this.statusMessage = root.querySelector("#status-message");
-    this.statusText = root.querySelector("#status-message-text");
-    this.btnIgnoreAllWarnings = root.querySelector("#btn-ignore-all-warnings");
+    this.btnChecklist = queryUi(root, "checklist");
+    this.btnCreateStyles = queryUi(root, "create-styles");
+    this.btnCreateRendimento = queryUi(root, "create-rendimento");
+    this.btnDownloadReport = queryUi(root, "download-report");
+    this.btnClose = queryUi(root, "close");
+    this.btnScriptCodigo = queryUi(root, "script-codigo");
+    this.progressBar = queryUi<HTMLProgressElement>(root, "progress-bar");
+    this.progressLabel = queryUi(root, "progress-label");
+    this.btnCancelChecklist = queryUi(root, "cancel-checklist");
+    this.countErrors = queryUi(root, "count-errors");
+    this.countWarnings = queryUi(root, "count-warnings");
+    this.countApproved = queryUi(root, "count-approved");
+    this.listApproved = queryUi(root, "list-approved");
+    this.listWarnings = queryUi(root, "list-warnings");
+    this.listErrors = queryUi(root, "list-errors");
+    this.statusMessage = queryUi(root, "status-message");
+    this.statusText = queryUi(root, "status-text");
+    this.btnIgnoreAllWarnings = queryUi(root, "ignore-all-warnings");
     this.bindResultExpanders();
     [this.listApproved, this.listWarnings, this.listErrors].forEach((list) => {
       if (list) boostElementWheelScroll(list);
@@ -126,10 +127,11 @@ export class PanelController {
     title: string,
     kind: "approved" | "warning" | "error"
   ): void {
-    const list = this.root.querySelector(`#${listId}`) as HTMLElement | null;
+    const list = queryUi(this.root, listId);
     const html = list?.innerHTML || '<li class="empty-item">Nenhum item</li>';
 
     showResultsDetailDialog({
+      owner: this.root.dataset.profile || "editorial",
       title,
       kind,
       html,
@@ -410,8 +412,8 @@ export class PanelController {
     this.ignoredWarningKeys.clear();
     this.root.classList.add("has-results");
     this.refreshSummaryUi(`${title} concluído.`);
-    tryExpandPanelToHostHeight();
-    window.setTimeout(() => tryExpandPanelToHostHeight(), 120);
+    tryExpandPanelToHostHeight(this.root);
+    window.setTimeout(() => tryExpandPanelToHostHeight(this.root), 120);
   }
 
   private refreshSummaryUi(statusMessage?: string): void {
@@ -455,6 +457,7 @@ export class PanelController {
 
   private syncOpenResultWindows(): void {
     updateOpenResultsDetailDialogs(
+      this.root.dataset.profile || "editorial",
       {
         approved: this.listApproved?.innerHTML || '<li class="empty-item">Nenhum item</li>',
         warning: this.listWarnings?.innerHTML || '<li class="empty-item">Nenhum item</li>',

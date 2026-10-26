@@ -4,6 +4,7 @@ declare module "uxp" {
       panels?: Record<
         string,
         {
+          create?: (node: HTMLElement) => void;
           show?: (node: HTMLElement) => void;
           hide?: () => void;
           destroy?: () => void;

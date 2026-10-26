@@ -91,7 +91,7 @@ export class ClosureOrchestrator {
         path: this.readDocumentPath(doc),
       };
     });
-    storeChecklistResult(docInfo.name, docInfo.path, summary);
+    storeChecklistResult(this.profile, docInfo.name, docInfo.path, summary);
   }
 
   async closeMaterial(
@@ -118,7 +118,7 @@ export class ClosureOrchestrator {
       };
     });
 
-    const cachedChecklist = getCachedChecklistResult(docInfo.name, docInfo.path);
+    const cachedChecklist = getCachedChecklistResult(this.profile, docInfo.name, docInfo.path);
 
     const paths = await this.exportService.packageService.buildPackageStructure(
       docInfo.name,
@@ -273,7 +273,7 @@ export class ClosureOrchestrator {
       };
     });
 
-    const cachedChecklist = getCachedChecklistResult(docInfo.name, docInfo.path);
+    const cachedChecklist = getCachedChecklistResult(this.profile, docInfo.name, docInfo.path);
     const paths = await this.exportService.packageService.buildPackageStructure(
       docInfo.name,
       destinationFolder

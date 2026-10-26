@@ -7,25 +7,32 @@ interface ChecklistCacheEntry {
   validatedAt: string;
 }
 
-let cachedChecklist: ChecklistCacheEntry | null = null;
+const cachedChecklists = new Map<string, ChecklistCacheEntry>();
+
+function cacheKey(profile: string, documentName: string, documentPath: string): string {
+  return `${profile}\n${documentName}\n${documentPath}`;
+}
 
 export function storeChecklistResult(
+  profile: string,
   documentName: string,
   documentPath: string,
   summary: ValidationSummary
 ): void {
-  cachedChecklist = {
+  cachedChecklists.set(cacheKey(profile, documentName, documentPath), {
     documentName,
     documentPath,
     summary,
     validatedAt: new Date().toISOString(),
-  };
+  });
 }
 
 export function getCachedChecklistResult(
+  profile: string,
   documentName: string,
   documentPath: string
 ): ValidationSummary | null {
+  const cachedChecklist = cachedChecklists.get(cacheKey(profile, documentName, documentPath));
   if (!cachedChecklist) {
     return null;
   }
@@ -40,10 +47,21 @@ export function getCachedChecklistResult(
   return cachedChecklist.summary;
 }
 
-export function clearChecklistCache(): void {
-  cachedChecklist = null;
+export function clearChecklistCache(profile?: string): void {
+  if (!profile) {
+    cachedChecklists.clear();
+    return;
+  }
+  const prefix = `${profile}\n`;
+  Array.from(cachedChecklists.keys()).forEach((key) => {
+    if (key.startsWith(prefix)) cachedChecklists.delete(key);
+  });
 }
 
-export function hasCachedChecklist(documentName: string, documentPath: string): boolean {
-  return getCachedChecklistResult(documentName, documentPath) !== null;
+export function hasCachedChecklist(
+  profile: string,
+  documentName: string,
+  documentPath: string
+): boolean {
+  return getCachedChecklistResult(profile, documentName, documentPath) !== null;
 }

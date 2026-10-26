@@ -25,6 +25,7 @@ type UxpDialog = HTMLDialogElement & {
 export type ResultDetailKind = "approved" | "warning" | "error";
 
 export interface ResultDetailOptions {
+  owner?: string;
   title: string;
   kind: ResultDetailKind;
   html: string;
@@ -59,7 +60,11 @@ interface OpenDetail {
   onGoTo?: (itemId: number, pageName?: string) => void;
 }
 
-const openDetails = new Map<ResultDetailKind, OpenDetail>();
+const openDetails = new Map<string, OpenDetail>();
+
+function detailKey(owner: string, kind: ResultDetailKind): string {
+  return `${owner}:${kind}`;
+}
 
 function paintList(
   listEl: HTMLElement,
@@ -77,6 +82,7 @@ function paintList(
 }
 
 export function updateOpenResultsDetailDialogs(
+  owner: string,
   contents: Partial<Record<ResultDetailKind, string>>,
   handlers?: {
     onIgnore?: (key: string) => void;
@@ -85,7 +91,7 @@ export function updateOpenResultsDetailDialogs(
   }
 ): void {
   (Object.keys(contents) as ResultDetailKind[]).forEach((kind) => {
-    const open = openDetails.get(kind);
+    const open = openDetails.get(detailKey(owner, kind));
     if (!open) return;
     if (handlers?.onIgnore) open.onIgnore = handlers.onIgnore;
     if (handlers?.onIgnoreAll) open.onIgnoreAll = handlers.onIgnoreAll;
@@ -251,7 +257,9 @@ function syncListHeight(root: HTMLElement, header: HTMLElement, listEl: HTMLElem
 }
 
 export function showResultsDetailDialog(options: ResultDetailOptions): void {
-  const existing = openDetails.get(options.kind);
+  const owner = options.owner || "editorial";
+  const key = detailKey(owner, options.kind);
+  const existing = openDetails.get(key);
   if (existing) {
     existing.onIgnore = options.onIgnore;
     existing.onIgnoreAll = options.onIgnoreAll;
@@ -264,7 +272,7 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   const titleColor = KIND_TITLE_COLOR[options.kind];
 
   const dialog = document.createElement("dialog") as UxpDialog;
-  dialog.id = `editorial-results-detail-dialog-${options.kind}`;
+  dialog.id = `results-detail-dialog-${owner}-${options.kind}`;
   dialog.setAttribute("data-results-kind", options.kind);
 
   const root = document.createElement("div");
@@ -321,7 +329,7 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
 
   bindResultGroupToggles(listEl);
 
-  openDetails.set(options.kind, {
+  openDetails.set(key, {
     kind: options.kind,
     listEl,
     titleEl,
@@ -356,7 +364,7 @@ export function showResultsDetailDialog(options: ResultDetailOptions): void {
   const teardown = (): void => {
     if (closed) return;
     closed = true;
-    openDetails.delete(options.kind);
+    openDetails.delete(key);
     window.clearInterval(resizePoll);
     dialog.removeEventListener("close", teardown);
     dialog.remove();

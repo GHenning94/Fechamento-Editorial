@@ -31,7 +31,6 @@
     {
       "type": "panel",
       "id": "capasAutoclosePanel",
-      "main": "capas.html",
       "label": {
         "default": "CAPAS AUTOCLOSE"
       },

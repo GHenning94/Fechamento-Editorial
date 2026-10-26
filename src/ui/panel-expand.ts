@@ -5,7 +5,7 @@
  * InDesign/macOS, a janela costuma acompanhar a altura mínima do documento —
  * por isso forçamos min-height no html/body/root após validar.
  */
-export function tryExpandPanelToHostHeight(): void {
+export function tryExpandPanelToHostHeight(panelRoot?: HTMLElement | null): void {
   const screenHeight =
     typeof window.screen?.availHeight === "number" && window.screen.availHeight > 0
       ? window.screen.availHeight
@@ -24,7 +24,7 @@ export function tryExpandPanelToHostHeight(): void {
     document.body.style.height = px;
     document.body.style.overflow = "hidden";
 
-    const root = document.getElementById("root") || document.getElementById("cover-root");
+    const root = panelRoot || document.querySelector<HTMLElement>(".panel[data-profile]");
     if (root) {
       root.style.minHeight = px;
       root.style.height = px;

@@ -11,8 +11,10 @@ import {
   clearPanelContainer,
   markPanelInitialized,
   mountPanelRoot,
+  queryUi,
   resetPanelInitialization,
   showLicenseGate,
+  type PanelProfile,
 } from "./ui/panel-mount";
 import { PackageCancelledError, promptChecklistReportFile } from "./utils/file-system";
 import { ensureInDesignReady, getDefaultReportUserName } from "./utils/indesign-runtime";
@@ -22,7 +24,7 @@ import { createRendimentoTags } from "./services/rendimento-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
 import { runCoverCodeScript } from "./services/cover-scripts";
 
-export type PanelProfile = "editorial" | "cover";
+export type { PanelProfile };
 
 interface PanelSession {
   profile: PanelProfile;
@@ -57,10 +59,26 @@ function resolvePanelNode(value: unknown): HTMLElement | null {
   return isMountable(value) ? value : null;
 }
 
-/** Um painel por página HTML: a aba de capas tem a própria página e o próprio script. */
-export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
-  const session = createSession(profile);
-  const { entrypoints } = require("uxp");
+function claimHost(raw: unknown, profile: PanelProfile): HTMLElement | null {
+  const resolved = resolvePanelNode(raw);
+  const target = resolved || document.body;
+  if (!target) return null;
+
+  const owner = target.getAttribute("data-panel-owner");
+  if (owner && owner !== profile) {
+    const owned = document.querySelector(`[data-panel-owner="${profile}"]`);
+    return owned instanceof HTMLElement ? owned : null;
+  }
+
+  target.setAttribute("data-panel-owner", profile);
+  return target;
+}
+
+function attachPanel(session: PanelSession): {
+  create(node: unknown): void;
+  show(node: unknown): void;
+} {
+  const profile = session.profile;
 
   async function handleLicenseReset(container: HTMLElement): Promise<void> {
     const removed = await deactivateLicense();
@@ -72,7 +90,7 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
     if (!removed) {
       showLicenseGate(container, () => {
         void retryActivation(container);
-      });
+      }, profile);
       return;
     }
 
@@ -80,7 +98,7 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
     if (stillLicensed) {
       showLicenseGate(container, () => {
         void retryActivation(container);
-      });
+      }, profile);
       return;
     }
 
@@ -88,7 +106,7 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
   }
 
   function bindDevLicenseReset(container: HTMLElement, root: HTMLElement): void {
-    const resetButton = root.querySelector("#btn-license-reset") as HTMLElement | null;
+    const resetButton = queryUi(root, "license-reset");
     if (!resetButton) {
       return;
     }
@@ -303,11 +321,11 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
   }
 
   async function initPanel(raw: unknown): Promise<void> {
-    const target = resolvePanelNode(raw) || document.body;
+    const target = claimHost(raw, profile);
     if (!target) return;
 
-    const marker = profile === "cover" ? "#cover-root #btn-script-codigo" : "#root #btn-create-styles";
-    if (session.controller?.isReady() && target.querySelector(marker)) {
+    const readyName = profile === "cover" ? "script-codigo" : "create-styles";
+    if (session.controller?.isReady() && queryUi(target, readyName)) {
       return;
     }
 
@@ -326,7 +344,7 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
         session.controller = null;
         showLicenseGate(target, () => {
           void retryActivation(target);
-        });
+        }, profile);
         const activated = await requestActivation(target);
         if (!activated || session.generation !== generation) return;
         mountPanelRoot(target, true, profile);
@@ -353,7 +371,7 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
     if (!activated) {
       showLicenseGate(container, () => {
         void retryActivation(container);
-      });
+      }, profile);
       return;
     }
 
@@ -363,16 +381,33 @@ export function bootstrapPanel(profile: PanelProfile, panelId: string): void {
     await mountLicensedPanel(container);
   }
 
+  return {
+    create(node: unknown) {
+      void initPanel(node);
+    },
+    show(node: unknown) {
+      void initPanel(node);
+    },
+  };
+}
+
+const SETUP_FLAG = "__editorialAutoclosePanelSetup";
+
+/** Um único entrypoints.setup registra os dois painéis. O InDesign ignora HTML separado. */
+export function bootstrapPanels(): void {
+  const scope = globalThis as typeof globalThis & { [SETUP_FLAG]?: boolean };
+  if (scope[SETUP_FLAG]) return;
+
+  const { entrypoints } = require("uxp");
   entrypoints.setup({
     panels: {
-      [panelId]: {
-        create(node: unknown) {
-          void initPanel(node);
-        },
-        show(node: unknown) {
-          void initPanel(node);
-        },
-      },
+      editorialAutoclosePanel: attachPanel(createSession("editorial")),
+      capasAutoclosePanel: attachPanel(createSession("cover")),
     },
   });
+  scope[SETUP_FLAG] = true;
+}
+
+export function bootstrapPanel(_profile: PanelProfile, _panelId: string): void {
+  bootstrapPanels();
 }

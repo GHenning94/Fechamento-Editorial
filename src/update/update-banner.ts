@@ -1,3 +1,4 @@
+import { queryUi } from "../ui/panel-mount";
 import { PLUGIN_VERSION } from "./plugin-version";
 import { onActionActivate, setActionDisabled } from "../ui/action-control";
 import { applyPluginUpdate, reloadPluginPanel } from "./update-apply";
@@ -11,7 +12,7 @@ function formatVersionLabel(version: string): string {
 }
 
 function bindVersionTag(root: HTMLElement): void {
-  const tag = root.querySelector("#plugin-version-tag");
+  const tag = queryUi(root, "version-tag");
   if (tag) {
     tag.textContent = formatVersionLabel(PLUGIN_VERSION);
   }
@@ -24,10 +25,10 @@ function notesElements(root: HTMLElement): {
   bodyEl: HTMLElement | null;
 } {
   return {
-    button: root.querySelector("#btn-version-info") as HTMLElement | null,
-    card: root.querySelector("#version-notes-card") as HTMLElement | null,
-    titleEl: root.querySelector("#version-notes-title") as HTMLElement | null,
-    bodyEl: root.querySelector("#version-notes-body") as HTMLElement | null,
+    button: queryUi(root, "version-info"),
+    card: queryUi(root, "version-notes-card"),
+    titleEl: queryUi(root, "version-notes-title"),
+    bodyEl: queryUi(root, "version-notes-body"),
   };
 }
 
@@ -74,7 +75,7 @@ function bindNotesButton(root: HTMLElement): void {
 }
 
 function bindUpdateButton(root: HTMLElement, update: PluginUpdateInfo, setStatus?: StatusFn): void {
-  const button = root.querySelector("#btn-plugin-update") as HTMLElement | null;
+  const button = queryUi(root, "plugin-update");
   if (!button) {
     return;
   }
