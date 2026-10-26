@@ -677,11 +677,11 @@ progress::-webkit-progress-value {
 }
 
 /* Alertas: botões Ignorar no DOM oculto não podem alargar a lista */
-#list-warnings {
+[data-ui="list-warnings"] {
   padding-right: 16px;
 }
 
-#list-warnings .result-group:not(.is-open) > .result-group-body {
+[data-ui="list-warnings"] .result-group:not(.is-open) > .result-group-body {
   display: none !important;
   height: 0 !important;
   width: 0 !important;
@@ -694,11 +694,11 @@ progress::-webkit-progress-value {
   visibility: hidden !important;
 }
 
-#list-errors {
+[data-ui="list-errors"] {
   padding-right: 16px;
 }
 
-#list-approved {
+[data-ui="list-approved"] {
   padding-right: 16px;
 }
 
@@ -786,21 +786,21 @@ progress::-webkit-progress-value {
   font-weight: 600;
 }
 
-#list-errors .result-group-count,
+[data-ui="list-errors"] .result-group-count,
 .result-group-count-error {
   color: var(--error);
   border-color: #6b3030;
   background-color: #2e1a1a;
 }
 
-#list-warnings .result-group-count,
+[data-ui="list-warnings"] .result-group-count,
 .result-group-count-warning {
   color: var(--warning);
   border-color: #6b5a28;
   background-color: #2e2a1a;
 }
 
-#list-approved .result-group-count,
+[data-ui="list-approved"] .result-group-count,
 .result-group-count-success {
   color: var(--success);
   border-color: #2f6b48;
@@ -985,7 +985,7 @@ progress::-webkit-progress-value {
   margin-right: auto;
 }
 
-#editorial-results-detail-dialog {
+dialog[data-results-kind] {
   padding: 0;
   margin: 0;
   border: none;
@@ -995,7 +995,7 @@ progress::-webkit-progress-value {
   box-sizing: border-box;
 }
 
-#editorial-results-detail-dialog::backdrop {
+dialog[data-results-kind]::backdrop {
   background-color: rgba(0, 0, 0, 0.6);
 }
 
