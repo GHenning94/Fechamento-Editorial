@@ -23,7 +23,7 @@ import { createMemorialStyleTags } from "./services/style-tags-service";
 import { createRendimentoTags } from "./services/rendimento-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
 import { runCoverCodeScript } from "./services/cover-scripts";
-import { openPluginPanel, removeStaleScriptActions } from "./ui/open-panel";
+import { openPluginPanel, removeStalePluginMenus } from "./ui/open-panel";
 
 export type { PanelProfile };
 
@@ -444,8 +444,15 @@ export function bootstrapPanels(): void {
   entrypoints.setup({
     plugin: {
       create() {
-        window.setTimeout(removeStaleScriptActions, 300);
-        window.setTimeout(removeStaleScriptActions, 1200);
+        removeStalePluginMenus(false);
+        openPluginPanel("capasAutoclosePanel");
+        window.setTimeout(() => {
+          removeStalePluginMenus(false);
+          openPluginPanel("capasAutoclosePanel");
+        }, 400);
+      },
+      destroy() {
+        removeStalePluginMenus(true);
       },
     },
     commands: {
@@ -477,8 +484,8 @@ export function bootstrapPanels(): void {
 
   mounts.editorial.mount(editorialHost);
   mounts.cover.mount(coverHost);
-  window.setTimeout(removeStaleScriptActions, 300);
-  window.setTimeout(removeStaleScriptActions, 1200);
+  removeStalePluginMenus(false);
+  openPluginPanel("capasAutoclosePanel");
 
   const claimCoverShell = (node: HTMLElement): void => {
     const tag = node.tagName.toLowerCase();
