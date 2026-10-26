@@ -10,6 +10,13 @@
   },
   "entrypoints": [
     {
+      "type": "command",
+      "id": "openCapasAutoclose",
+      "label": {
+        "default": "Abrir CAPAS AUTOCLOSE"
+      }
+    },
+    {
       "type": "panel",
       "id": "editorialAutoclosePanel",
       "label": {
@@ -64,6 +71,9 @@
     "clipboard": "readAndWrite",
     "network": {
       "domains": "all"
+    },
+    "ipc": {
+      "enablePluginCommunication": true
     },
     "launchProcess": {
       "schemes": [

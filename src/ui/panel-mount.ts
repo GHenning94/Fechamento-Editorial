@@ -2,10 +2,10 @@ export type PanelProfile = "editorial" | "cover";
 
 export function queryUi<T extends Element = HTMLElement>(root: ParentNode, name: string): T | null {
   const selector = `[data-ui="${name}"]`;
-  if (root instanceof Element) {
-    return root.querySelector(`:scope ${selector}`);
+  if (root instanceof Element && root.getAttribute("data-ui") === name) {
+    return root as unknown as T;
   }
-  return root.querySelector(selector);
+  return root.querySelector(selector) as T | null;
 }
 
 function buildPanelHtml(profile: PanelProfile): string {
@@ -114,7 +114,7 @@ function buildPanelHtml(profile: PanelProfile): string {
   <footer class="panel-footer">
     <div id="status-message" data-ui="status-message" class="status-message status-info">
       <img class="work-spinner" src="data:image/gif;base64,R0lGODlhIAAgAPIAACMjKff07tbSyrCspIqGfG5qZFBMSDc0OiH/C05FVFNDQVBFMi4wAwEAAAAh+QQEBQAAACwAAAAAIAAgAAADSQi63P4wykkDsDTr7SwGAshlYThO5amu0eCy8OkOcW3fOEDoec/sO59w6CsYiTljAcmEHJ4QA0A6eh4U16tCSuVYo9NYtkkuJwAAIfkEBAUAAAAsAAAAACAAIAAAA0kIutz+MMpJq72YBrDz3J0XgWJpOkJ6rlgqsHAsswNQz/hS33nvQ4egh0D8PYKHYdHIPAofBUA0g1QYAFdFdIqpQqWra7ZJbiYAACH5BAQFAAAALAAAAAAgACAAAANJCLrc/jDKSau9OOvNu/9NIIIkJQZlqq6YALjMAciqTG8uzO48dPyagbD3+N0uwgFxCTE4IQRANOM0KAoArCI6xVSh0g9WyywzEwAh+QQEBQAAACwAAAAAIAAgAAADSQi63P4wykmrvTjrzbt/R/g54TE25amubEsFAMyYJkt3sOzuPGT8GoGw9/gZgkOi8lFoQgYAaKZZUBAAVwVUiqE+o59rdkleJgAAIfkEBAUAAAAsAAAAACAAIAAAA0kIutz+MMpJq734aFz14ZQHjqRIQubppGrrvnDcGAAt07as7/xT/KCAsAf5FYJDojJCaEIEACinSVAMAFcFVIqhPqOta3ZJLgMSACH5BAQFAAAALAAAAAAgACAAAANNCLrc/jDKSQ+wNOt9+rLY5nShKJFmqi5Gu0at8ULxbN94rkMF0O+9325ILD4ISOMQSVA6i4MoJACgmqIDhQCwVVCtIuy0att2n+g0IAEAIfkEBAUAAAAsAAAAACAAIAAAA0kIutz+MMpJD7A06236stglbkBnRCBZelCqvlEhw5Jc0PGM73zv/xkCQAgcGovIpBIyaC6RzcFzqhRYkVaBIgDg8rJTrpdKLgMSACH5BAQFAAAALAAAAAAgACAAAANKCLrc/jDKSQ2wNOtd+rIYcIib0hXROJZnSpbwRMzxYUMzEcs0bK+7oHBILC4GAKTxmFw6n1CYYBqtTgXVrFYR6EK7ga93Sy6bGwkAIfkEBAUAAAAsAAAAACAAIAAAA0kIutz+MMpJC7A06036shhgiJvSEdE4lmdKlvA0zPFhQ/MQyzRsH7ugcEgUAoEMAUBZTC6NAGRzSiUGrtUs4xrQer/gsHhMLj8SACH5BAQFAAAALAAAAAAgACAAAANJCLrc/jDKSQmwNOs9+rIYUIib0g3ROJZnSpbwJMyxYUOzEMs0bBu7oHBIFB4AR0YAsCwqmUakc0qtxg5Yq1aBTW6/4LB4TC5rEgAh+QQEBQAAACwAAAAAIAAgAAADSQi63P4wykkHsDTrLfqyGECIm9IJ0TiWZ0qW8BTMcWFDcxDLNGwXu6BwSBQaAMeicnJMLp/QKOVAlVqpB6tWmc1Cu1HwdkweJwAAIfkEBAUAAAAsAAAAACAAIAAAA0kIutz+MMpJBbA06x36shgwiJvSBdE4lmdKlnCsEbRs3wBN4Hzv/44CQAgsNoREo3LJNDiZRqcBSr0dAFfcNYvtFrc8cHVMViQAADs=" width="16" height="16" alt="" />
-      <span id="status-message-text" data-ui="status-text">Pronto.</span>
+      <span id="status-message-text" data-ui="status-text">Carregando…</span>
     </div>
   </footer>
 </div>

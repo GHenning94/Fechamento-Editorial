@@ -23,6 +23,7 @@ import { createMemorialStyleTags } from "./services/style-tags-service";
 import { createRendimentoTags } from "./services/rendimento-tags-service";
 import { bindUpdateBanner } from "./update/update-banner";
 import { runCoverCodeScript } from "./services/cover-scripts";
+import { openPluginPanel, removeStaleScriptActions } from "./ui/open-panel";
 
 export type { PanelProfile };
 
@@ -59,24 +60,24 @@ function resolvePanelNode(value: unknown): HTMLElement | null {
   return isMountable(value) ? value : null;
 }
 
-function claimHost(raw: unknown, profile: PanelProfile): HTMLElement | null {
-  const resolved = resolvePanelNode(raw);
-  const target = resolved || document.body;
-  if (!target) return null;
+function hostById(id: string): HTMLElement {
+  const found = document.getElementById(id);
+  if (found instanceof HTMLElement) return found;
+  const host = document.createElement("div");
+  host.id = id;
+  document.body.appendChild(host);
+  return host;
+}
 
-  const owner = target.getAttribute("data-panel-owner");
-  if (owner && owner !== profile) {
-    const owned = document.querySelector(`[data-panel-owner="${profile}"]`);
-    return owned instanceof HTMLElement ? owned : null;
-  }
-
-  target.setAttribute("data-panel-owner", profile);
-  return target;
+function rootFromEvent(raw: unknown): HTMLElement | null {
+  const node = resolvePanelNode(raw);
+  if (!node || node === document.documentElement || node === document.body) return null;
+  if (node.id === "editorial-host" || node.id === "cover-host") return null;
+  return node;
 }
 
 function attachPanel(session: PanelSession): {
-  create(node: unknown): void;
-  show(node: unknown): void;
+  mount(container: HTMLElement): void;
 } {
   const profile = session.profile;
 
@@ -130,27 +131,23 @@ function attachPanel(session: PanelSession): {
   }
 
   async function mountLicensedPanel(container: HTMLElement): Promise<void> {
-    await yieldToHost(50);
-
-    try {
-      await ensureInDesignReady();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      container.innerHTML = `
-        <div class="panel license-gate">
-          <p class="license-gate-text">${message}</p>
-        </div>
-      `;
-      return;
-    }
-
     const root = mountPanelRoot(container, true, profile);
     if (!root) {
       return;
     }
 
-    const controller = new PanelController(root);
+    let controller: PanelController;
+    try {
+      controller = new PanelController(root);
+    } catch (error) {
+      const status = root.querySelector("[data-ui='status-text']");
+      if (status) status.textContent = error instanceof Error ? error.message : String(error);
+      return;
+    }
+
     if (!controller.isReady()) {
+      const status = root.querySelector("[data-ui='status-text']");
+      if (status) status.textContent = "Controles do painel não foram encontrados.";
       return;
     }
 
@@ -313,48 +310,50 @@ function attachPanel(session: PanelSession): {
           : undefined,
     });
 
+    root.dataset.bound = "1";
     controller.setStatus("Pronto.", "info");
+
+    try {
+      await ensureInDesignReady();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      controller.setStatus(message, "error");
+    }
   }
 
   async function requestActivation(container: HTMLElement): Promise<boolean> {
     return promptLicenseActivation(container);
   }
 
-  async function initPanel(raw: unknown): Promise<void> {
-    const target = claimHost(raw, profile);
-    if (!target) return;
-
-    const readyName = profile === "cover" ? "script-codigo" : "create-styles";
-    if (session.controller?.isReady() && queryUi(target, readyName)) {
-      return;
-    }
+  async function initPanel(target: HTMLElement): Promise<void> {
+    if (!target || target === document.body || target === document.documentElement) return;
+    if (target.querySelector(`.panel[data-profile="${profile}"][data-bound="1"]`)) return;
+    if (isLicensePromptOpen()) return;
 
     session.generation += 1;
     const generation = session.generation;
-    mountPanelRoot(target, true, profile);
-
-    if (isLicensePromptOpen()) return;
-
     session.initInFlight = true;
     try {
-      const licensed = await isLicenseActive();
-      if (session.generation !== generation) return;
-
-      if (!licensed) {
-        session.controller = null;
-        showLicenseGate(target, () => {
-          void retryActivation(target);
-        }, profile);
-        const activated = await requestActivation(target);
-        if (!activated || session.generation !== generation) return;
-        mountPanelRoot(target, true, profile);
-      }
-
-      if (session.generation !== generation) return;
       resetPanelInitialization();
       session.controller = null;
       session.lastChecklistSummary = null;
       await mountLicensedPanel(target);
+      if (session.generation !== generation) return;
+
+      const licensed = await isLicenseActive();
+      if (session.generation !== generation) return;
+      if (licensed) return;
+
+      session.controller = null;
+      showLicenseGate(target, () => {
+        void retryActivation(target);
+      }, profile);
+      const activated = await requestActivation(target);
+      if (!activated || session.generation !== generation) return;
+      await mountLicensedPanel(target);
+    } catch (error) {
+      const status = target.querySelector("[data-ui='status-text']");
+      if (status) status.textContent = error instanceof Error ? error.message : String(error);
     } finally {
       if (session.generation === generation) {
         session.initInFlight = false;
@@ -382,29 +381,139 @@ function attachPanel(session: PanelSession): {
   }
 
   return {
-    create(node: unknown) {
-      void initPanel(node);
-    },
-    show(node: unknown) {
-      void initPanel(node);
+    mount(container: HTMLElement) {
+      void initPanel(container);
     },
   };
 }
 
 const SETUP_FLAG = "__editorialAutoclosePanelSetup";
 
-/** Um único entrypoints.setup registra os dois painéis. O InDesign ignora HTML separado. */
+function stretch(node: HTMLElement): void {
+  node.style.height = "100%";
+  node.style.width = "100%";
+  node.style.display = "flex";
+  node.style.flexDirection = "column";
+  node.style.minHeight = "0";
+  node.style.backgroundColor = "#17171a";
+}
+
+/** O InDesign só mostra a capa se o HTML dela for inserido no root que o show() entrega. */
 export function bootstrapPanels(): void {
   const scope = globalThis as typeof globalThis & { [SETUP_FLAG]?: boolean };
   if (scope[SETUP_FLAG]) return;
 
+  const mounts = {
+    editorial: attachPanel(createSession("editorial")),
+    cover: attachPanel(createSession("cover")),
+  };
+  const editorialHost = hostById("editorial-host");
+  const coverHost = hostById("cover-host");
+  let editorialRoot: HTMLElement | null = null;
+
+  const showEditorial = (raw: unknown): void => {
+    const root = rootFromEvent(raw);
+    if (
+      root &&
+      editorialRoot &&
+      root !== editorialRoot &&
+      !editorialRoot.contains(root) &&
+      !root.contains(editorialRoot) &&
+      !root.contains(editorialHost)
+    ) {
+      showCover(root);
+      return;
+    }
+    if (root && !root.contains(coverHost)) editorialRoot = root;
+    mounts.editorial.mount(editorialHost);
+  };
+
+  const showCover = (raw: unknown): void => {
+    const root = rootFromEvent(raw) || (raw instanceof HTMLElement ? raw : null);
+    if (root && root !== coverHost && !coverHost.contains(root) && !root.contains(editorialHost)) {
+      stretch(root);
+      if (!root.contains(coverHost)) root.appendChild(coverHost);
+    }
+    if (coverHost.parentElement && coverHost.parentElement !== document.body) {
+      coverHost.classList.add("is-placed");
+    }
+    mounts.cover.mount(coverHost);
+  };
+
   const { entrypoints } = require("uxp");
   entrypoints.setup({
+    plugin: {
+      create() {
+        window.setTimeout(removeStaleScriptActions, 300);
+        window.setTimeout(removeStaleScriptActions, 1200);
+      },
+    },
+    commands: {
+      openCapasAutoclose: {
+        run() {
+          openPluginPanel("capasAutoclosePanel");
+        },
+      },
+    },
     panels: {
-      editorialAutoclosePanel: attachPanel(createSession("editorial")),
-      capasAutoclosePanel: attachPanel(createSession("cover")),
+      editorialAutoclosePanel: {
+        create(node: unknown) {
+          showEditorial(node);
+        },
+        show(node: unknown) {
+          showEditorial(node);
+        },
+      },
+      capasAutoclosePanel: {
+        create(node: unknown) {
+          showCover(node);
+        },
+        show(node: unknown) {
+          showCover(node);
+        },
+      },
     },
   });
+
+  mounts.editorial.mount(editorialHost);
+  mounts.cover.mount(coverHost);
+  window.setTimeout(removeStaleScriptActions, 300);
+  window.setTimeout(removeStaleScriptActions, 1200);
+
+  const claimCoverShell = (node: HTMLElement): void => {
+    const tag = node.tagName.toLowerCase();
+    if (tag === "script" || tag === "style" || tag === "link") return;
+    if (node === editorialHost || node === coverHost) return;
+    if (editorialHost.contains(node) || coverHost.contains(node) || node.contains(editorialHost)) return;
+    const panelId = node.getAttribute("panelid") || node.getAttribute("panelId") || node.id;
+    const coverShell =
+      panelId === "capasAutoclosePanel" ||
+      tag === "uxp-panel" ||
+      (node.parentElement === document.body && node.childElementCount === 0);
+    if (!coverShell) return;
+    showCover(node);
+  };
+
+  const observer = new MutationObserver((records) => {
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node instanceof HTMLElement) claimCoverShell(node);
+      });
+    });
+  });
+  const scanShells = (): void => {
+    document.querySelectorAll("uxp-panel, [panelid='capasAutoclosePanel'], [panelId='capasAutoclosePanel']").forEach((node) => {
+      if (node instanceof HTMLElement) claimCoverShell(node);
+    });
+  };
+
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+    scanShells();
+    const timer = window.setInterval(scanShells, 400);
+    window.setTimeout(() => window.clearInterval(timer), 20000);
+  }
+
   scope[SETUP_FLAG] = true;
 }
 

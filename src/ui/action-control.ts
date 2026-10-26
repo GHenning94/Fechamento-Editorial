@@ -22,13 +22,24 @@ export function onActionActivate(
   el: HTMLElement | null,
   handler: () => void
 ): void {
-  if (!el) return;
+  if (!el || el.dataset.actionBound === "1") return;
+  el.dataset.actionBound = "1";
+  let lastRun = 0;
 
-  el.addEventListener("click", (event) => {
+  const run = (event: Event): void => {
     event.preventDefault();
     if (isActionDisabled(el)) return;
+    const now = Date.now();
+    if (now - lastRun < 400) return;
+    lastRun = now;
     handler();
+  };
+
+  el.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    run(event);
   });
+  el.addEventListener("click", run);
 
   el.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;

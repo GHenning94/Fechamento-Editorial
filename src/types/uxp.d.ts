@@ -1,6 +1,10 @@
 declare module "uxp" {
   export const entrypoints: {
     setup(config: {
+      plugin?: {
+        create?: () => void;
+        destroy?: () => void;
+      };
       panels?: Record<
         string,
         {
